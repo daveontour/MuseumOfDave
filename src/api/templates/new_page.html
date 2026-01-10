@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Let's Talk About Dave</title>
+    <link rel="stylesheet" href="/static/css/new_page.css">
+    <link rel="stylesheet" href="/static/css/leaflet.css">
+    <!-- Include marked.js -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Optional: highlight.js -->
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
+    <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <!-- Font Awesome for icons (optional, but nice for buttons) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <div class="sidebar" style="background-color: #19264d;">
+            <div class="header-container">
+                <h2>Let's Talk About Dave</h2>
+                <button id="hamburger-menu" class="hamburger-btn">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+
+            <div class="voice-selector">
+                <h3>Answer in the Voice Of:</h3>
+                
+                <!-- Voice Image Display -->
+                <div class="voice-image-display" style="background:none !important;">
+                    <img id="selected-voice-image" src="/static/images/expert.png" alt="Selected Voice" class="selected-voice-img">
+                </div>
+                
+                <!-- Voice Dropdown Select -->
+                <div class="voice-dropdown-container">
+                    <select id="voice-select" name="voice">
+                        <option value="dave">Dave's own voice</option>
+                        <option value="expert" selected>A dispassionate expert</option>
+                        <option value="male_friend">Dave's best male friend</option>
+                        <option value="female_friend">Dave's best female friend</option>
+                        <option value="psychologist">A psychologist</option>
+                        <option value="after_death">A friend speaking after Dave's death</option>
+                        <option value="irish">A Irish limmerick poet</option>
+                        <option value="secret_admirer">A admirer who remained anonymous to Dave</option>
+                        <option value="haiku">A Japanese haiku master</option>
+                        <option value="insult">An insult commedian</option>
+                        <option value="earthchild">A hippy earthchild</option>
+                        <option value="bar_girl">A Thai bar girl that Dave told his story to</option>
+                        <option value="parents">His mother and father</option>
+                        <option value="preacher">A fire and brimstone preacher who disapproves of all aspects of Dave's life</option>
+                    </select>
+                </div>
+                
+                <!-- Mood Selector (for Dave voice) -->
+                <div id="mood-selector" style="display: none; margin-top: 10px;">
+                    <select id="dave-mood" name="dave-mood">
+                        <option value="neutral">Neutral - Just Regular Dave</option>
+                        <option value="reflective">Reflective - Thoughtful and Contemplative</option>
+                        <option value="excited">Excited - Enthusiastic and Energetic</option>
+                        <option value="melancholic">Melancholic - Wistful and Nostalgic</option>
+                        <option value="depressed">Depressed - Hopeless and Dispondent</option>
+                        <option value="philosophical">Philosophical - Deep and Analytical</option>
+                        <option value="humorous">Humorous - Witty and Playful</option>
+                        <option value="cynical">Cynical - Skeptical and Sardonic</option>
+                        <option value="optimistic">Optimistic - Hopeful and Positive</option>
+                        <option value="analytical">Analytical - Factual and Detached</option>
+                        <option value="angry">Angry - Aggressive and Resentful</option>
+                        <option value="sad">Sad - Mournful and Melancholic</option>
+                        <option value="anxious">Anxious - Nervous and Worried</option>
+                        <option value="content">Content - Satisfied and Content</option>
+                        <option value="grateful">Grateful - Appreciative and Thankful</option>
+                    </select>
+                </div>
+
+                <div class="work-mode-container">
+                    <label class="work-mode-label">
+                        <input type="checkbox" id="companion-mode" name="companion-mode">
+                        <span>Companion Mode</span>
+                        <i class="fas fa-heart"></i>
+                    </label>
+
+                    
+                    <div class="slider-container" style="margin-top: 15px;">
+                        <label for="creativity-level">Creativity</label>
+                        <input type="range" id="creativity-level" min="0" max="2" step="0.1" value="0">
+                        <span class="value-display">0</span>
+                    </div>
+
+                    <button type="button" id="interviewer-mode-btn" class="mode-btn" data-mode="interviewer" style="margin-top: 20px;">
+                        <i class="fas fa-briefcase"></i>
+                        <span>Interviewer Mode</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- More Options Section -->
+            <div class="more-options-section">
+                <h3>Explore Dave's World</h3>
+                <div class="more-options-buttons">
+                    <button type="button" class="more-options-btn" id="fb-albums-sidebar-btn">
+                        <i class="fas fa-images"></i> Facebook Albums
+                    </button>
+                    <button type="button" class="more-options-btn" id="fb-messenger-sidebar-btn">
+                        <i class="fas fa-comments"></i> Chats & Messages
+                    </button>
+                    <button type="button" class="more-options-btn" id="image-gallery-sidebar-btn">
+                        <i class="fas fa-photo-video"></i> Image Gallery
+                    </button>
+                    <button type="button" class="more-options-btn" id="locations-sidebar-btn">
+                        <i class="fas fa-map-marker-alt"></i> Locations
+                    </button>
+                    <button type="button" class="more-options-btn" id="email-gallery-sidebar-btn">
+                        <i class="fas fa-envelope"></i> Email Gallery
+                    </button>
+                    <button type="button" class="more-options-btn" id="suggestions-sidebar-btn">
+                        <i class="fas fa-lightbulb"></i> Suggestions
+                    </button>
+                    <button type="button" class="more-options-btn" id="have-your-say-sidebar-btn">
+                        <i class="fas fa-microphone"></i> Have Your Say
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Interview Control Section (hidden by default) -->
+            <div class="interview-control-section" style="display: none;">
+                <h3>Interview Controls</h3>
+                
+                <!-- Interview Purpose Selector -->
+                <div class="interview-purpose-selector">
+                    <label for="interview-purpose">Interview Purpose:</label>
+                    <select id="interview-purpose" name="interview-purpose">
+                        <option value="">Select Purpose</option>
+                        <option value="biography">Biography Writing</option>
+                        <option value="research">Academic Research</option>
+                        <option value="journalism">Journalism/Article</option>
+                        <option value="therapy">Therapeutic Session</option>
+                        <option value="oral-history">Oral History</option>
+                        <option value="memoir">Memoir Writing</option>
+                        <option value="documentary">Documentary Film</option>
+                        <option value="podcast">Podcast Interview</option>
+                        <option value="book">Book Research</option>
+                        <option value="personal">Personal Interest</option>
+                        <option value="family">Family History</option>
+                        <option value="professional">Professional Development</option>
+                        <option value="creative">Creative Writing</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                
+                            <!-- Interviewee Selection -->
+            <div class="interviewee-selection" style="margin-bottom: 20px;">
+                <label for="interviewee-select" style="color: #b8e0f7; font-size: 14px; margin-bottom: 5px; display: block;">Interviewee:</label>
+                <select id="interviewee-select" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #4a5568; background-color: #2d3748; color: #e2e8f0; margin-bottom: 10px;">
+                    <option value="">Loading interviewees...</option>
+                </select>
+                <button type="button" id="add-interviewee-btn" class="interview-control-btn" style="width: 100%; padding: 8px 12px; font-size: 12px;">
+                    <i class="fas fa-plus"></i>
+                    <span>Add New Interviewee</span>
+                </button>
+            </div>
+                
+                <div class="interview-control-buttons">
+                    <button type="button" id="start-interview-btn" class="interview-control-btn">
+                        <i class="fas fa-microphone"></i>
+                        <span>Start Interview</span>
+                    </button>
+                    <button type="button" id="resume-interview-btn" class="interview-control-btn">
+                        <i class="fas fa-play"></i>
+                        <span>Resume Interview</span>
+                    </button>
+                    <button type="button" id="pause-interview-btn" class="interview-control-btn">
+                        <i class="fas fa-pause"></i>
+                        <span>Pause Interview</span>
+                    </button>
+                    <button type="button" id="write-interim-bio-btn" class="interview-control-btn">
+                        <i class="fas fa-file-alt"></i>
+                        <span>Write Interim Biography</span>
+                    </button>
+                    <button type="button" id="finish-interview-btn" class="interview-control-btn">
+                        <i class="fas fa-stop"></i>
+                        <span>Finish Interview</span>
+                    </button>
+                    <button type="button" id="write-final-bio-btn" class="interview-control-btn">
+                        <i class="fas fa-book"></i>
+                        <span>Write Final Biography</span>
+                    </button>
+                    <button type="button" id="reset-interview-btn" class="interview-control-btn">
+                        <i class="fas fa-undo"></i>
+                        <span>Reset Interview</span>
+                    </button>
+                </div>
+            </div>
+            
+            {# <p class="model-info">Model: {{ config.GOOGLE_API_MODEL or 'gemini-1.5-pro-latest' }}</p> #}
+        </div>
+
+        <div class="chat-main">
+            <div class="chat-header">
+                <button id="new-chat-btn">New Chat</button>
+                <button id="change-user-id-btn">Change User ID</button>
+            </div>
+            <div id="chat-box">
+                <div id="info-box" class="info-box">
+                    <div class="info-box-content-wrapper" style="display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start; gap: 2rem;height:280px">
+                        <div class="info-content" style="width: 50%;">
+                            <ul>
+                                <li>Select a voice from the sidebar to get responses from different perspectives</li>
+                                <li>If you choose "Dave's own voice", you can also select his current mood</li>
+                                <li>Type your questions about Dave in the chat box below</li>
+                                <li>Click "Suggestions" for some useful, provocative or fun suggestions</li>
+                                <li>Click "Have Your Say" to enter your own perspective or story about Dave</li>
+                            </ul>
+                        </div>
+                        <div id="voice-preview" class="voice-preview" style="width: 50%;display: inline;">
+                            <p style="font-weight: bold; color: #2c3e50; margin-bottom: 0.5rem; font-size: 1.1em;">Current Voice</p>
+                            <img src="/static/images/expert.png" alt="expert character" class="preview-image">
+                            <p class="preview-description">A knowledgeable expert who provides accurate, factual information</p>
+                        </div>
+                    </div>
+
+                    <div class="voice-flow-container" style="display: grid; grid-template-rows: repeat(2, 1fr); grid-template-columns: repeat(7, 1fr); gap: 15px;">
+                        <div class="voice-icon-wrapper" data-voice="dave" data-description="Dave's own voice">
+                            <img src="/static/images/dave_sm.png" alt="dave" class="voice-icon">
+                        </div>
+
+                        <div class="voice-icon-wrapper" data-voice="expert" data-description="Expert analysis of Dave's situation">
+                            <img src="/static/images/expert_sm.png" alt="expert" class="voice-icon">
+                        </div>
+
+                        <div class="voice-icon-wrapper" data-voice="male_friend" data-description="A close male friend's view of Dave">
+                            <img src="/static/images/male-friend_sm.png" alt="male-friend" class="voice-icon">
+                        </div>
+                        <div class="voice-icon-wrapper" data-voice="female_friend" data-description="A female friend's perspective on Dave">
+                            <img src="/static/images/female-friend_sm.png" alt="female-friend" class="voice-icon">
+                        </div>
+                        <div class="voice-icon-wrapper" data-voice="psychologist" data-description="A professional psychological analysis">
+                            <img src="/static/images/psychologist_sm.png" alt="psychologist" class="voice-icon">
+                        </div>
+                        <div class="voice-icon-wrapper" data-voice="after_death" data-description="Dave's story from beyond">
+                            <img src="/static/images/after-death_sm.png" alt="after-death" class="voice-icon">
+                        </div>
+                         <div class="voice-icon-wrapper" data-voice="irish" data-description="An Irish perspective on Dave">
+                            <img src="/static/images/irish_sm.png" alt="irish" class="voice-icon">
+                        </div>
+                        <div class="voice-icon-wrapper" data-voice="secret_admirer" data-description="A secret admirer's loving perspective">
+                            <img src="/static/images/secret-admirer_sm.png" alt="secret-admirer" class="voice-icon">
+                        </div>
+                        <div class="voice-icon-wrapper" data-voice="haiku" data-description="Dave's story in Haiku form">
+                            <img src="/static/images/haiku_sm.png" alt="haiku" class="voice-icon">
+                        </div>
+                        <div class="voice-icon-wrapper" data-voice="insult" data-description="A critical view of Dave">
+                            <img src="/static/images/insult_sm.png" alt="insult" class="voice-icon">
+                        </div>
+                        <div class="voice-icon-wrapper" data-voice="earthchild" data-description="A nature-connected perspective">
+                            <img src="/static/images/earthchild_sm.png" alt="earthchild" class="voice-icon">
+                        </div>
+                        <div class="voice-icon-wrapper" data-voice="bar_girl" data-description="A bar girl's unique observations">
+                            <img src="/static/images/bar-girl_sm.png" alt="bar-girl" class="voice-icon">
+                        </div>
+                        <div class="voice-icon-wrapper" data-voice="parents" data-description="Dave's parents' perspective">
+                            <img src="/static/images/parents_sm.png" alt="parents" class="voice-icon">
+                        </div>
+                        <div class="voice-icon-wrapper" data-voice="preacher" data-description="A spiritual interpretation">
+                            <img src="/static/images/preacher_sm.png" alt="preacher" class="voice-icon">
+                        </div>
+                    </div>
+                </div>
+                <!-- Chat messages will be loaded here -->
+                {% for message in history %}
+                {% set role = message.role | replace('model', 'assistant') %}
+                <div class="message {{ role }}-message">
+                    <!-- CHANGE: Add a toolbar div for assistant messages -->
+                    {% if role == 'assistant' %}
+                    <div class="message-toolbar">
+                        <button class="copy-md-btn" title="Copy Markdown">
+                            <i class="fa-regular fa-clipboard"></i> Copy
+                        </button>
+                    </div>
+                    {% endif %}
+                    <!-- /CHANGE -->
+                    <div class="message-content" data-role="{{ role }}">
+                        <!-- Raw text initially, JS will render Markdown -->
+                        <!-- CHANGE: Store raw markdown in data attribute for JS access -->
+                        <textarea class="raw-markdown" style="display:none;">{{ message.parts[0] }}</textarea>
+                        <!-- Container for rendered HTML -->
+                        <div class="rendered-content">
+                            {{ message.parts[0] | safe }} <!-- Keep initial display if JS is slow/fails -->
+                        </div>
+                        <!-- /CHANGE -->
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Loading Indicator -->
+            <div id="loading-indicator" style="display: none;">
+                <div class="thinking-dots">
+                    <img class="loading-voice-image" src="/static/images/expert.png"
+                        alt="Voice character">
+                    <span class="thinking-text">Thinking</span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                </div>
+            </div>
+
+            <!-- Error Display -->
+            <div id="error-display" class="error-message" style="display: none;"></div>
+
+
+            <form id="chat-form" style="background-color: #19264d;padding-left: 0px;">
+                <div style="position: relative; width: 100%;">
+                    <textarea id="user-input" placeholder="Enter your question or comment..." rows="3" style="width: 100%;"></textarea>
+                    <div style="position: absolute; top: 50%; right: 5px; transform: translateY(-50%); display: flex; flex-direction: column; gap: 5px;">
+                        <button type="button" id="chat-start-dictation-btn" class="chat-dictation-btn" title="Start voice dictation" style="background: #90EE90; color: #2c3e50; border: none; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 14px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M5 3a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0z"/>
+                                <path d="M3.5 6.5A.5.5 0 0 1 4 7v1a4 4 0 0 0 8 0V7a.5.5 0 0 1 1 0v1a5 5 0 0 1-4.5 4.975V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 .5-.5"/>
+                            </svg>
+                        </button>
+                        <button type="button" id="chat-stop-dictation-btn" class="chat-dictation-btn" title="Stop voice dictation" style="display: none; background: #FFB6C1; color: #2c3e50; border: none; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 14px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M13 8c0 .564-.094 1.107-.266 1.613l-.814-.814A4.02 4.02 0 0 0 12 8V7a.5.5 0 0 1 1 0zm-5 4c.818 0 1.578-.245 2.212-.667l.718.719a4.973 4.973 0 0 1-2.43.923V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 1 0v1a4 4 0 0 0 4 4m3-9v4.879L5.158 2.037A3.001 3.001 0 0 1 11 3"/>
+                                <path d="M9.486 10.607 5 6.12V8a3 3 0 0 0 4.486 2.607m-7.84-9.253 12 12L1.646 2.354 1.354 2.06l-.708.708 12 12 .708-.707L2.354 1.646z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div id="chat-dictation-status" style="color: #b8e0f7; font-size: 12px; margin-top: 5px; min-height: 15px; margin-left: 10px;"></div>
+                <button type="submit" id="send-button" >Send</button>
+            </form>
+        </div>
+        
+        <!-- Interviewer Mode Layout -->
+        <div class="interviewer-main" style="display: none;">
+            <div class="interviewer-header">
+                <div class="interviewer-header-content">
+                    <div class="interviewer-header-left">
+                        <h2>Interview Mode</h2>
+                        <p>Respond to interview question so the AI can write a biography</p>
+                    </div>
+                    <div class="interviewer-header-right">
+                        <button type="button" id="exit-interviewer-mode-btn" class="exit-interviewer-btn">
+                            <i class="fas fa-arrow-left"></i>
+                            <span>Back to Normal Mode</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div id="interviewer-chat-box">
+                <div id="interviewer-info-box" class="interviewer-info-box">
+                    <div class="interviewer-info-content">
+                        <h3>Welcome to Interview Mode</h3>
+                        <p>This is a simplified interface for conducting interviews. You can:</p>
+                        <ul>
+                            <li>Respond to questions about your life, experiences, and relationships</li>
+                            <li>Be confronted by the insights that the AI has about you</li>
+                            <li>Focus on the conversation without distractions</li>
+                        </ul>
+                        <p><strong>Start saying hello to the Kara, the AI Interviewer.</strong></p>
+                    </div>
+                </div>
+                <!-- Interview messages will be loaded here -->
+            </div>
+
+            <!-- Interviewer Loading Indicator -->
+            <div id="interviewer-loading-indicator" style="display: none;">
+                <div class="interviewer-thinking-dots">
+                    <img class="interviewer-loading-voice-image" src="/static/images/expert.png"
+                        alt="Voice character">
+                    <span class="interviewer-thinking-text">Thinking</span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                </div>
+            </div>
+
+            <!-- Interviewer Error Display -->
+            <div id="interviewer-error-display" class="interviewer-error-message" style="display: none;"></div>
+<!-- 
+            <form id="interviewer-chat-form" style="background-color: #19264d; padding-left: 0px;">
+                <div style="position: relative; width: 100%;">
+                        <textarea id="interviewer-user-input" placeholder="Respond to your interview question..." rows="3" style="width: 100%;"></textarea>
+                        <div style="position: absolute; top: 50%; right: 5px; transform: translateY(-50%); display: flex; flex-direction: column; gap: 5px;">
+                            <button type="button" id="interviewer-start-dictation-btn" class="interviewer-dictation-btn" title="Start voice dictation" style="background: #90EE90; color: #2c3e50; border: none; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 14px;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M5 3a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0z"/>
+                                    <path d="M3.5 6.5A.5.5 0 0 1 4 7v1a4 4 0 0 0 8 0V7a.5.5 0 0 1 1 0v1a5 5 0 0 1-4.5 4.975V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 .5-.5"/>
+                                </svg>
+                            </button>
+                            <button type="button" id="interviewer-stop-dictation-btn" class="interviewer-dictation-btn" title="Stop voice dictation" style="display: none; background: #FFB6C1; color: #2c3e50; border: none; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 14px;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M13 8c0 .564-.094 1.107-.266 1.613l-.814-.814A4.02 4.02 0 0 0 12 8V7a.5.5 0 0 1 1 0zm-5 4c.818 0 1.578-.245 2.212-.667l.718.719a4.973 4.973 0 0 1-2.43.923V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 1 0v1a4 4 0 0 0 4 4m3-9v4.879L5.158 2.037A3.001 3.001 0 0 1 11 3"/>
+                                    <path d="M9.486 10.607 5 6.12V8a3 3 0 0 0 4.486 2.607m-7.84-9.253 12 12L1.646 2.354 1.354 2.06l-.708.708 12 12 .708-.707L2.354 1.646z"/>
+                                </svg>
+                            </button>
+                        </div>
+                </div>
+                <div id="interviewer-dictation-status" style="color: #b8e0f7; font-size: 12px; margin-top: 5px; min-height: 15px; margin-left: 10px;"></div>
+                <button type="submit" id="interviewer-send-button" style="height: 40px;">Respond</button>
+            </form> -->
+
+            <form id="interviewer-chat-form" style="background-color: #19264d;padding-left: 0px;">
+                <div style="position: relative; width: 100%;">
+                    <textarea id="interviewer-user-input" placeholder="Enter your response..." rows="3" style="width: 100%;"></textarea>
+                    <div style="position: absolute; top: 50%; right: 5px; transform: translateY(-50%); display: flex; flex-direction: column; gap: 5px;">
+                        <button type="button" id="interviewer-start-dictation-btn" class="chat-dictation-btn" title="Start voice dictation" style="background: #90EE90; color: #2c3e50; border: none; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 14px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M5 3a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0z"/>
+                                <path d="M3.5 6.5A.5.5 0 0 1 4 7v1a4 4 0 0 0 8 0V7a.5.5 0 0 1 1 0v1a5 5 0 0 1-4.5 4.975V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 .5-.5"/>
+                            </svg>
+                        </button>
+                        <button type="button" id="interviewer-stop-dictation-btn" class="chat-dictation-btn" title="Stop voice dictation" style="display: none; background: #FFB6C1; color: #2c3e50; border: none; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 14px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M13 8c0 .564-.094 1.107-.266 1.613l-.814-.814A4.02 4.02 0 0 0 12 8V7a.5.5 0 0 1 1 0zm-5 4c.818 0 1.578-.245 2.212-.667l.718.719a4.973 4.973 0 0 1-2.43.923V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 1 0v1a4 4 0 0 0 4 4m3-9v4.879L5.158 2.037A3.001 3.001 0 0 1 11 3"/>
+                                <path d="M9.486 10.607 5 6.12V8a3 3 0 0 0 4.486 2.607m-7.84-9.253 12 12L1.646 2.354 1.354 2.06l-.708.708 12 12 .708-.707L2.354 1.646z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div id="chat-dictation-status" style="color: #b8e0f7; font-size: 12px; margin-top: 5px; min-height: 15px; margin-left: 10px;"></div>
+                <button type="submit" id="interviewer-send-button" >Respond</button>
+            </form>
+
+        </div>
+        
+        <!-- Configuration Page -->
+        <div class="config-page" style="display: none;">
+            <div class="config-header">
+                <h2>Configuration</h2>
+                <button id="close-config" class="close-btn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="config-tabs">
+                <button class="config-tab-button active" data-tab="settings">
+                    <i class="fas fa-cog"></i> Settings
+                </button>
+                <button class="config-tab-button" data-tab="api-docs">
+                    <i class="fas fa-book"></i> API Docs
+                </button>
+                <button class="config-tab-button" data-tab="images-grid">
+                    <i class="fas fa-images"></i> Email Attachment Images
+                </button>
+            </div>
+            <div class="config-content" style="height:calc(100vh - 170px)">
+                <div class="config-tab-content active" id="settings-tab">
+                    <section class="config-section">
+                        <h3>Chat Settings</h3>
+                        <div class="setting-group">
+                            <label for="message-font-size">Message Font Size</label>
+                            <input type="range" id="message-font-size" min="12" max="24" value="16">
+                            <span class="value-display">16px</span>
+                        </div>
+                    </section>
+                    <section class="config-section">
+                        <h3>Voice and Image Settings</h3>
+                        <div class="setting-group">
+                            <label>
+                                <input type="checkbox" id="show-audio-tags" checked>
+                                Show audio tags in messages
+                            </label>
+                        </div>
+                        <div class="setting-group">
+                            <label>
+                                <input type="checkbox" id="show-image-tags" checked>
+                                Show image links in messages
+                            </label>
+                        </div>
+                        <div class="setting-group">
+                            <label>
+                                <input type="checkbox" id="show-json-tags">
+                                Show embedded JSON in messages
+                            </label>
+                        </div>
+                        <div class="setting-group">
+                            <label>
+                                <input type="checkbox" id="auto-voice-short-responses">
+                                Automatically call voice API for responses under 60 words
+                            </label>
+                        </div>
+                    </section>
+                </div>
+                <div class="config-tab-content" id="api-docs-tab">
+                    <iframe id="api-docs-iframe" src="/docs"></iframe>
+                </div>
+                <div class="config-tab-content" id="images-grid-tab">
+                    <iframe id="images-grid-iframe" src="/attachments-images-grid"></iframe>
+                </div>
+            </div>
+        </div>
+
+
+
+        <!-- FB Messenger Options Modal -->
+        <div id="fb-messenger-options-modal" class="modal">
+            <div class="modal-content">
+                <button id="close-fb-messenger-modal" class="modal-close-btn">&times;</button>
+                <h2>Facebook and Instagram Messenger Options</h2>
+                <form id="fb-messenger-options-form">
+                    <div class="setting-group">
+                        <label for="fb-select">Select Conversation :</label>
+                        <select id="fb-select" name="fb-select">
+
+                        </select>
+                    </div>
+                    <div class="setting-group">
+                        <div class="radio-group">
+                            <div><input type="radio" checked id="radio1" name="fb-radio" value="summariseconversation"><label for="radio1"> Summarise the conversation</label></div>
+                            <div><input type="radio" id="radio2" name="fb-radio" value="wholeconversation"><label for="radio2"> See the entire conversation</label></div>
+                            <div><input type="radio" id="radio3" name="fb-radio" value="makeupconversation"><label for="radio3"> Create an imaginary conversation</label></div>
+                        </div>
+                        <label>
+                            <input type="checkbox" id="oneToOneOnly" checked>
+                            Only One-to-One Chats
+                        </label>
+                    </div>
+                    <div class="modal-btn-row">
+                        <button type="button" id="fb-ok-btn" class="modal-btn modal-btn-primary">OK</button>
+                        <button type="button" id="fb-cancel-btn" class="modal-btn modal-btn-secondary">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Facebook Choose Albums Modal  -->
+        <div id="fb-albums-modal" class="modal">
+            <div class="modal-content">
+                <button id="close-fb-albums-modal" class="modal-close-btn">&times;</button>
+                <h2>Facebook Albums</h2>
+                <form id="fb-albums-form">
+                    <div class="setting-group">
+                        <label for="fb-albums-select">Select Album :</label>
+                        <select id="fb-albums-select" name="fb-albums-select">
+                            <!-- Album options will be populated dynamically -->
+                        </select>
+                    </div>
+                    <div class="modal-btn-row">
+                        <button type="button" id="fb-albums-ok-btn" class="modal-btn modal-btn-primary">OK</button>
+                        <button type="button" id="fb-albums-cancel-btn" class="modal-btn modal-btn-secondary">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+
+
+
+        <!-- Display Suggestions Modal -->
+        <div id="tile-suggestions-modal" class="modal">
+            <div class="modal-content tile-suggestions-modal-content">
+                <div class="modal-suggestions-header">
+                    <h2 id="tile-suggestions-modal-title" style="color: #fff;">Suggestions</h2>
+                    <button class="modal-suggestions-close-btn" id="modal-suggestions-close-btn" style="font-size: 1.5rem;">&times;</button>
+                </div>
+                <p id="tile-suggestions-modal-description" style="color: #fff;">Choose a suggestion from one of the categories below</p>
+                <div id="tile-suggestions-container" class="tile-suggestions-grid"></div>
+            </div>
+        </div>
+
+        <!-- Display Have Your Say Modal -->
+        <div id="have-your-say-modal" class="modal">
+            <div class="modal-content" style="max-width: 800px; width: 95vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 2rem; position: relative;">
+                <button class="modal-close-btn" id="close-have-your-say-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer;">&times;</button>
+                <h2 style="margin-top: 0; color: #233366; font-size: 1.3em; text-align: center;">Have Your Say</h2>
+                <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.7em; margin-bottom: 1em; align-items: center;">
+                    <label for="have-your-say-name" style="color: #333; text-align: right; font-weight: bold;">Your Name</label>
+                    <input id="have-your-say-name" type="text" placeholder="Optional" style="border-radius: 6px; border: 1px solid #bfc9da; padding: 0.5em; font-size: 1em;" />
+                    <label for="have-your-say-relationship" style="color: #333; text-align: right; font-weight: bold;">Relationship to Dave</label>
+                    <input id="have-your-say-relationship" type="text" placeholder="Optional" style="border-radius: 6px; border: 1px solid #bfc9da; padding: 0.5em; font-size: 1em;" />
+                </div>
+                <p style="color: #333; margin-bottom: 1em;">Click the button and dictate your input, or type below:</p>
+                <textarea id="have-your-say-textarea" rows="10" style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em; margin-bottom: 1em;"></textarea>
+                <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.7em; margin-bottom: 1em; align-items: left;">
+                <div id="dictation-status" style="margin-top: 0.7em; color: #666; font-size: 0.95em;"></div>
+                    <div style="display: flex; justify-content: flex-end; gap: 0.7em;">
+                        <button type="button" id="start-dictation-btn" class="modal-btn modal-btn-secondary" style="background: #04ec36; color: #233366;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-mic-fill" viewBox="0 0 16 16">
+                                <path d="M5 3a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0z"/>
+                                <path d="M3.5 6.5A.5.5 0 0 1 4 7v1a4 4 0 0 0 8 0V7a.5.5 0 0 1 1 0v1a5 5 0 0 1-4.5 4.975V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 .5-.5"/>
+                            </svg>
+                            Start Dictation</button>
+
+                        <button id="stop-dictation-btn" class="modal-btn modal-btn-secondary" style="display: none; background: #ec1f04; color: #233366;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-mic-mute-fill" viewBox="0 0 16 16">
+                            <path d="M13 8c0 .564-.094 1.107-.266 1.613l-.814-.814A4.02 4.02 0 0 0 12 8V7a.5.5 0 0 1 1 0zm-5 4c.818 0 1.578-.245 2.212-.667l.718.719a4.973 4.973 0 0 1-2.43.923V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 1 0v1a4 4 0 0 0 4 4m3-9v4.879L5.158 2.037A3.001 3.001 0 0 1 11 3"/>
+                            <path d="M9.486 10.607 5 6.12V8a3 3 0 0 0 4.486 2.607m-7.84-9.253 12 12L1.646 2.354 1.354 2.06l-.708.708 12 12 .708-.707L2.354 1.646z"/>
+                        </svg>
+                        Stop Dictation
+                        </button>
+                        <button type="button" id="submit-have-your-say-btn" class="modal-btn modal-btn-primary">Submit</button>
+                        <button type="button" id="cancel-have-your-say-btn" class="modal-btn modal-btn-secondary">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Geo Metadata Locations Modal -->
+        <div id="geo-metadata-modal" class="modal">
+            <div class="modal-content geo-metadata-modal-content">
+                <button id="close-geo-metadata-modal" class="modal-close-btn">&times;</button>
+                <div style="position: absolute; top: 10px; left: 10px; z-index: 1000;">
+                    <button id="shuffle-photos-btn" class="modal-btn modal-btn-primary" style="background: #233366; color: white; border: none; padding: 0.5em 1em; border-radius: 6px; cursor: pointer; font-size: 0.9em;">
+                        <i class="fas fa-random" style="margin-right: 0.5em;"></i>Shuffle Photos
+                    </button>
+                </div>
+                <div style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 1000;">
+                    <h2 style="margin: 0; color: #233366; font-size: 1.5em;">Locations Map</h2>
+                </div>
+                 <div class="geo-metadata-tab-content geo-tab-images">
+                    <div id="map-view"></div>
+                </div>
+                <div id="geo-metadata-shown-count" style="padding: 1em; background-color: rgba(200, 200, 200, 0.3); position: absolute; bottom: 10px; left: 10px;">                   
+                </div>
+            </div>
+        </div>
+
+        <!-- Image Gallery Modal -->
+        <div id="image-gallery-modal" class="modal">
+           <div class="modal-content image-gallery-modal-content">
+                <button id="close-image-gallery-modal" class="modal-close-btn">&times;</button>
+                <div class="image-gallery-modal-content">
+                    <div class="image-gallery-modal-body">
+                        <div style="display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; gap: 2px;padding: 1em;background-color: aliceblue;">
+                                    <div class="geo-metadata-filters" style="display: flex; flex-direction:column;gap: 0.4em; margin-bottom: 0.5em; margin-top: 0.5em; margin-left: 10px; align-items: start;">
+                                        <div style="display: flex; align-items: center; gap: 0.3em;">
+                                            <h2 style="margin: 0; font-size: 1.1em;">Image Gallery</h2> 
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 0.3em; width:100%">
+                                            <input type="text" id="image-gallery-search" placeholder="Search..." style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em; width: 100%;">
+                                        </div>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.3em; align-items: center;">
+                                            <select id="image-gallery-year-filter" style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em;">
+                                                <option value="0" selected>All Years</option>
+                                                <option value="2025">2025</option>
+                                                <option value="2024">2024</option>
+                                                <option value="2023">2023</option>
+                                                <option value="2022">2022</option>
+                                                <option value="2021">2021</option>
+                                                <option value="2020">2020</option>
+                                                <option value="2019">2019</option>
+                                                <option value="2018">2018</option>  
+                                                <option value="2017">2017</option>
+                                                <option value="2016">2016</option>
+                                                <option value="2015">2015</option>
+                                                <option value="2014">2014</option>
+                                                <option value="2013">2013</option>
+                                                <option value="2012">2012</option>
+                                                <option value="2011">2011</option>
+                                                <option value="2010">2010</option>
+                                                <option value="2009">2009</option>
+                                                <option value="2008">2008</option>
+                                                <option value="2007">2007</option>
+                                                <option value="2006">2006</option>
+                                                <option value="2005">2005</option>
+                                                <option value="2004">2004</option>
+                                                <option value="2003">2003</option>
+                                                <option value="2002">2002</option>
+                                                <option value="2001">2001</option>
+                                                <option value="2000">2000</option>
+                                                <option value="1999">1999</option>
+                                                <option value="1998">1998</option>
+                                                <option value="1997">1997</option>
+                                                <option value="1996">1996</option>
+                                                <option value="1995">1995</option>
+                                                <option value="1994">1994</option>
+                                                <option value="1993">1993</option>
+                                                <option value="1992">1992</option>
+                                                <option value="1991">1991</option>
+                                                <option value="1990">1990</option>
+                                            </select> 
+                                            <select id="image-gallery-month-filter" style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em;">
+                                                <option value="0" selected>All Months</option>
+                                                <option value="1">January</option>
+                                                <option value="2">February</option>
+                                                <option value="3">March</option>
+                                                <option value="4">April</option>
+                                                <option value="5">May</option>
+                                                <option value="6">June</option>
+                                                <option value="7">July</option>
+                                                <option value="8">August</option>
+                                                <option value="9">September</option>
+                                                <option value="10">October</option>
+                                                <option value="11">November</option>
+                                                <option value="12">December</option>
+                                            </select>
+                                        </div>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.3em; align-items: center;">
+                                            <select id="image-gallery-location-filter" style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em;">
+                                                <option value="all" selected>All Locations</option>
+                                                <option value="loc">GPS Data</option>
+                                                <option value="non">No GPS Data</option>
+                                                <option value="aus">Australian Locations</option>
+                                                <option value="dxb">Dubai Locations</option>
+                                                <option value="me">Middle East</option>
+                                                <option value="eur">European Locations</option>
+                                                <option value="usa">USA Locations & Canada</option>
+                                                <option value="af">African Locations</option>
+                                                <option value="asia">Asian Locations</option>
+                                                <option value="oth">Other Locations</option>
+                                            </select>
+                                            <select id="image-gallery-source-filter" style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em;">
+                                            </select>                                         
+
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 0.3em;">
+                                            <button id="image-gallery-search-btn" class="modal-btn modal-btn-primary" style="background: #233366; color: white; border: none; padding: 0.3em 0.8em; border-radius: 4px; cursor: pointer; font-size: 0.9em;">
+                                                <i class="fas fa-search" style="margin-right: 0.3em;"></i>Search
+                                            </button>
+                                            <button id="image-gallery-clear-btn" class="modal-btn modal-btn-secondary" style="background: #6c757d; color: white; border: none; padding: 0.3em 0.8em; border-radius: 4px; cursor: pointer; font-size: 0.9em;">
+                                                <i class="fas fa-times" style="margin-right: 0.3em;"></i>Clear
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="image-gallery-list" id="image-gallery-list"></div>
+                        </div>
+                        <div class="image-gallery-image">
+                                <div id="image-gallery-image-details" style="padding: 5px; background-color: rgba(200, 200, 200, 0.3); position: absolute; top: 10px; left: 10px;"></div>
+                                <button id="download-image-gallery-btn" class="download-btn" title="Download this item" style="position: absolute; top: 15px; right: 60px;">
+                                    <i class="fas fa-download"></i> Download
+                                </button>
+                                <div id="image-gallery-map"></div>
+                                <img id="image-gallery-image" src="" frameborder="0"></img>
+                                <div id="image-gallery-instructions" style="margin-top: 1em; margin-bottom: 1em;">
+                                    Select a thumbnail from the list on the left to view the image and location details
+                                </div>
+                                <div id="image-gallery-audio-container" style="display: none;">
+                                    <audio id="image-gallery-audio-player" controls></audio>
+                                </div>
+                                <div id="image-gallery-video-container" style="display: none;">
+                                    <video id="image-gallery-video-player" controls style="max-width: 100%; max-height: 400px;"></video>
+                                </div>
+                                <div id="image-gallery-pdf-container" style="display: none; width: 100%; height: 600px;">
+                                    <iframe id="image-gallery-pdf-viewer" style="width: 100%; height: 100%; border: none;"></iframe>
+                                </div>
+                                <button class="image-gallery-fixed-btn" id="image-gallery-fixed-btn" title="Action"><i class="fa fa-map-marked-alt" style="margin-right: 10px;"></i>Show In Google Maps</button>
+                        </div>
+                    </div>
+                </div>
+           </div>
+        </div>
+
+        <!-- Email Gallery Modal -->
+        <div id="email-gallery-modal" class="modal">
+           <div class="modal-content email-gallery-modal-content">
+                <button id="close-email-gallery-modal" class="modal-close-btn">&times;</button>
+                <div class="email-gallery-modal-content">
+                    <div class="email-gallery-modal-body">
+                        <div style="display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; gap: 2px;padding: 1em;background-color: aliceblue;">
+                                    <div class="email-metadata-filters" style="display: flex; flex-direction:column;gap: 0.4em; margin-bottom: 0.5em; margin-top: 0.5em; margin-left: 10px; align-items: start;">
+                                        <div style="display: flex; align-items: center; gap: 0.3em;">
+                                            <h2 style="margin: 0; font-size: 1.1em;">Email Gallery</h2> 
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 0.3em; width:100%">
+                                            <input type="text" id="email-gallery-search" placeholder="Search emails..." style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em; width: 100%;">
+                                        </div>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.3em; align-items: center;">
+                                            <input type="text" id="email-gallery-sender" placeholder="From..." style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em;">
+                                            <input type="text" id="email-gallery-recipient" placeholder="To..." style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em;">
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 0.3em;width:100%">
+                                            <input type="text" id="email-gallery-to-from" placeholder="To or From..." style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em; width: 100%;">
+                                        </div> 
+                                        <div style="display: flex; align-items: center; gap: 0.3em; flex-wrap: wrap;">
+                                            <select id="email-gallery-year-filter" style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em;">
+                                                <!-- <option value="all" selected>All Years</option> -->
+                                            </select>                                         
+                                            <select id="email-gallery-month-filter" style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em;">
+                                                <!-- <option value="all" selected>All Months</option> -->
+                                            </select>
+                                            <label style="display: flex; align-items: center; gap: 0.3em; color: #333; font-size: 0.9em;">
+                                                <input type="checkbox" id="email-gallery-business-filter" style="margin: 0;">
+                                                Business
+                                            </label>
+                                            <label style="display: flex; align-items: center; gap: 0.3em; color: #333; font-size: 0.9em;">
+                                                <input type="checkbox" id="email-gallery-attachments-filter" style="margin: 0;">
+                                                Attachments
+                                            </label>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 0.3em;">
+                                            <button id="email-gallery-search-btn" class="modal-btn modal-btn-primary" style="background: #233366; color: white; border: none; padding: 0.3em 0.8em; border-radius: 4px; cursor: pointer; font-size: 0.9em;">
+                                                <i class="fas fa-search" style="margin-right: 0.3em;"></i>Search
+                                            </button>
+                                            <button id="email-gallery-clear-btn" class="modal-btn modal-btn-secondary" style="background: #6c757d; color: white; border: none; padding: 0.3em 0.8em; border-radius: 4px; cursor: pointer; font-size: 0.9em;">
+                                                <i class="fas fa-times" style="margin-right: 0.3em;"></i>Clear
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="email-gallery-list" id="email-gallery-list"></div>
+                        </div>
+                        <div class="email-gallery-content">
+                                <div id="email-gallery-email-details" style="padding: 5px; background-color: rgba(200, 200, 200, 0.3); position: absolute; top: 10px; left: 10px; border-radius: 4px; font-size: 0.9em;"></div>
+                                <div id="email-gallery-instructions" style="margin-top: 1em; margin-bottom: 1em; text-align: center; color: #666; font-style: italic;">
+                                    Select an email from the list on the left to view its content
+                                </div>
+                                <div id="email-gallery-email-content" class="email-content-display" style="display: none;">
+                                    <div class="email-header" style="border-bottom: 2px solid #e9ecef; padding-bottom: 1em; margin-bottom: 1.5em;">
+                                        <div class="email-subject" style="font-size: 1.4em; font-weight: bold; color: #233366; margin-bottom: 0.5em;"></div>
+                                        <div class="email-meta" style="display: grid; grid-template-columns: auto 1fr; gap: 0.5em 1em; font-size: 0.95em; color: #666;">
+                                            <div class="email-meta-label" style="font-weight: bold;">From:</div>
+                                            <div class="email-meta-value email-from"></div>
+                                            <div class="email-meta-label" style="font-weight: bold;">To:</div>
+                                            <div class="email-meta-value email-to"></div>
+                                            <div class="email-meta-label" style="font-weight: bold;">Date:</div>
+                                            <div class="email-meta-value email-date"></div>
+                                            <div class="email-meta-label" style="font-weight: bold;">Folder:</div>
+                                            <div class="email-meta-value email-folder"></div>
+                                        </div>
+                                    </div>
+                                    <div class="email-body" style="line-height: 1.6; color: #333; font-size: 1em;"></div>
+                                    <div class="email-attachments" style="display: flex; flex-direction: row; flex-wrap: wrap; gap: 0.5em; margin-top: 1em; align-items: flex-start;">
+                                    </div>
+                                </div>
+                        </div>
+                    </div>
+                </div>
+           </div>
+        </div>
+        
+        
+
+        <!-- Confirmation Modal -->
+        <div id="confirmation-modal" class="modal confirmation-modal">
+            <div class="modal-content confirmation-modal-content">
+                    <div class="confirmation-modal-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <h2 id="confirmation-modal-title" style="margin: 0;"></h2>
+                        <button class="modal-close-btn" id="close-confirmation-modal">&times;</button>
+                    </div>
+                <p id="confirmation-modal-text"></p>
+                <div class="confirmation-modal-buttons">
+                        <button type="button" id="confirmation-modal-confirm" class="modal-btn modal-btn-primary">Confirm</button>
+    <button type="button" id="confirmation-modal-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+</div>
+</div>
+</div>
+
+<!-- Add Interviewee Modal -->
+<div id="add-interviewee-modal" class="modal">
+<div class="modal-content" style="max-width: 500px; width: 95vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 2rem; position: relative;">
+    <button class="modal-close-btn" id="close-add-interviewee-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer;">&times;</button>
+    <div class="modal-header">
+        <h2 style="margin: 0; color: #2c3e50;">Add New Interviewee</h2>
+    </div>
+    <div class="modal-body" style="margin: 20px 0;">
+        <label for="new-interviewee-name" style="display: block; margin-bottom: 8px; color: #2c3e50; font-weight: bold;">Interviewee Name:</label>
+        <input type="text" id="new-interviewee-name" placeholder="Enter interviewee name..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+    </div>
+    <div class="modal-btn-row" style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button type="button" id="add-interviewee-submit-btn" class="modal-btn modal-btn-primary">Add Interviewee</button>
+        <button type="button" id="add-interviewee-cancel-btn" class="modal-btn modal-btn-secondary">Cancel</button>
+    </div>
+</div>
+</div>
+
+        <!-- Single Image Modal -->
+        <div id="single-image-modal" class="modal">
+            <div class="modal-content single-image-modal-content">
+                <div class="single-image-container">
+                    <div id="single-image-details" class="single-image-details"></div>
+                    <button id="close-single-image-modal" class="single-image-close-btn">&times;</button>
+                    <button id="download-single-image-btn" class="download-btn" title="Download this item">
+                        <i class="fas fa-download"></i> Download
+                    </button>
+                    <img id="single-image-modal-img" src="" alt="Image" class="single-image-display" />
+                    <audio id="single-image-modal-audio" controls class="single-audio-display"></audio>
+                    <video id="single-image-modal-video" controls class="single-video-display"></video>
+                    <iframe id="single-image-modal-pdf" src="" frameborder="0" class="single-pdf-display"></iframe>
+                    
+                </div>
+            </div>
+        </div>
+
+        <!-- Just a note that to display the multi-image modal, you need to call the showMultiImageModal function from the scriptv2.js file 
+             and pass in the images array and the current image uri.
+             For example:
+             Modals.MultiImageDisplay.showMultiImageModal(images, uri);
+             The HTML for the fb album modal is all dynamically created in the javascript file.
+        -->
+
+        <!-- Display album images Modal -->
+        <div id="fb-album-modal" class="modal">
+            <div class="modal-content tile-album-modal-content">
+                <button id="close-fb-album-modal" class="modal-album-close-btn">&times;</button>
+                <h2 id="fb-album-modal-title"></h2>
+                <p id="fb-album-modal-description"></p>
+                <div id="fb-album-container" class="fb-album-grid"></div>
+            </div>
+        </div>
+
+        <!-- Change User ID Modal -->
+        <div id="change-user-id-modal" class="modal">
+            <div class="modal-content" style="max-width: 500px; width: 90vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 2rem; position: relative;">
+                <button class="modal-close-btn" id="close-change-user-id-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer;">&times;</button>
+                <h2 style="margin-top: 0; color: #233366; font-size: 1.3em; text-align: center;">Change User ID</h2>
+                <div style="margin-bottom: 1.5em;">
+                    <label for="current-user-id" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Current User ID:</label>
+                    <input id="current-user-id" type="text" readonly style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em; background-color: #f8f9fa; color: #666;" />
+                </div>
+                <div style="margin-bottom: 1.5em;">
+                    <label for="new-user-id" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">New User ID:</label>
+                    <input id="new-user-id" type="text" placeholder="Enter new User ID..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 0.7em;">
+                    <button type="button" id="change-user-id-cancel-btn" class="modal-btn modal-btn-secondary">Cancel</button>
+                    <button type="button" id="change-user-id-confirm-btn" class="modal-btn modal-btn-primary">Change User ID</button>
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+
+    <script src="/static/js/new_page.js"></script>
+    <script src="/static/js/leaflet.js"></script>
+    <script>
+        // Function to show confirmation modal
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var editBtn = document.getElementById('edit-davebio-btn');
+            if (editBtn) {
+                editBtn.addEventListener('click', function() {
+                    window.open('/davebio_editor', '_blank');
+                });
+            }
+
+
+        });
+    </script>
+</body>
+
+</html>

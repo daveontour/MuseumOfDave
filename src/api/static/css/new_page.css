@@ -1,0 +1,3554 @@
+/* --- :root variables (if any) --- */
+:root {
+    --message-font-size: 16px;
+}
+
+/* --- Global/Body Styles --- */
+body {
+    font-family: sans-serif;
+    margin: 0;
+    background-color: #f0f2f5;
+    display: flex;
+    height: 100vh;
+    overflow: hidden; /* Prevent body scrolling */
+}
+
+.app-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+}
+
+/* --- Layout Components --- */
+.sidebar {
+    width: 400px;
+    min-width: 400px; /* Prevent shrinking below this width */
+    flex-shrink: 0; /* Prevent the sidebar from shrinking */
+    background-color: #e0e0e0;
+    padding: 20px;
+    padding-top: 0px;
+    padding-bottom: 5px;
+    border-right: 1px solid #ccc;
+    display: flex;
+    flex-direction: column;
+    height: 100vh; /* Full height */
+    box-sizing: border-box; /* Include padding in height */
+    overflow-y: auto; /* Allow scrolling if content is too tall */
+}
+
+.sidebar h2 {
+    margin-top: -15px;
+    color: #333;
+}
+
+.sidebar button {
+    padding: 10px 15px;
+    background-color: #dadfe0;
+    color: gray;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-bottom: 1px;
+    font-size: 1em;
+}
+
+.sidebar button:hover {
+    color: white;
+}
+
+.header-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+    padding: 10px 0;
+}
+
+.header-container h2 {
+    margin-top: 0px;
+    flex-grow: 1;
+    color: #fff; /* Assuming this is for a dark theme header within sidebar, adjust if not */
+}
+
+.chat-main {
+    flex-grow: 1; /* Takes remaining width */
+    display: flex;
+    flex-direction: column;
+    height: 100vh; /* Full height */
+    background-color: #e6f3ff;
+    position: relative; /* For absolute positioning of children */
+    margin-left: -1px; /* To avoid any border issues */
+    overflow: visible; /* Allow dropup to extend outside container */
+}
+
+.chat-header {
+    position: absolute;
+    top: 10px;
+    right: 20px;
+    z-index: 10;
+}
+
+/* --- Chat Area Specifics --- */
+#chat-box {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 20px;
+    padding-top: 50px; /* Add space for the fixed button */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Adjust first message in chat to not have extra top margin */
+#chat-box > .message:first-child {
+    margin-top: 10px;
+}
+
+.message {
+    margin-bottom: 15px;
+    padding: 10px 15px;
+    border-radius: 18px;
+    max-width: 75%;
+    word-wrap: break-word; /* Wrap long words */
+    position: relative; /* For positioning the copy button */
+    margin-top: 35px; /* Make space for the copy button */
+}
+
+.user-message {
+    background-color: #dcf8c6;
+    align-self: flex-end; /* Align user messages to the right */
+    border-bottom-right-radius: 4px;
+}
+
+.assistant-message {
+    background-color: #f1f0f0;
+    align-self: flex-start; /* Align assistant messages to the left */
+    border-bottom-left-radius: 4px;
+    padding-left: 15px; /* Ensure consistent padding */
+}
+
+.system-message { /* Appears this was intended for system role, though not explicitly used as a class in HTML */
+    background-color: #87CEEB; /* Example, align as needed */
+    align-self: flex-start; /* Or center, or full-width */
+}
+
+
+/* Voice-specific Message Styling */
+.assistant-message.voice-expert {
+    background-color: #f0f0f0;
+    border-left: 4px solid #2c3e50;
+    font-family: 'Arial', sans-serif;
+}
+
+.assistant-message.voice-male-friend {
+    background-color: #e8f5e9;
+    border-left: 4px solid #4CAF50;
+    font-family: 'Roboto', sans-serif;
+}
+
+.assistant-message.voice-female-friend {
+    background-color: #f3e5f5;
+    border-left: 4px solid #9c27b0;
+    font-family: 'Helvetica', sans-serif;
+}
+
+.assistant-message.voice-psychologist {
+    background-color: #e3f2fd;
+    border-left: 4px solid #1976d2;
+    font-family: 'Georgia', serif;
+}
+
+.assistant-message.voice-after-death {
+    background-color: #fafafa;
+    border-left: 4px solid #616161;
+    font-family: 'Times New Roman', serif;
+    font-style: italic;
+}
+
+.assistant-message.voice-secret-admirer {
+    background-color: #fff3e0;
+    border-left: 4px solid #ff9800;
+    font-family: 'Cursive', cursive;
+    font-style: italic;
+}
+
+.assistant-message.voice-bar-girl {
+    background-color: #ffebee;
+    border-left: 4px solid #e91e63;
+    font-family: 'Verdana', sans-serif;
+}
+
+.assistant-message.voice-parents {
+    background-color: #e8eaf6;
+    border-left: 4px solid #3f51b5;
+    font-family: 'Book Antiqua', serif;
+}
+
+.assistant-message.voice-dave {
+    background-color: #e0f2f1;
+    border-left: 4px solid #009688;
+    font-family: 'Calibri', sans-serif;
+}
+
+.assistant-message.voice-preacher {
+    background-color: #ffebee;
+    border-left: 4px solid #b71c1c;
+    font-family: 'Garamond', 'Crimson Text', 'Georgia', serif;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+.assistant-message[class*="voice-"] {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    padding-left: 20px; /* Add space for the border */
+}
+
+.assistant-message[class*="voice-"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* --- Message Content Styling --- */
+.message-content {
+    overflow: hidden; /* Ensure content wraps around the floated image */
+    font-size: var(--message-font-size);
+    min-height: 60px; /* Default min-height for assistant messages */
+    position: relative; /* For speak button */
+    padding-bottom: 5px; /* Make space for the speak button */
+}
+
+/* Set specific min-height for non-assistant messages */
+.message-content[data-role="user"],
+.message-content[data-role="suggestion"],
+.message-content[data-role="system"] {
+    min-height: 25px;
+}
+
+/* Data role based background colors (some might be redundant if message class already sets it) */
+.message-content[data-role="user"] {
+    background-color: #dcf8c6; /* From .user-message */
+    margin-left: auto;
+}
+.message-content[data-role="suggestion"] {
+    background-color: #f4f778; /* From .suggestion */
+    margin-left: auto;
+}
+.message-content[data-role="assistant"] {
+    background-color: #f1f1f1; /* From .assistant-message */
+    max-width: 60vw; /* Example, adjust as needed */
+}
+.message-content[data-role="system"] {
+    background-color: #87CEEB; /* From .system-message */
+}
+
+
+.message-content p {
+    margin-top: 0;
+    margin-bottom: 0.5em; /* Space between paragraphs */
+    line-height: 1.6;
+    font-size: var(--message-font-size);
+}
+.message-content p:first-child {
+    margin-top: 0;
+}
+.message-content p:last-child {
+   margin-bottom: 0;
+}
+
+.message-content ul, .message-content ol {
+    padding-left: 25px;
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+}
+
+.message-content li {
+    margin-bottom: 0.3em;
+}
+
+/* Code Blocks and Inline Code */
+.message-content pre {
+    clear: both; /* Ensure code blocks clear the float from voice image */
+    background-color: #2d2d2d;
+    color: #f8f8f2;
+    padding: 15px;
+    border-radius: 5px;
+    overflow-x: auto;
+    font-family: monospace;
+    font-size: calc(var(--message-font-size) * 0.9);
+    white-space: pre;
+    margin-top: 8px; /* Add space above code blocks */
+}
+
+.message-content code:not(pre > code) { /* Inline code */
+    background-color: #e0e0e0;
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: calc(var(--message-font-size) * 0.9);
+}
+
+/* --- Message Add-ons --- */
+/* Small Voice Image in Message */
+.message-voice-image {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    float: left;
+    margin: 0 16px 12px 0;
+    object-fit: cover;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Copy Button (Hover) */
+.message .copy-hover-btn {
+    position: absolute;
+    top: -25px;
+    right: 0;
+    z-index: 2;
+    display: none; /* Hide by default */
+    padding: 4px 8px;
+    background: #eee;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8em;
+    color: #333;
+    align-items: center;
+    gap: 4px;
+}
+
+.message:hover .copy-hover-btn {
+    display: flex; /* Show on message hover */
+}
+
+.copy-hover-btn:hover {
+    background-color: #f0f0f0;
+    border-color: #ccc;
+    color: #333;
+}
+
+.copy-hover-btn i {
+    font-size: 18px; /* Ensure this matches FontAwesome icon size if used */
+}
+
+.copy-hover-btn.copied {
+    background-color: #4CAF50;
+    color: white;
+    border-color: #4CAF50;
+}
+
+.copy-hover-btn.error {
+    background-color: #f44336;
+    color: white;
+    border-color: #f44336;
+}
+
+/* Old Copy Markdown Button (if still used, check JS) */
+.message-toolbar {
+    text-align: right;
+    margin-top: -15px;
+    margin-right: 5px;
+    margin-bottom: 5px;
+    height: 20px;
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+}
+.assistant-message[class*="voice-"] .message-toolbar { /* Specific to assistant voice messages */
+    margin-right: 15px;
+}
+.message.assistant-message:hover .message-toolbar {
+    opacity: 1;
+}
+.copy-md-btn { /* This seems like an older copy button, review JS if it's still active */
+    background: #eee;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 2px 6px;
+    cursor: pointer;
+    font-size: 0.8em;
+    color: #333;
+    display: none; /* Hide by default */
+}
+.message:hover .copy-md-btn {
+    display: inline-flex;
+    align-items: center;
+}
+.copy-md-btn:hover {
+    background: #ddd;
+}
+.copy-md-btn i {
+    margin-right: 4px;
+}
+
+
+/* JSON Viewer */
+.json-wrapper {
+    margin-top: 10px;
+    border-top: 1px solid #ddd;
+    padding-top: 10px;
+    position: relative;
+}
+
+.json-toggle {
+    background: #f0f0f0;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: all 0.2s ease;
+}
+
+.json-toggle:hover {
+    background: #e0e0e0;
+}
+
+.json-content {
+    margin-top: 10px;
+    background: #c9c1c1e3;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+}
+
+.json-content pre { /* Overrides general pre for JSON */
+    margin: 0;
+    white-space: pre-wrap;
+    font-family: monospace;
+    font-size: 0.9em;
+    color: #333;
+    background-color: transparent; /* JSON pre shouldn't have dark bg */
+    padding: 0;
+}
+
+/* Image Previews in Message */
+.image-buttons-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.image-preview {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 2px solid #e0e0e0;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.image-preview:hover {
+    transform: scale(1.05);
+    border-color: #007bff;
+}
+
+.image-preview-button {
+    background: #ffffff;
+    border: none;
+    border-radius: 20px;
+    margin: 1px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 0.9em;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background-color 0.2s;
+}
+
+.image-preview-button:hover {
+    background: #e0e0e0;
+}
+
+.image-preview-button i {
+    color: #666;
+}
+
+.video-preview-button {
+    background: #ffffff;
+    border: none;
+    border-radius: 20px;
+    margin: 1px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 0.9em;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background-color 0.2s;
+}
+.video-preview-button:hover {
+    background: #e0e0e0;
+}
+
+.video-preview-button i {
+    color: #666;
+}
+
+.audio-preview-button {
+    background: #ffffff;
+    border: none;
+    border-radius: 20px;
+    margin: 1px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 0.9em;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background-color 0.2s;
+}
+.audio-preview-button:hover {
+    background: #e0e0e0;
+}
+
+.image-preview-button i {
+    color: #666;
+}
+
+
+/* Speak Button and Audio Tags */
+.speak-button {
+    position: absolute;
+    bottom: 5px;
+    right: 5px;
+    background: #f0f0f0;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.speak-button:hover {
+    background: #e0e0e0;
+}
+
+.speak-button svg { /* If using SVG directly */
+    width: 16px;
+    height: 16px;
+    fill: #666;
+}
+.speak-button i { /* If using FontAwesome icon */
+    color: #666;
+}
+
+
+/* Audio tag visibility (JS toggles 'hide-audio-tags' class on body) */
+.hide-audio-tags .message-content audio,
+.hide-audio-tags .audio-status { /* Also hide status if audio tags are hidden */
+    display: none !important;
+}
+/* This rule seems problematic if text content is important: */
+/* .hide-audio-tags .message-content p:has(audio) {
+    display: none;
+} */
+.audio-status {
+    font-size: 0.8em;
+    font-style: italic;
+    margin-top: 4px;
+    color: #666;
+}
+
+
+/* --- Input Form --- */
+#chat-form {
+    display: flex;
+    padding: 15px;
+    background-color: #f8f8f8;
+    position: relative; /* Ensure proper positioning context for dropup */
+    overflow: visible; /* Allow dropup to extend outside form */
+}
+
+#user-input {
+    width: 100%;
+    padding: 12px;
+    padding-right: 50px; /* Add space for the floating microphone icon */
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-size: 16px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 60px;
+    box-sizing: border-box;
+    background-color: #fff;
+    color: #333;
+}
+
+#chat-form button { /* General button style in form */
+    padding: 10px 20px;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 1em;
+    margin-left: 10px; /* Default margin for buttons after the first */
+}
+
+#chat-form button:first-of-type { /* Send button */
+    background-color: #007bff;
+    margin-left: 0; /* No left margin for the very first button */
+}
+
+#chat-form button:first-of-type:hover {
+    background-color: #0056b3;
+}
+
+.chat-form-button { /* Specific class for other buttons like "Suggestions" */
+    margin-left: 4px; /* Overrides general margin-left if needed */
+    background-color: #b8e0f7;
+    color: #2c5777 !important; /* Important to override general color: white */
+}
+
+.chat-form-button:hover {
+    background-color: #a3d4f4;
+}
+
+#new-chat-btn { /* Specific styling for New Chat button, usually in sidebar/header */
+    background-color: #87CEEB;
+    color: white;
+    border: none;
+    padding: 9px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    white-space: nowrap;
+    font-size: 1.1em;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+#new-chat-btn:hover {
+    background-color: #6CA6CD;
+}
+
+#change-user-id-btn {
+    background-color: #87CEEB;
+    color: white;
+    border: none;
+    padding: 9px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    white-space: nowrap;
+    font-size: 1.1em;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-left: 10px;
+}
+
+#change-user-id-btn:hover {
+    background-color: #6CA6CD;
+}
+
+/* Change User ID Modal specific styling */
+#change-user-id-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 2000;
+    justify-content: center;
+    align-items: center;
+    overflow-y: auto;
+}
+
+#change-user-id-modal[style*="display: flex"] {
+    display: flex !important;
+}
+
+#change-user-id-modal .modal-content {
+    animation: modal-pop-in 0.3s ease-out;
+    max-width: 500px;
+    width: 90vw;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+    padding: 2rem;
+    position: relative;
+}
+
+
+/* --- UI Elements --- */
+/* Loading Indicator (Original complex one) */
+#loading-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex; /* Will be toggled by JS */
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 22px;
+    background-color: rgba(255, 255, 255, 0.9);
+    border-radius: 12px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+}
+
+.thinking-text {
+    color: #5f6368;
+    font-weight: 500;
+    font-size: 1.8em;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.thinking-dots {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    line-height: 1;
+}
+
+.loading-voice-image {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-right: 16px; /* Or remove if centered above text */
+}
+
+.dot {
+    width: 18px;
+    height: 18px;
+    background-color: #5f6368;
+    border-radius: 50%;
+    animation: pulse 1.4s infinite ease-in-out;
+    display: inline-block;
+    vertical-align: middle;
+    margin-bottom: 9px;
+}
+.dot:nth-child(1) { animation-delay: 0s; }
+.dot:nth-child(2) { animation-delay: 0.2s; }
+.dot:nth-child(3) { animation-delay: 0.4s; }
+
+
+/* Simpler Spinner (if preferred over the dots) */
+/* #loading-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    color: #888;
+    gap: 10px;
+}
+.spinner {
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border-left-color: #09f;
+  animation: spin 1s linear infinite;
+} */
+
+
+/* Error Display */
+.error-message { /* Used to be #error-display, class is more flexible */
+    color: #dc3545;
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    padding: 10px;
+    margin: 0 15px 10px 15px; /* Adjust margin to fit above form */
+    border-radius: 4px;
+    text-align: center;
+    /* display: none; is handled by JS */
+}
+
+/* Info Box (shown when chat is empty) */
+.info-box {
+    display: flex; /* Toggled by JS via .hidden */
+    flex-direction: column;
+    align-items: center;
+    background-color: #d9e5f0;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 2rem;
+    margin: 2rem auto;
+    width: 85%;
+    text-align: left;
+    position: relative;
+}
+.info-box.hidden {
+    display: none;
+}
+
+.info-box h2 {
+    color: #2c3e50;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    width: 100%;
+}
+
+.info-box-content-wrapper {
+    display: flex;
+    align-items: flex-start;
+    gap: 2rem;
+    width: 100%;
+}
+
+.info-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.info-box p {
+    color: #34495e;
+    line-height: 1.6;
+    margin-bottom: 1rem;
+}
+
+.info-box h3 {
+    color: #2c3e50;
+    margin: 1rem 0;
+}
+
+.info-box ul {
+    list-style-type: disc;
+    margin-left: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.info-box li {
+    color: #34495e;
+    margin-bottom: 0.5rem;
+    line-height: 1.4;
+}
+
+.info-footer {
+    color: #7f8c8d !important;
+    font-style: italic;
+    text-align: center;
+    margin-top: 1rem;
+}
+
+.info-box .voice-image-container { /* Voice image specifically in info box */
+    display: flex;
+    width: 200px;
+    height: 300px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    box-shadow: none;
+    padding: 0;
+}
+
+.info-box .voice-image-container img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 50%;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.info-box .voice-image-container img:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Sidebar Controls */
+.voice-selector { /* Container for voice radios */
+    margin-top: 0px;
+    padding: 15px;
+    background-color: #f5f5f5;
+    border-radius: 8px;
+    overflow-y: auto;
+    flex-shrink: 0; /* Changed from 1 to 0 to prevent shrinking */
+    max-height: none; /* Remove max-height constraint */
+}
+
+.voice-selector h3 {
+    margin: 0 0 15px 0;
+    font-size: 1em;
+    color: #333;
+}
+
+/* Voice Image Display */
+.voice-image-display {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 15px;
+    padding: 10px;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.selected-voice-img {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 50%;
+    border: 3px solid #4a90e2;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.selected-voice-img:hover {
+    transform: scale(1.05);
+    border-color: #357abd;
+}
+
+/* Voice Dropdown Container */
+.voice-dropdown-container {
+    margin-bottom: 15px;
+}
+
+#voice-select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background-color: white;
+    font-size: 14px;
+    color: #333;
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+}
+
+#voice-select:focus {
+    outline: none;
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+}
+
+#voice-select:hover {
+    border-color: #4a90e2;
+}
+
+/* More Options Section */
+.more-options-section {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #f5f5f5;
+    border-radius: 8px;
+    overflow-y: auto;
+    flex-shrink: 0; /* Changed from 1 to 0 to prevent shrinking */
+}
+
+.more-options-section h3 {
+    margin: 0 0 15px 0;
+    font-size: 1em;
+    color: #333;
+}
+
+.more-options-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.more-options-btn {
+    width: 100%;
+    padding: 10px 12px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+}
+
+.more-options-btn:hover {
+    background-color: #0056b3;
+    color: white;
+    transform: translateY(-1px);
+}
+
+.more-options-btn:active {
+    transform: translateY(0);
+}
+
+.more-options-btn i {
+    width: 16px;
+    text-align: center;
+}
+
+/* Legacy radio group styles - keeping for backward compatibility */
+.radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.radio-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.radio-item input[type="radio"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+.radio-item label {
+    font-size: 0.9em;
+    color: #444;
+    cursor: pointer;
+    line-height: 1.2;
+}
+
+.radio-item:hover label {
+    color: #000;
+}
+
+/* Mood Selector (for Dave voice) */
+#mood-selector {
+    margin-top: 10px;
+    padding: 8px;
+    background-color: #f8f8f8;
+    border-radius: 4px;
+    border-left: 3px solid #009688; /* Dave's color */
+}
+
+#mood-selector label {
+    display: block;
+    margin-bottom: 5px;
+    color: #444;
+    font-size: 0.9em;
+}
+
+#dave-mood {
+    width: 100%;
+    padding: 6px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: white;
+    color: #333;
+    font-size: 0.9em;
+    cursor: pointer;
+}
+#dave-mood:hover { border-color: #009688; }
+#dave-mood:focus {
+    outline: none;
+    border-color: #009688;
+    box-shadow: 0 0 0 2px rgba(0, 150, 136, 0.1);
+}
+#dave-mood option { padding: 4px; }
+
+/* Creativity Level Slider */
+.creativity-container {
+    margin: 15px 0;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 8px;
+}
+.creativity-container label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 0.9em;
+    color: #666;
+}
+.slider-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.slider-container input[type="range"] {
+    flex: 1;
+    height: 5px;
+    -webkit-appearance: none;
+    background: #ddd;
+    border-radius: 5px;
+    outline: none;
+}
+.slider-container input[type="range"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #ccc;
+}
+.slider-container input[type="range"]:disabled::-webkit-slider-thumb {
+    background: #999;
+    cursor: not-allowed;
+}
+.slider-container input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 15px;
+    height: 15px;
+    background: #4a90e2;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+.slider-container input[type="range"]::-webkit-slider-thumb:hover {
+    background: #357abd;
+}
+.slider-container .value-display { /* Next to slider */
+    min-width: 35px;
+    font-size: 0.9em;
+    color: #666;
+}
+
+/* Work Mode Checkbox */
+.work-mode-container {
+    margin: 15px 0;
+    padding: 10px;
+    border-radius: 5px;
+    background: rgba(0, 0, 0, 0.03);
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    margin-top: 20px;
+    padding-top: 20px;
+}
+.work-mode-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: #333;
+    font-size: 0.95em;
+}
+.work-mode-label input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+.work-mode-label i {
+    color: #2c3e50;
+}
+.work-mode-label:hover {
+    color: #000;
+}
+
+.model-info { /* At bottom of sidebar */
+    margin-top: auto;
+    font-size: 0.8em;
+    color: #666;
+}
+
+/* --- Configuration Page --- */
+.config-page {
+    /* display: none; by default, JS handles visibility */
+    flex: 1; /* Take up remaining space in app-container */
+    z-index: 1000; /* If using overlay */
+    padding: 20px;
+    background-color: white; /* Assuming it replaces chat-main */
+    display: flex;
+    flex-direction: column;
+    height: 100vh; /* Full viewport height */
+    box-sizing: border-box;
+    min-height: 0; /* Important for flex children */
+    overflow: hidden; /* Prevent page-level scrolling */
+}
+
+.config-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+    flex-shrink: 0;
+}
+.config-header h2 {
+    margin: 0;
+    color: #333;
+}
+
+.config-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #eee;
+    flex-shrink: 0;
+}
+
+.config-tab-button {
+    padding: 10px 20px;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    font-size: 14px;
+    color: #666;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.config-tab-button:hover {
+    color: #007bff;
+    background-color: #f8f9fa;
+}
+
+.config-tab-button.active {
+    color: #007bff;
+    border-bottom-color: #007bff;
+    font-weight: 600;
+}
+
+.config-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.config-tab-content {
+    display: none;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.config-tab-content.active {
+    display: flex;
+    flex-direction: column;
+}
+
+#api-docs-tab {
+    padding: 0;
+    overflow: hidden;
+}
+
+#api-docs-iframe {
+    width: 100%;
+    border: none;
+    flex: 1;
+    min-height: 0;
+    display: block;
+}
+
+#images-grid-tab {
+    padding: 0;
+    overflow: hidden;
+}
+
+#images-grid-iframe {
+    width: 100%;
+    border: none;
+    flex: 1;
+    min-height: 0;
+    display: block;
+}
+
+.close-btn, .hamburger-btn { /* Grouped similar button styles */
+    background: none;
+    border: none;
+    font-size: 1.5em;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+.close-btn { color: #666; padding: 5px; }
+.close-btn:hover { color: #dc3545; }
+
+.hamburger-btn {
+    background-color: #dadfe0; /* From original sidebar button */
+    color: #333;
+    padding: 5px 10px;
+    margin-left: 10px; /* If used next to another element */
+}
+.hamburger-btn:hover { color: #007bff; }
+
+
+.config-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+.config-section h3 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: #2c3e50;
+}
+.setting-group {
+    margin-bottom: 20px;
+}
+.setting-group:last-child { margin-bottom: 0; }
+.setting-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #495057;
+}
+.setting-group input[type="range"] {
+    width: 100%;
+    max-width: 300px;
+}
+.setting-group select {
+    width: 100%;
+    max-width: 300px;
+    padding: 8px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    background-color: white;
+}
+.setting-group .value-display { /* For font size, creativity etc. */
+    margin-left: 10px;
+    color: #666;
+}
+.setting-group input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+/* --- Tool Selector Styling (Currently Hidden) --- */
+.tool-description,
+.tool-list,
+.tool-item,
+.tool-item:hover, /* These :hover rules will also be hidden if parent is */
+.tool-item label,
+.tool-item input[type="checkbox"],
+.tool-info,
+.tool-item.disabled,
+.tool-item.disabled label {
+    display: none;
+}
+/* If you plan to show them, these are the styles: */
+/*
+.tool-description { margin-bottom: 15px; color: #666; font-style: italic; }
+.tool-list {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 15px; max-height: 400px; overflow-y: auto;
+    padding: 10px; background: white; border-radius: 6px; border: 1px solid #eee;
+}
+.tool-item { padding: 10px; background: #f8f9fa; border-radius: 6px; transition: background-color 0.2s ease; }
+.tool-item:hover { background: #e9ecef; }
+.tool-item label { display: flex; flex-direction: column; cursor: pointer; color: #333; font-weight: 500; }
+.tool-item input[type="checkbox"] { margin-right: 8px; }
+.tool-info { font-size: 0.85em; color: #666; margin-top: 4px; font-weight: normal; }
+.tool-item.disabled { opacity: 0.6; background: #f1f1f1; }
+.tool-item.disabled label { cursor: not-allowed; }
+*/
+
+/* --- Voice Preview & Icons (Sidebar) --- */
+.voice-image-container { /* Old container for single large voice image, likely replaced by preview */
+    display: none;
+}
+#voice-image { /* Old ID for single large voice image */
+    max-width: 100%; max-height: 100%; width: auto; height: auto;
+    object-fit: contain; border-radius: 4px; transition: transform 0.3s ease;
+}
+#voice-image:hover { transform: scale(1.02); }
+
+
+.voice-preview { /* For the preview image and description area in sidebar */
+    display: block; /* Was none, should be visible */
+    text-align: center;
+    padding: 20px;
+    padding-top: 0px; /* Adjust as needed */
+}
+.preview-image {
+    width: 160px;
+    height: 160px;
+    object-fit: cover;
+    border-radius: 50%;
+    margin-bottom: 15px;
+}
+.preview-description {
+    color: #333;
+    font-size: 1.1em;
+    margin: 0;
+}
+
+.voice-flow-container { /* Container for the small clickable voice icons */
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 15px;
+    padding: 20px 0; /* Remove side padding if voice-selector has it */
+    margin-top: 10px; /* Space from radio buttons */
+}
+.voice-icon-wrapper {
+    width: 70px;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+.voice-icon { /* The small clickable image */
+    width: 100%;
+    height: auto;
+    border-radius: 50%;
+    transition: transform 0.2s ease, filter 0.2s ease, border 0.2s ease; /* Added border transition */
+    border: 3px solid transparent; /* For selection highlight */
+}
+.voice-icon:hover {
+    transform: scale(1.1);
+    filter: brightness(1.1);
+}
+/* JS will add 'border: 3px solid blue;' for selected */
+
+
+/* --- Modals (General) --- */
+.modal { /* Base class for all modals if commonality exists, then override */
+    display: none; /* JS controls this */
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: rgba(0,0,0,0.5); /* Default overlay */
+    z-index: 2000; /* Default z-index */
+    justify-content: center;
+    align-items: center;
+    overflow-y: auto; /* For modals taller than viewport */
+}
+/* Ensure JS-shown modals are actually flexed */
+.modal[style*="display: flex"] {
+    display: flex !important;
+}
+
+.modal-content { /* Base for modal content boxes */
+    background: #fff;
+    border-radius: 12px; /* Default radius */
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    padding: 2rem; /* Default padding */
+    padding-top: 16px;
+    position: relative;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    max-height: 90vh; /* Prevent modal from being too tall */
+    overflow-y: auto; /* Scroll inside modal if content overflows */
+    width: 90vw; /* Default width, can be overridden */
+    max-width: 600px; /* Default max-width */
+}
+
+.modal-close-btn { /* General close button for modals */
+    position: absolute;
+    top: 12px; right: 18px;
+    font-size: 1.7rem;
+    background: none; border: none;
+    color: #bfc9da;
+    cursor: pointer;
+    transition: color 0.2s;
+    z-index: 10; /* Above modal content */
+}
+.modal-close-btn:hover { color: #4a90e2; }
+
+.modal-btn-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1em;
+    margin-top: 1.5em;
+}
+.modal-btn {
+    padding: 0.5em 1.5em;
+    border-radius: 6px;
+    border: none;
+    font-size: 1em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.18s, color 0.18s;
+}
+.modal-btn-primary { background: #4a90e2; color: #fff; }
+.modal-btn-primary:hover { background: #233366; }
+.modal-btn-secondary { background: #eaf1fb; color: #233366; margin-left: 10px; }
+.modal-btn-secondary:hover { background: #d1e2f7; }
+
+@keyframes modal-pop-in { /* Common modal animation */
+    0% { transform: scale(0.95) translateY(30px); opacity: 0; }
+    100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+
+/* --- Specific Modals --- */
+/* Modern Suggestions Modal (Tiles) */
+#suggestions-modal {
+    background: #000 !important; /* Solid black background instead of transparent */
+}
+
+#suggestions-modal .modal-content { 
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 0;
+    border-radius: 20px;
+    max-width: 90vw;
+    width: 90vw;
+    max-height: 85vh;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+}
+
+.tile-suggestions-modal-content {
+    width: 90vw;
+    max-width: 90vw;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    position: relative;
+}
+
+.modal-suggestions-header {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 25px 30px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    position: relative;
+}
+
+.modal-suggestions-header h2 {
+    color: white;
+    font-size: 2.2em;
+    font-weight: 700;
+    margin: 0;
+    text-align: center;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    letter-spacing: -0.5px;
+}
+
+.modal-suggestions-header p {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 1.1em;
+    margin: 10px 0 0 0;
+    text-align: center;
+    font-weight: 300;
+}
+
+#modal-suggestions-close-btn {
+    position: absolute;
+    top: 20px;
+    right: 25px;
+    font-size: 2rem;
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(0, 0, 0, 0.3);
+    border: none;
+    border-radius: 50%;
+    width: 45px;
+    height: 45px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+#modal-suggestions-close-btn:hover {
+    color: white;
+    background: rgba(0, 0, 0, 0.5);
+    transform: scale(1.1);
+}
+
+#tile-suggestions-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(224px, 1fr));
+    gap: 20px;
+    padding: 32px;
+    max-height: calc(85vh - 120px);
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+/* Custom scrollbar for the suggestions container */
+#tile-suggestions-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+#tile-suggestions-container::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+#tile-suggestions-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+#tile-suggestions-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.tile-suggestions {
+    background: white;
+    border-radius: 13px;
+    box-shadow: 0 6px 26px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    cursor: pointer;
+    position: relative;
+    min-height: 112px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 20px 16px;
+    box-sizing: border-box;
+}
+
+.tile-suggestions::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.tile-suggestions:hover::before {
+    opacity: 1;
+}
+
+.tile-suggestions p {
+    margin: 0;
+    line-height: 1.4;
+    position: relative;
+    z-index: 2;
+}
+
+.tile-suggestions p:first-child {
+    font-weight: 600;
+    font-size: 0.9em;
+    margin-bottom: 8px;
+    color: #667eea;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tile-suggestions p:last-child {
+    font-size: 1.1em;
+    font-weight: 500;
+    color: #2d3748;
+    line-height: 1.3;
+}
+
+.tile-suggestions:hover {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+
+.tile-suggestions:active {
+    transform: translateY(-4px) scale(1.01);
+}
+
+/* Add subtle animation on load */
+@keyframes tileFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.tile-suggestions {
+    animation: tileFadeIn 0.6s ease forwards;
+}
+
+/* Stagger the animation for multiple tiles */
+.tile-suggestions:nth-child(1) { animation-delay: 0.1s; }
+.tile-suggestions:nth-child(2) { animation-delay: 0.2s; }
+.tile-suggestions:nth-child(3) { animation-delay: 0.3s; }
+.tile-suggestions:nth-child(4) { animation-delay: 0.4s; }
+.tile-suggestions:nth-child(5) { animation-delay: 0.5s; }
+.tile-suggestions:nth-child(6) { animation-delay: 0.6s; }
+.tile-suggestions:nth-child(7) { animation-delay: 0.7s; }
+.tile-suggestions:nth-child(8) { animation-delay: 0.8s; }
+
+
+/* FB Messenger Options Modal */
+#fb-messenger-options-modal .modal-content {
+    max-width: 400px; /* Narrower modal */
+    animation: modal-pop-in 0.25s cubic-bezier(.4,2,.6,1) 1;
+}
+#fb-messenger-options-modal h2 {
+    margin-top: 0; margin-bottom: 1.2em; color: #233366;
+    font-size: 1.4em; font-weight: 600; text-align: center;
+}
+#fb-messenger-options-modal .setting-group { margin-bottom: 1.2em; }
+#fb-messenger-options-modal label {
+    font-weight: 500; color: #2c3e50;
+    margin-bottom: 0.3em; display: block;
+}
+#fb-messenger-options-modal select {
+    width: 100%; padding: 0.5em; border-radius: 6px;
+    border: 1px solid #bfc9da; font-size: 1em;
+    background: #f7faff; margin-top: 0.2em;
+}
+#fb-messenger-options-modal .radio-group > div { /* For radio button items */
+    display: flex; align-items: center;
+    gap: 0.5em; margin-bottom: 0.3em;
+}
+#fb-messenger-options-modal input[type="radio"] { accent-color: #4a90e2; margin-right: 0; }
+#fb-messenger-options-modal .radio-group label { /* Label next to radio */
+    margin-bottom: 0; display: inline;
+    font-weight: 400; color: #2c3e50;
+}
+#fb-messenger-options-modal input[type="checkbox"] { accent-color: #4a90e2; margin-right: 0.5em; }
+
+
+/* FB Albums Modal */
+#fb-albums-modal .modal-content { /* Similar to FB Messenger modal */
+    max-width: 400px;
+    animation: modal-pop-in 0.25s cubic-bezier(.4,2,.6,1) 1;
+}
+#fb-albums-modal h2 {
+    margin-top: 0; margin-bottom: 1.2em; color: #233366;
+    font-size: 1.4em; font-weight: 600; text-align: center;
+}
+#fb-albums-modal .setting-group { margin-bottom: 1.2em; }
+#fb-albums-modal label {
+    font-weight: 500; color: #2c3e50;
+    margin-bottom: 0.3em; display: block;
+}
+#fb-albums-modal select {
+    width: 100%; padding: 0.5em; border-radius: 6px;
+    border: 1px solid #bfc9da; font-size: 1em;
+    background: #f7faff; margin-top: 0.2em;
+}
+
+
+/* Tile Album Modal (Image Grid) */
+#fb-album-modal .modal-content { /* .tile-album-modal-content */
+    max-width: 1000px; /* Wider for grid */
+    width: 90vw;
+    padding-top: 40px; /* Space for title/close button */
+}
+#fb-album-modal-title {
+    margin-top: 0; margin-bottom: 0.5rem;
+    color: #333; font-size: 1.5rem;
+    text-align: center; /* Centered title */
+}
+#fb-album-modal-description {
+    color: #666; margin-bottom: 1.5rem;
+    text-align: center; /* Centered description */
+}
+.fb-album-grid { /* #tile-album-container */
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+    padding: 20px 0;
+}
+.tile-album { /* Individual tile in the grid */
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    cursor: pointer;
+}
+.tile-album:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+.tile-album img {
+    width: 100%; height: 150px;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+.tile-album:hover img { transform: scale(1.05); }
+.tile-album-description {
+    padding: 12px; font-size: 14px;
+    color: #333; line-height: 1.4;
+}
+#fb-album-modal .modal-album-close-btn { /* Specific close for this modal */
+    /* Uses .modal-close-btn general style, or specific: */
+    position: absolute; right: 15px; top: 15px;
+    font-size: 24px; color: #666; padding: 5px; line-height: 1;
+}
+#fb-album-modal .modal-album-close-btn:hover { color: #333; }
+
+
+/* Have Your Say Modal (Dictation) */
+#have-your-say-modal .modal-content {
+    max-width: 450px; /* Slightly wider for inputs */
+}
+#have-your-say-modal h2 { /* Assuming a title might be added */
+    margin-top: 0; margin-bottom: 1.2em; color: #233366;
+    font-size: 1.4em; font-weight: 600; text-align: center;
+}
+#have-your-say-modal textarea {
+    width: 100%;
+    min-height: 100px; /* Ensure decent height */
+    border-radius: 6px; border: 1px solid #bfc9da;
+    padding: 0.7em; font-size: 1em;
+    margin-bottom: 1em; resize: vertical;
+    box-sizing: border-box;
+}
+#have-your-say-modal .input-row {
+    display: flex;
+    gap: 0.7em;
+    margin-bottom: 1em;
+}
+#have-your-say-modal input[type="text"] { /* For Name/Relationship */
+    flex: 1; /* Allow them to share space */
+    border-radius: 6px; border: 1px solid #bfc9da;
+    padding: 0.5em; font-size: 1em;
+    box-sizing: border-box;
+}
+#have-your-say-modal #dictation-status {
+    margin-top: 0.7em; color: #666;
+    font-size: 0.95em;
+    text-align: center; /* Center status */
+    min-height: 1.2em; /* Reserve space */
+}
+#have-your-say-modal .dictation-buttons { /* Container for start/stop dictation */
+    display: flex;
+    justify-content: center;
+    gap: 1em;
+    margin-bottom: 1em;
+}
+
+/* The main container div */
+.my-conversation-container {
+    border: 2px solid #333;
+    padding: 15px;
+    background-color: #fff;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.conversation-message {
+    margin-bottom: 8px
+}
+.conversation-row {
+    /* Common row styles if any */
+}
+
+.conversation-top-row {
+    display: flex;
+    /* justify-content: space-between;
+    gap: 10px; */
+    margin-bottom: 0px;
+}
+
+.conversation-item {
+    /* background-color: #e9e9e9; */
+    padding: 5px 5px;
+    padding-top: 2px;
+    border: none;
+    text-align: left;
+}
+
+.conversation-top-row .conversation-item {
+    /* flex-grow: 1; */
+}
+
+.conversation-bottom-row .conversation-item {
+    /* background-color: #d0e0f0; */
+}
+
+/* Image Modal (Full-screen preview from message attachments or tile grid) */
+.image-modal {
+    position: fixed; top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex; /* JS toggles this */
+    justify-content: center; align-items: center;
+    z-index: 3000; /* High z-index */
+}
+.image-modal img {
+    max-width: 90vw; max-height: 90vh;
+    object-fit: contain; border-radius: 4px;
+}
+.image-modal .modal-close { /* Specific close for this full-screen modal */
+    position: absolute; top: 20px; right: 20px;
+    background: none; border: none;
+    color: white; font-size: 32px;
+    cursor: pointer; padding: 0;
+    width: 40px; height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+    z-index: 3001; /* Above image */
+}
+.image-modal .modal-close:hover { background: rgba(255, 255, 255, 0.1); }
+.image-modal .nav-arrow {
+    position: absolute; top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.5);
+    color: white; border: none;
+    padding: 16px; cursor: pointer;
+    font-size: 24px; border-radius: 50%;
+    transition: background-color 0.2s, transform 0.2s;
+    z-index: 3001; /* Above image */
+}
+.image-modal .nav-arrow:hover {
+    background: rgba(0, 0, 0, 0.8);
+    transform: translateY(-50%) scale(1.1);
+}
+.image-modal .nav-arrow.prev { left: 20px; }
+.image-modal .nav-arrow.next { right: 20px; }
+
+
+/* --- Utility Classes --- */
+.hidden {
+    display: none !important; /* Ensure it overrides other display properties */
+}
+
+
+/* --- Animations --- */
+@keyframes pulse {
+    0%, 100% { transform: scale(0.8); opacity: 0.5; }
+    50% { transform: scale(1.2); opacity: 1; }
+}
+
+@keyframes spin { /* For simpler spinner option */
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+
+/* --- Media Queries --- */
+@media (max-width: 768px) {
+    .info-box-content-wrapper {
+        flex-direction: column;
+        align-items: center;
+    }
+    .info-box .voice-image-container {
+        margin-bottom: 1.5rem;
+    }
+    .info-content {
+        width: 100%;
+    }
+
+    /* Example for modals on small screens if needed */
+    .modal-content {
+        max-height: 95vh; /* Allow more height on smaller screens */
+        width: 95vw;
+    }
+    #fb-messenger-options-modal .modal-content,
+    #fb-albums-modal .modal-content { /* Specific small screen adjustments */
+        padding: 1.2rem 0.7rem;
+    }
+}
+
+/* --- Theme Specific Adjustments (Example, expand as needed) --- */
+/* Dark theme adjustments for creativity slider */
+.theme-dark .creativity-container { background: rgba(255, 255, 255, 0.1); }
+.theme-dark .creativity-container label,
+.theme-dark .slider-container .value-display { color: #ccc; }
+.theme-dark .slider-container input[type="range"] { background: #444; }
+
+/* Sepia theme adjustments for creativity slider */
+.theme-sepia .creativity-container { background: rgba(112, 66, 20, 0.1); }
+.theme-sepia .creativity-container label,
+.theme-sepia .slider-container .value-display { color: #704214; }
+
+/* Geo Metadata Modal Styles */
+.geo-metadata-modal-content {
+  width: 90vw;
+  max-width: 90vw;
+  max-height: 90vh;
+  height: 90vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+.geo-metadata-modal-body {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+}
+.geo-metadata-list {
+  width: 450px;
+  min-width: 250px;
+  max-width: 400px;
+  background: #f7faff;
+  border-right: 1px solid #d1e2f7;
+  overflow-y: auto;
+  height: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 1.5em 0.5em 1.5em 1.5em;
+}
+.geo-metadata-list .geo-location-item {
+  padding: 0.7em 0.5em;
+  border-bottom: 1px solid #e0e7ef;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-size: 1em;
+}
+.geo-metadata-list .geo-location-item:hover,
+.geo-metadata-list .geo-location-item.selected {
+  background: #eaf1fb;
+}
+.geo-metadata-map {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  position: relative; /* Add for absolute positioning of child button */
+}
+#geo-metadata-image {
+  width: 100%;
+  height: 100%;
+  border: none;
+  min-height: 400px;
+  display: none;
+  object-fit: contain; /* Maintains aspect ratio while fitting container */
+  background-color: #f8f9fa; /* Light background to make image boundaries visible */
+}
+#geo-metadata-instructions {
+    width: 100%;
+    height: 100%;
+    border: none;
+    min-height: 400px;
+    display: block;
+    text-align: center;
+    font-size: 1.0rem;
+    color: #666;
+    padding: 1em;
+  }
+.geo-map-fixed-btn {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  z-index: 10;
+  background: #4a90e2;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  width: 200px;
+  height: 40px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  font-size: 0.9rem;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.geo-map-fixed-btn:hover {
+  background: #233366;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.22);
+}
+
+.geo-metadata-tabs {
+    display: flex;
+    border-bottom: 1px solid #ccc;
+    margin-bottom: 0px;
+}
+.geo-tab-btn {
+    background: none;
+    border: none;
+    padding: 0.7em 1.5em;
+    cursor: pointer;
+    font-weight: bold;
+    color: #233366;
+    border-bottom: 2px solid transparent;
+    transition: border-color 0.2s;
+}
+.geo-tab-btn.active {
+    border-bottom: 2px solid #233366;
+    color: #19264d;
+}
+.geo-metadata-tab-content {
+    display: block;
+    height:calc(100% - 40px);
+}
+.geo-metadata-tab-content.active {
+    display: block;
+}
+
+/* Image Gallery Modal Styles */
+.image-gallery-modal-content {
+    width: 90vw;
+    max-width: 90vw;
+    max-height: 90vh;
+    height: 90vh;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+}
+
+.image-gallery-modal-body {
+    display: flex;
+    flex-direction: row; 
+    height: 100%;
+}
+
+.image-gallery-fixed-btn {
+    position: absolute;
+    bottom: 24px;
+    right: 24px;
+    z-index: 10;
+    background: #4a90e2;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    width: 200px;
+    height: 40px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    font-size: 0.9rem;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s, box-shadow 0.2s;
+}
+
+.image-gallery-fixed-btn:hover {
+    background: #233366;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.22);
+}
+
+.image-gallery-image {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    background-color: #f8f9fa;
+    padding: 2px;
+    max-width: calc(100% - 12px);
+    max-height: calc(100% - 12px);
+}
+
+.image-gallery-image img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    display: none; /* Will be shown when image is loaded */
+}
+
+.image-gallery-image img[src] {
+    display: block; /* Show image once it has a src */
+}
+
+#image-gallery-instructions {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 1.1rem;
+    color: #666;
+    font-style: italic;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 2px dashed #dee2e6;
+}
+
+.image-gallery-list {
+    width: 450px;
+    max-width: 450px;
+    min-width: 450px;
+    height: 100%;
+    border-right: none;
+    border-bottom: 1px solid #d1e2f7;
+    padding: 1em;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    overflow-y: scroll;
+}
+
+.image-gallery-has-gps {
+    border: 2px solid #4a90e2;
+    width: 100px;
+    height: 100px;
+    padding: 1px;
+    width: 100px;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 6px;
+    cursor: pointer;
+    max-height: 100px;
+}
+
+.image-gallery-has-no-gps {
+    border: 2px solid #041222;
+    width: 100px;
+    height: 100px;
+    padding: 1px;
+    width: 100px;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 6px;
+    cursor: pointer;
+    max-height: 100px;
+}
+
+.image-gallery-list img {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+#image-gallery-map{
+    position: absolute;
+    z-index: 10;
+    bottom: 20px;
+    display: none;
+    right: 20px;
+    height:200px;
+    width:240px;
+}
+
+#map{
+    position: absolute;
+    z-index: 10;
+    bottom: 20px;
+    display: none;
+    right: 20px;
+    height:200px;
+    width:240px;
+}
+#map-view{
+    position: absolute;
+    z-index: 10;
+    bottom: 5%;
+    display: block;
+    right: 5%;
+    height:90%;
+    width:90%;
+}
+
+/* Email Gallery Modal Styles */
+.email-gallery-modal-content {
+    width: 90vw;
+    max-width: 90vw;
+    max-height: 90vh;
+    height: 90vh;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+}
+
+.email-gallery-modal-body {
+    display: flex;
+    flex-direction: row; 
+    height: 100%;
+}
+
+.email-gallery-content {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    position: relative;
+    background-color: #ffffff;
+    padding: 2em;
+    overflow-y: auto;
+    border-left: 1px solid #e9ecef;
+}
+
+.email-gallery-list {
+    width: 450px;
+    max-width: 450px;
+    min-width: 450px;
+    height: 100%;
+    border-right: 1px solid #e9ecef;
+    padding: 1em;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    background-color: #f8f9fa;
+}
+
+.email-list-item {
+    background: #ffffff;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 0.75em;
+    margin-bottom: 0.5em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    position: relative;
+}
+
+.email-list-item:hover {
+    border-color: #4a90e2;
+    box-shadow: 0 2px 6px rgba(74, 144, 226, 0.15);
+    transform: translateY(-1px);
+    background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.email-list-item.selected {
+    border-color: #4a90e2;
+    background-color: #f8fbff;
+    box-shadow: 0 2px 6px rgba(74, 144, 226, 0.2);
+}
+
+.email-list-item.selected::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: #4a90e2;
+}
+
+.email-list-item .email-subject {
+    font-weight: 600;
+    color: #233366;
+    font-size: 0.95em;
+    margin-bottom: 0.4em;
+    line-height: 1.2;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.email-list-item .email-sender {
+    font-size: 0.85em;
+    color: #555;
+    margin-bottom: 0.2em;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+}
+
+.email-list-item .email-date {
+    font-size: 0.75em;
+    color: #888;
+    margin-bottom: 0.3em;
+    font-weight: 400;
+}
+
+.email-list-item .email-preview {
+    font-size: 0.8em;
+    color: #666;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-top: 0.3em;
+}
+
+.email-list-item.has-attachments::after {
+    content: '📎';
+    position: absolute;
+    top: 0.5em;
+    right: 0.5em;
+    font-size: 1.2em;
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+}
+
+.email-list-item.has-attachments:hover::after {
+    opacity: 0.8;
+}
+
+.email-content-display {
+    width: 100%;
+    max-width: 100%;
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 2em;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.email-header {
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 1.5em;
+    margin-bottom: 2em;
+}
+
+.email-subject {
+    font-size: 1.6em;
+    font-weight: 700;
+    color: #233366;
+    margin-bottom: 1em;
+    line-height: 1.3;
+}
+
+.email-meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.75em 1.5em;
+    font-size: 0.95em;
+    color: #666;
+}
+
+.email-meta-label {
+    font-weight: 600;
+    color: #333;
+    min-width: 80px;
+}
+
+.email-meta-value {
+    color: #666;
+    word-break: break-word;
+}
+
+.email-body {
+    line-height: 1.7;
+    color: #333;
+    font-size: 1em;
+    white-space: pre-wrap;
+}
+
+.email-body p {
+    margin-bottom: 1em;
+}
+
+.email-body p:last-child {
+    margin-bottom: 0;
+}
+
+#email-gallery-instructions {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 1.1rem;
+    color: #666;
+    font-style: italic;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 2px dashed #dee2e6;
+}
+
+@media (max-width: 900px) {
+    .email-gallery-modal-content {
+        flex-direction: column;
+        width: 98vw;
+        max-width: 98vw;
+        height: 98vh;
+        max-height: 98vh;
+    }
+    
+    .email-gallery-modal-body {
+        flex-direction: column;
+    }
+    
+    .email-gallery-list {
+        width: 100%;
+        max-width: 100vw;
+        min-width: 0;
+        height: 300px;
+        border-right: none;
+        border-bottom: 1px solid #e9ecef;
+        padding: 1em;
+    }
+    
+    .email-gallery-content {
+        height: 100%;
+        min-height: 400px;
+        padding: 1em;
+    }
+    
+    .email-content-display {
+        padding: 1em;
+    }
+    
+    .email-subject {
+        font-size: 1.3em;
+    }
+    
+    .email-meta {
+        grid-template-columns: 1fr;
+        gap: 0.5em;
+    }
+    
+    .email-meta-label {
+        min-width: auto;
+    }
+}
+
+@media (max-width: 768px) {
+    .email-gallery-list {
+        height: 250px;
+    }
+    
+    .email-gallery-content {
+        min-height: 350px;
+    }
+    
+    .email-list-item {
+        padding: 0.6em;
+        margin-bottom: 0.4em;
+    }
+    
+    .email-list-item .email-subject {
+        font-size: 0.85em;
+    }
+    
+    .email-list-item .email-sender {
+        font-size: 0.75em;
+    }
+    
+    .email-list-item .email-preview {
+        font-size: 0.75em;
+    }
+}
+
+@media (max-width: 900px) {
+    .geo-metadata-modal-content {
+        flex-direction: column;
+        width: 98vw;
+        max-width: 98vw;
+        height: 98vh;
+        max-height: 98vh;
+    }
+    .geo-metadata-modal-body {
+        flex-direction: column;
+    }
+    .geo-metadata-list {
+        width: 100%;
+        max-width: 100vw;
+        min-width: 0;
+        height: 200px;
+        border-right: none;
+        border-bottom: 1px solid #d1e2f7;
+        padding: 1em;
+    }
+    .geo-metadata-map {
+        height: 100%;
+        min-height: 300px;
+    }
+}
+
+/* --- Geo List Two Column Layout --- */
+.geo-list-row {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 1em;
+    width: 100%;
+    min-height: 80px;
+    margin-bottom: 0.5em;
+}
+.geo-list-left {
+    flex: 3 1 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+}
+.geo-list-right {
+    align-items: center;
+    justify-content: center;
+    min-width: 100px;
+    max-width: 100px;
+    max-height: 90px;
+}
+.geo-list-right img {
+    width: 100px;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 6px;
+    cursor: pointer;
+
+}
+@media (max-width: 700px) {
+    .geo-list-row {
+        flex-direction: column;
+        gap: 0.3em;
+        min-height: 0;
+    }
+    .geo-list-right {
+        max-width: 100%;
+        max-height: 120px;
+    }
+}
+
+/* Email Message Styling */
+.email-message {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    max-width: 85%;
+    margin-bottom: 20px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.email-content {
+    padding: 0;
+}
+
+.email-header {
+    background-color: #f8f9fa;
+    padding: 15px 20px;
+    border-bottom: 1px solid #e0e0e0;
+    border-radius: 8px 8px 0 0;
+}
+
+.email-field {
+    margin-bottom: 8px;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.email-field:last-child {
+    margin-bottom: 0;
+}
+
+.email-field strong {
+    color: #495057;
+    font-weight: 600;
+    min-width: 80px;
+    display: inline-block;
+}
+
+.email-subject {
+    font-size: 16px;
+    font-weight: 600;
+    color: #212529;
+    /* border-top: 1px solid #dee2e6; */
+    padding-top: 4px;
+    margin-top: 4px;
+}
+
+.email-separator {
+    margin: 0;
+    border: none;
+    border-top: 1px solid #e0e0e0;
+}
+
+.email-body {
+    padding: 20px;
+    line-height: 1.6;
+    color: #212529;
+    background-color: #ffffff;
+}
+
+.email-body p {
+    margin-bottom: 12px;
+}
+
+.email-body p:last-child {
+    margin-bottom: 0;
+}
+
+.email-attachments {
+    padding: 15px 20px;
+    background-color: #f8f9fa;
+    border-top: 1px solid #e0e0e0;
+    border-radius: 0 0 8px 8px;
+    align-items: flex-start;
+}
+
+.email-attachments img {
+    object-fit: contain;
+    max-width: 100%;
+    height: auto;
+}
+
+.email-attachments h4 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    color: #495057;
+    font-weight: 600;
+}
+
+.email-attachment {
+    display: flex;
+    align-items: center;
+    padding: 8px 0;
+    font-size: 14px;
+    color: #495057;
+}
+
+.email-attachment i {
+    margin-right: 8px;
+    color: #6c757d;
+}
+
+.email-attachment .attachment-size {
+    margin-left: 8px;
+    color: #6c757d;
+    font-size: 12px;
+}
+
+/* Email message copy button styling */
+.email-message .copy-hover-btn {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    color: #495057;
+}
+
+.email-message .copy-hover-btn:hover {
+    background-color: #0056b3;
+    color: white;
+}
+
+/* Single Image Modal Styles */
+.single-image-modal-content {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    max-width: 95vw;
+    max-height: 95vh;
+    width: auto;
+    height: auto;
+}
+
+.single-image-container {
+    position: relative;
+    background: #fff;
+    border-radius: 8px;
+    padding: 1em;
+    max-width: 90vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+
+.single-image-details {
+    padding: 5px;
+    background-color: rgba(243, 236, 236, 0.85);
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    border-radius: 4px;
+    z-index: 10;
+}
+
+.single-image-details p {
+    font-size: 14px;
+    margin: 2px 0 1px 0;
+    color: #333;
+}
+
+.single-image-close-btn {
+    align-self: flex-end;
+    font-size: 1.5em;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #666;
+    padding: 5px;
+    margin-bottom: 10px;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease;
+}
+
+.single-image-close-btn:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+    color: #333;
+}
+
+.single-image-display {
+    display:none;
+    max-width: 80vw;
+    max-height: 70vh;
+    border-radius: 6px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.2);
+    object-fit: contain;
+}
+
+.single-audio-display {
+    display:none;
+    max-width: 80vw;
+    max-height: 70vh;
+    border-radius: 6px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.2);
+    object-fit: contain;
+}
+
+.single-video-display {
+    display:none;
+    max-width: 80vw;
+    max-height: 70vh;
+    border-radius: 6px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.2);
+    object-fit: contain;
+}
+
+.single-pdf-display {
+    display:none;
+    max-width: 80vw;
+    max-height: 70vh;
+    width: 80vw;
+    height: 70vh;
+    border-radius: 6px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.2);
+    object-fit: contain;
+}
+
+/* Responsive adjustments for single image modal */
+@media (max-width: 768px) {
+    .single-image-container {
+        max-width: 95vw;
+        max-height: 95vh;
+        padding: 0.5em;
+    }
+    
+    .single-image-display {
+        max-width: 90vw;
+        max-height: 80vh;
+    }
+    
+    .single-image-details {
+        position: relative;
+        top: auto;
+        left: auto;
+        margin-bottom: 10px;
+        width: 100%;
+        text-align: center;
+    }
+}
+
+/* Dropup Styles */
+.dropup {
+    position: relative;
+    display: inline-block;
+}
+
+.dropup-btn {
+    position: relative;
+    padding-right: 2.5em !important; /* Extra space for the chevron - use !important to override */
+    /* Override chat-form-button styles */
+    margin-left: 4px !important;
+    background-color: #007bff !important;
+    color: white !important; /* Override the chat-form-button color */
+    padding: 10px 20px !important;
+    border: none !important;
+    border-radius: 20px !important;
+    cursor: pointer !important;
+    font-size: 1em !important;
+    transition: background-color 0.2s ease !important;
+    /* Ensure it's clickable */
+    pointer-events: auto !important;
+    user-select: none;
+}
+
+.dropup-btn:hover {
+    background-color: #0056b3 !important; /* Darker blue on hover */
+}
+
+.dropup-btn i {
+    position: absolute;
+    right: 0.8em;
+    top: 50%;
+    transform: translateY(-50%);
+    transition: transform 0.2s ease;
+}
+
+.dropup-btn.active i {
+    transform: translateY(-50%) rotate(180deg) !important;
+}
+
+.dropup-content {
+    display: none;
+    position: absolute;
+    bottom: 100%;
+    right: 0px;
+    bottom:85px;
+    background-color: transparent;
+    min-width: 200px;
+    box-shadow: none;
+    border-radius: 8px 8px 0 0;
+    z-index: 9999; /* Very high z-index to ensure it appears above everything */
+    margin-bottom: 5px;
+    border: none;
+    max-height: 300px;
+    overflow: hidden;
+    padding: 5px;
+    /* Debug styles to ensure visibility */
+    color: #333;
+    font-size: 14px;
+    /* Flexbox for vertical arrangement with gap */
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.dropup.active .dropup-content {
+    display: flex !important; /* Force display with !important and use flex */
+    animation: dropup-slide-up 1.0s ease-out;
+}
+
+@keyframes dropup-slide-up {
+    from {
+        opacity: 0;
+        transform: translateY(100px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.dropup-item {
+    display: block;
+    width: 100%;
+    padding: 0.8em 1em;
+    border: none;
+    background: none;
+    text-align: left;
+    cursor: pointer;
+    color: #333;
+    font-size: 0.9em;
+    transition: background-color 0.2s ease;
+    border-bottom: 1px solid #f0f0f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* Debug styles to ensure visibility */
+    background-color: #fff;
+    margin: 2px 0;
+    border-radius: 4px;
+    /* Override any first-child/first-of-type styles */
+    margin-left: 0 !important;
+}
+
+/* Ensure consistent styling for all dropup items regardless of position */
+.dropup-content .dropup-item:first-child,
+.dropup-content .dropup-item:first-of-type {
+    margin-left: 0 !important;
+    margin-top: 0 !important;
+}
+
+.dropup-item:last-child {
+    border-bottom: none;
+    border-radius: 0 0 8px 8px;
+}
+
+.dropup-item:hover {
+    background-color: #f8f9fa;
+    color: #233366;
+}
+
+.dropup-item i {
+    margin-right: 0.5em;
+    width: 16px;
+    text-align: center;
+}
+
+/* Ensure dropup doesn't interfere with other elements */
+.dropup-content::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    right: 20px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid #fff;
+}
+
+/* Chat dictation button styles */
+.chat-dictation-btn {
+    transition: all 0.2s ease;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    height: 40px;
+}
+
+.chat-dictation-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.chat-dictation-btn:active {
+    transform: scale(0.95);
+}
+
+.chat-dictation-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+#chat-dictation-status {
+    color: #b8e0f7;
+    font-size: 12px;
+    margin-top: 5px;
+    min-height: 15px;
+    font-style: italic;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Download button styles */
+.download-btn {
+    position: absolute;
+    top: 15px;
+    right: 60px;
+    background: #4a90e2;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    z-index: 1001;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: background-color 0.2s ease;
+}
+
+.download-btn:hover {
+    background: #233366;
+}
+
+.download-btn i {
+    font-size: 12px;
+}
+
+.download-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+.download-btn:disabled:hover {
+    background: #ccc;
+}
+
+/* --- Interviewer Mode Styles --- */
+.mode-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 15px;
+    background-color: #e8f4fd;
+    color: #233366;
+    border: 2px solid #4a90e2;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    margin-bottom: 10px;
+    width: 100%;
+    justify-content: center;
+}
+
+.mode-btn:hover {
+    background-color: #4a90e2;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(74, 144, 226, 0.3);
+}
+
+.mode-btn.active {
+    background-color: #233366;
+    color: white;
+    border-color: #233366;
+}
+
+.mode-btn i {
+    font-size: 16px;
+}
+
+/* Interviewer Main Layout */
+.interviewer-main {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background-color: #f8f9fa;
+    position: relative;
+    overflow: visible;
+    margin-left: -1px;
+}
+
+.interviewer-header {
+    background-color: #233366;
+    color: white;
+    padding: 20px;
+    border-bottom: 3px solid #4a90e2;
+}
+
+.interviewer-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.interviewer-header-left {
+    text-align: left;
+}
+
+.interviewer-header-left h2 {
+    margin: 0 0 5px 0;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.interviewer-header-left p {
+    margin: 0;
+    font-size: 16px;
+    opacity: 0.9;
+}
+
+.interviewer-header-right {
+    display: flex;
+    align-items: center;
+}
+
+.exit-interviewer-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    text-decoration: none;
+}
+
+.exit-interviewer-btn:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-1px);
+}
+
+.exit-interviewer-btn i {
+    font-size: 14px;
+}
+
+/* Interview Control Section in Sidebar */
+.interview-control-section {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.interview-control-section h3 {
+    color: #b8e0f7;
+    margin: 0 0 15px 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* Interview Purpose Selector */
+.interview-purpose-selector {
+    margin-bottom: 15px;
+}
+
+.interview-purpose-selector label {
+    display: block;
+    color: #b8e0f7;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 5px;
+}
+
+.interview-purpose-selector select {
+    width: 100%;
+    padding: 8px 10px;
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #b8e0f7;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.interview-purpose-selector select:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.interview-purpose-selector select:focus {
+    outline: none;
+    background-color: rgba(255, 255, 255, 0.2);
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+}
+
+.interview-purpose-selector select option {
+    background-color: #19264d;
+    color: #b8e0f7;
+    padding: 8px;
+}
+
+.interview-control-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.interview-control-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #b8e0f7;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    width: 100%;
+    justify-content: flex-start;
+}
+
+.interview-control-btn:hover {
+    background-color: rgba(74, 144, 226, 0.3);
+    color: white;
+    border-color: #4a90e2;
+    transform: translateX(2px);
+}
+
+.interview-control-btn:active {
+    transform: translateX(0);
+}
+
+.interview-control-btn i {
+    font-size: 14px;
+    width: 16px;
+    text-align: center;
+}
+
+.interview-control-btn span {
+    font-weight: 500;
+    flex: 1;
+}
+
+.interview-control-btn:disabled {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: rgba(184, 224, 247, 0.4);
+    border-color: rgba(255, 255, 255, 0.1);
+    cursor: not-allowed;
+    transform: none;
+}
+
+.interview-control-btn:disabled:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: rgba(184, 224, 247, 0.4);
+    border-color: rgba(255, 255, 255, 0.1);
+    transform: none;
+}
+
+#interviewer-chat-box {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 20px;
+    padding-top: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.interviewer-info-box {
+    background-color: white;
+    border-radius: 12px;
+    padding: 30px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-left: 5px solid #4a90e2;
+}
+
+.interviewer-info-content h3 {
+    color: #233366;
+    margin: 0 0 15px 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.interviewer-info-content p {
+    color: #555;
+    margin: 0 0 15px 0;
+    line-height: 1.6;
+}
+
+.interviewer-info-content ul {
+    margin: 0 0 15px 0;
+    padding-left: 20px;
+}
+
+.interviewer-info-content li {
+    color: #555;
+    margin-bottom: 8px;
+    line-height: 1.5;
+}
+
+.interviewer-info-content strong {
+    color: #233366;
+}
+
+/* Interviewer Messages */
+.interviewer-main .message {
+    margin-bottom: 20px;
+    padding: 15px 20px;
+    border-radius: 12px;
+    max-width: 80%;
+    word-wrap: break-word;
+    position: relative;
+    margin-top: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.interviewer-main .user-message {
+    background-color: #e3f2fd;
+    border-left: 4px solid #2196f3;
+    align-self: flex-end;
+    margin-left: auto;
+}
+
+.interviewer-main .assistant-message {
+    background-color: white;
+    border-left: 4px solid #4caf50;
+    align-self: flex-start;
+    margin-right: auto;
+}
+
+/* Interviewer Form */
+#interviewer-chat-form {
+    display: flex;
+    padding: 15px;
+    background-color: #f8f8f8;
+    position: relative; /* Ensure proper positioning context for dropup */
+    overflow: visible; /* Allow dropup to extend outside form */
+}
+
+#interviewer-user-input {
+    width: 100%;
+    padding: 15px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 16px;
+    resize: vertical;
+    min-height: 60px;
+    font-family: inherit;
+    transition: border-color 0.2s ease;
+}
+
+#interviewer-user-input:focus {
+    outline: none;
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+#interviewer-send-button {
+    background-color: #4a90e2;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 0px;
+    transition: background-color 0.2s ease;
+}
+#interviewer-chat-form button:first-of-type { /* Send button */
+    background-color: #007bff;
+    margin-left: 0; /* No left margin for the very first button */
+}
+
+#interviewer-send-button:hover {
+    background-color: #233366;
+}
+
+#interviewer-send-button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+#interviewer-chat-form button { /* General button style in form */
+    padding: 10px 20px;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 1em;
+    margin-left: 10px; /* Default margin for buttons after the first */
+}
+#interviewer-user-input {
+    width: 100%;
+    padding: 12px;
+    padding-right: 50px; /* Add space for the floating microphone icon */
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-size: 16px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 140px;
+    box-sizing: border-box;
+    background-color: #fff;
+    color: #333;
+}
+
+/* Interviewer Dictation */
+.interviewer-dictation-btn {
+    transition: all 0.2s ease;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    height: 40px;
+}
+
+.interviewer-dictation-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.interviewer-dictation-btn:active {
+    transform: scale(0.95);
+}
+
+.interviewer-dictation-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+#interviewer-dictation-status {
+    color: #666;
+    font-size: 12px;
+    margin-top: 5px;
+    min-height: 15px;
+    font-style: italic;
+}
+
+/* Interviewer Loading */
+#interviewer-loading-indicator {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    background-color: rgba(255, 255, 255, 0.9);
+    border-radius: 12px;
+    margin: 20px 0;
+}
+
+.interviewer-thinking-dots {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #233366;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.interviewer-loading-voice-image {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #4a90e2;
+}
+
+.interviewer-thinking-text {
+    margin-right: 10px;
+}
+
+/* Interviewer Error */
+.interviewer-error-message {
+    background-color: #ffebee;
+    color: #c62828;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 10px 0;
+    border-left: 4px solid #f44336;
+    font-weight: 500;
+}
+
+/* Hide sidebar elements in interviewer mode */
+.interviewer-mode .sidebar .more-options-section {
+    display: none;
+}
+
+.interviewer-mode .sidebar .voice-flow-container {
+    display: none;
+}
+
+.interviewer-mode .sidebar .creativity-container {
+    display: none;
+}
+
+.interviewer-mode .sidebar .work-mode-container {
+    display: none;
+}
+
+/* Responsive adjustments for interviewer mode */
+@media (max-width: 768px) {
+    .interviewer-main {
+        margin-left: 0;
+    }
+    
+    .interviewer-header {
+        padding: 15px;
+    }
+    
+    .interviewer-header-content {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+    }
+    
+    .interviewer-header-left {
+        text-align: center;
+    }
+    
+    .interviewer-header-left h2 {
+        font-size: 20px;
+    }
+    
+    .interviewer-header-left p {
+        font-size: 14px;
+    }
+    
+    .exit-interviewer-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+    
+    #interviewer-chat-box {
+        padding: 15px;
+    }
+    
+    .interviewer-info-box {
+        padding: 20px;
+    }
+    
+    .interviewer-main .message {
+        max-width: 90%;
+    }
+}

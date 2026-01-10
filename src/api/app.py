@@ -3,9 +3,10 @@
 import os
 import threading
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Response, BackgroundTasks, Query
+from fastapi import FastAPI, HTTPException, Response, BackgroundTasks, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
@@ -27,6 +28,9 @@ app = FastAPI(
 # Mount static files directory
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+# Initialize Jinja2 templates
+templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 # Initialize database connection
 db = Database(get_config())
@@ -234,6 +238,13 @@ async def root():
         }
     }
 
+@app.get("/new-page", response_class=HTMLResponse)
+async def new_page(request: Request):
+    """Serve the new page."""
+    return templates.TemplateResponse(
+        "new_page.html",
+        {"request": request}
+    )
 
 @app.get("/health")
 async def health_check():
@@ -1020,26 +1031,18 @@ async def get_attachment_content(attachment_id: int, preview: bool = False):
 
 
 @app.get("/attachments-viewer", response_class=HTMLResponse)
-async def attachments_viewer():
+async def attachments_viewer(request: Request):
     """Serve the attachment viewer web page."""
-    template_path = Path(__file__).parent / "templates" / "attachments_viewer.html"
-    try:
-        html_content = template_path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        raise HTTPException(status_code=500, detail="Template file not found")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading template: {str(e)}")
-    return HTMLResponse(content=html_content)
+    return templates.TemplateResponse(
+        "attachments_viewer.html",
+        {"request": request}
+    )
 
 
 @app.get("/attachments-images-grid", response_class=HTMLResponse)
-async def images_grid_viewer():
+async def images_grid_viewer(request: Request):
     """Serve the image grid viewer web page."""
-    template_path = Path(__file__).parent / "templates" / "images_grid.html"
-    try:
-        html_content = template_path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        raise HTTPException(status_code=500, detail="Template file not found")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading template: {str(e)}")
-    return HTMLResponse(content=html_content)
+    return templates.TemplateResponse(
+        "images_grid.html",
+        {"request": request}
+    )
