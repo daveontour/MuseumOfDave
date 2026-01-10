@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "EmailClient"
+		},
+		{
+			"path": "EmailToDatabaseLoader"
+		},
+		{
+			"path": "APIServer"
+		}
+	]
+}
