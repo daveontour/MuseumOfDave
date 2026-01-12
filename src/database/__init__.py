@@ -1,7 +1,7 @@
 """Database package."""
 
-from .models import Email, Attachment, IMessage, Base
+from .models import Email, Attachment, IMessage, FacebookAlbum, FacebookAlbumImage, Base
 from .connection import Database
-from .storage import EmailStorage
+from .storage import EmailStorage, FacebookAlbumStorage
 
-__all__ = ["Email", "Attachment", "IMessage", "Base", "Database", "EmailStorage"]
+__all__ = ["Email", "Attachment", "IMessage", "FacebookAlbum", "FacebookAlbumImage", "Base", "Database", "EmailStorage", "FacebookAlbumStorage"]

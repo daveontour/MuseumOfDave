@@ -15,12 +15,15 @@ from datetime import datetime
 from sqlalchemy import or_, func, and_, extract
 from sqlalchemy.orm import joinedload
 
-from ..database import Database, Attachment, Email, IMessage
+from ..database import Database, Attachment, Email, IMessage, FacebookAlbum, FacebookAlbumImage
 from ..database.storage import EmailStorage
 from ..loader import EmailDatabaseLoader
 from ..config import get_config
 from ..messageimport.imessageimport import import_imessages_from_directory
 from ..messageimport.whatsappimport import import_whatsapp_from_directory
+from ..messageimport.facebookimport import import_facebook_from_directory
+from ..messageimport.facebookalbumsimport import import_facebook_albums_from_directory
+from ..messageimport.instagramimport import import_instagram_from_directory
 
 # Create FastAPI app instance
 app = FastAPI(
@@ -111,6 +114,77 @@ whatsapp_import_progress: Dict[str, Any] = {
 # SSE event queue for WhatsApp import progress updates
 whatsapp_sse_clients: List[asyncio.Queue] = []
 whatsapp_sse_clients_lock = threading.Lock()
+
+# Facebook Messenger import state management
+facebook_import_lock = threading.Lock()
+facebook_import_cancelled = threading.Event()
+facebook_import_in_progress = False
+
+# Progress state for Facebook Messenger import SSE streaming
+facebook_import_progress: Dict[str, Any] = {
+    "current_conversation": None,
+    "conversations_processed": 0,
+    "total_conversations": 0,
+    "messages_imported": 0,
+    "messages_created": 0,
+    "messages_updated": 0,
+    "attachments_found": 0,
+    "attachments_missing": 0,
+    "missing_attachment_filenames": [],
+    "errors": 0,
+    "status": "idle",  # idle, in_progress, completed, cancelled, error
+    "error_message": None
+}
+
+# SSE event queue for Facebook Messenger import progress updates
+facebook_sse_clients: List[asyncio.Queue] = []
+facebook_sse_clients_lock = threading.Lock()
+
+# Instagram import state management
+instagram_import_lock = threading.Lock()
+instagram_import_cancelled = threading.Event()
+instagram_import_in_progress = False
+
+# Progress state for Instagram import SSE streaming
+instagram_import_progress: Dict[str, Any] = {
+    "current_conversation": None,
+    "conversations_processed": 0,
+    "total_conversations": 0,
+    "messages_imported": 0,
+    "messages_created": 0,
+    "messages_updated": 0,
+    "errors": 0,
+    "status": "idle",  # idle, in_progress, completed, cancelled, error
+    "error_message": None
+}
+
+# SSE event queue for Instagram import progress updates
+instagram_sse_clients: List[asyncio.Queue] = []
+instagram_sse_clients_lock = threading.Lock()
+
+# Facebook Albums import state management
+facebook_albums_import_lock = threading.Lock()
+facebook_albums_import_cancelled = threading.Event()
+facebook_albums_import_in_progress = False
+
+# Progress state for Facebook Albums import SSE streaming
+facebook_albums_import_progress: Dict[str, Any] = {
+    "current_album": None,
+    "albums_processed": 0,
+    "total_albums": 0,
+    "albums_imported": 0,
+    "images_imported": 0,
+    "images_found": 0,
+    "images_missing": 0,
+    "missing_image_filenames": [],
+    "errors": 0,
+    "status": "idle",  # idle, in_progress, completed, cancelled, error
+    "error_message": None
+}
+
+# SSE event queue for Facebook Albums import progress updates
+facebook_albums_sse_clients: List[asyncio.Queue] = []
+facebook_albums_sse_clients_lock = threading.Lock()
 
 
 def update_imessage_progress_state(**kwargs):
@@ -207,6 +281,153 @@ def broadcast_whatsapp_progress_event_sync(event_type: str, data: Dict[str, Any]
         for client in disconnected_clients:
             if client in whatsapp_sse_clients:
                 whatsapp_sse_clients.remove(client)
+
+
+def update_facebook_progress_state(**kwargs):
+    """Thread-safe function to update Facebook Messenger import progress state."""
+    global facebook_import_progress
+    with facebook_import_lock:
+        for key, value in kwargs.items():
+            if key in facebook_import_progress:
+                if key == "missing_attachment_filenames" and isinstance(value, list):
+                    # Replace the list with the new one (which already contains all missing files)
+                    facebook_import_progress[key] = value.copy()
+                else:
+                    facebook_import_progress[key] = value
+
+
+def get_facebook_progress_state() -> Dict[str, Any]:
+    """Thread-safe function to get current Facebook Messenger import progress state."""
+    global facebook_import_progress
+    with facebook_import_lock:
+        return facebook_import_progress.copy()
+
+
+def broadcast_facebook_progress_event_sync(event_type: str, data: Dict[str, Any]):
+    """Thread-safe function to queue Facebook Messenger import progress event for SSE clients."""
+    global facebook_sse_clients
+    event_data = {
+        "type": event_type,
+        "data": data
+    }
+    message = f"data: {json.dumps(event_data)}\n\n"
+    
+    # Queue message for all connected clients
+    with facebook_sse_clients_lock:
+        disconnected_clients = []
+        for client_queue in facebook_sse_clients:
+            try:
+                # Use put_nowait to avoid blocking
+                client_queue.put_nowait(message)
+            except asyncio.QueueFull:
+                # Queue is full, skip this client
+                pass
+            except Exception:
+                disconnected_clients.append(client_queue)
+        
+        # Remove disconnected clients
+        for client in disconnected_clients:
+            if client in facebook_sse_clients:
+                facebook_sse_clients.remove(client)
+
+
+def update_facebook_albums_progress_state(**kwargs):
+    """Thread-safe function to update Facebook Albums import progress state."""
+    global facebook_albums_import_progress
+    with facebook_albums_import_lock:
+        for key, value in kwargs.items():
+            if key in facebook_albums_import_progress:
+                if key == "missing_image_filenames" and isinstance(value, list):
+                    # Replace the list with the new one (which already contains all missing files)
+                    facebook_albums_import_progress[key] = value.copy()
+                else:
+                    facebook_albums_import_progress[key] = value
+
+
+def get_facebook_albums_progress_state() -> Dict[str, Any]:
+    """Thread-safe function to get current Facebook Albums import progress state."""
+    global facebook_albums_import_progress
+    with facebook_albums_import_lock:
+        return facebook_albums_import_progress.copy()
+
+
+def broadcast_facebook_albums_progress_event_sync(event_type: str, data: Dict[str, Any]):
+    """Thread-safe function to queue Facebook Albums import progress event for SSE clients."""
+    global facebook_albums_sse_clients
+    event_data = {
+        "type": event_type,
+        "data": data
+    }
+    message = f"data: {json.dumps(event_data)}\n\n"
+    
+    # Queue message for all connected clients
+    with facebook_albums_sse_clients_lock:
+        disconnected_clients = []
+        for client_queue in facebook_albums_sse_clients:
+            try:
+                # Use put_nowait to avoid blocking
+                client_queue.put_nowait(message)
+            except asyncio.QueueFull:
+                # Queue is full, skip this client
+                pass
+            except Exception:
+                disconnected_clients.append(client_queue)
+        
+        # Remove disconnected clients
+        for client in disconnected_clients:
+            if client in facebook_albums_sse_clients:
+                facebook_albums_sse_clients.remove(client)
+
+
+def update_instagram_progress_state(**kwargs):
+    """Thread-safe function to update Instagram import progress state."""
+    global instagram_import_progress
+    with instagram_import_lock:
+        for key, value in kwargs.items():
+            if key in instagram_import_progress:
+                if isinstance(value, (dict, list)):
+                    instagram_import_progress[key] = value.copy()
+                else:
+                    instagram_import_progress[key] = value
+
+
+def get_instagram_progress_state() -> Dict[str, Any]:
+    """Thread-safe function to get current Instagram import progress state."""
+    global instagram_import_progress
+    with instagram_import_lock:
+        return instagram_import_progress.copy()
+
+
+def broadcast_instagram_progress_event_sync():
+    """Thread-safe function to queue Instagram import progress event for SSE clients."""
+    global instagram_sse_clients
+    progress_state = get_instagram_progress_state()
+    
+    # Create SSE event data
+    event_data = {
+        "type": "progress",
+        "data": progress_state
+    }
+    
+    message = f"data: {json.dumps(event_data)}\n\n"
+    
+    # Queue message for all connected clients
+    with instagram_sse_clients_lock:
+        disconnected_clients = []
+        for client_queue in instagram_sse_clients:
+            try:
+                # Use put_nowait to avoid blocking
+                client_queue.put_nowait(message)
+            except asyncio.QueueFull:
+                # Queue is full, skip this client
+                pass
+            except Exception:
+                disconnected_clients.append(client_queue)
+        
+        # Remove disconnected clients
+        for client in disconnected_clients:
+            if client in instagram_sse_clients:
+                instagram_sse_clients.remove(client)
 
 
 def update_progress_state(**kwargs):
@@ -310,6 +531,67 @@ class ImportWhatsAppResponse(BaseModel):
     attachments_found: int
     attachments_missing: int
     missing_attachment_filenames: List[str] = []
+    errors: int
+    timestamp: datetime
+
+
+class ImportFacebookRequest(BaseModel):
+    """Request model for Facebook Messenger import."""
+    directory_path: str
+    export_root: Optional[str] = None
+    user_name: Optional[str] = None
+
+
+class ImportFacebookResponse(BaseModel):
+    """Response model for Facebook Messenger import."""
+    message: str
+    directory_path: str
+    conversations_processed: int
+    messages_imported: int
+    messages_created: int
+    messages_updated: int
+    attachments_found: int
+    attachments_missing: int
+    missing_attachment_filenames: List[str] = []
+    errors: int
+    timestamp: datetime
+
+
+class ImportInstagramRequest(BaseModel):
+    """Request model for Instagram import."""
+    directory_path: str
+    export_root: Optional[str] = None
+    user_name: Optional[str] = None
+
+
+class ImportInstagramResponse(BaseModel):
+    """Response model for Instagram import."""
+    message: str
+    directory_path: str
+    conversations_processed: int
+    messages_imported: int
+    messages_created: int
+    messages_updated: int
+    errors: int
+    timestamp: datetime
+
+
+class ImportFacebookAlbumsRequest(BaseModel):
+    """Request model for Facebook Albums import."""
+    directory_path: str
+    export_root: Optional[str] = None
+
+
+class ImportFacebookAlbumsResponse(BaseModel):
+    """Response model for Facebook Albums import."""
+    message: str
+    directory_path: str
+    albums_processed: int
+    albums_imported: int
+    images_imported: int
+    images_found: int
+    images_missing: int
+    missing_image_filenames: List[str] = []
     errors: int
     timestamp: datetime
 
@@ -516,6 +798,32 @@ async def root():
             "POST /emails/process/cancel": "Cancel email processing if in progress",
             "GET /emails/process/status": "Get current email processing status",
             "POST /imessages/import": "Import iMessages from a directory structure",
+            "GET /imessages/import/stream": "Stream iMessage import progress via SSE",
+            "POST /imessages/import/cancel": "Cancel iMessage import if in progress",
+            "GET /imessages/import/status": "Get current iMessage import status",
+            "GET /imessages/chat-sessions": "Get list of unique chat session names",
+            "GET /imessages/conversation/{chat_session}": "Get all messages for a specific chat session",
+            "DELETE /imessages/conversation/{chat_session}": "Delete a conversation",
+            "GET /imessages/{message_id}/attachment": "Get attachment content for a message",
+            "POST /whatsapp/import": "Import WhatsApp messages from a directory structure",
+            "GET /whatsapp/import/stream": "Stream WhatsApp import progress via SSE",
+            "POST /whatsapp/import/cancel": "Cancel WhatsApp import if in progress",
+            "GET /whatsapp/import/status": "Get current WhatsApp import status",
+            "POST /facebook/import": "Import Facebook Messenger messages from a directory structure",
+            "GET /facebook/import/stream": "Stream Facebook Messenger import progress via SSE",
+            "POST /facebook/import/cancel": "Cancel Facebook Messenger import if in progress",
+            "GET /facebook/import/status": "Get current Facebook Messenger import status",
+            "POST /instagram/import": "Import Instagram messages from a directory structure",
+            "GET /instagram/import/stream": "Stream Instagram import progress via SSE",
+            "POST /instagram/import/cancel": "Cancel Instagram import if in progress",
+            "GET /instagram/import/status": "Get current Instagram import status",
+            "POST /facebook/albums/import": "Import Facebook Albums from a directory structure",
+            "GET /facebook/albums/import/stream": "Stream Facebook Albums import progress via SSE",
+            "POST /facebook/albums/import/cancel": "Cancel Facebook Albums import if in progress",
+            "GET /facebook/albums/import/status": "Get current Facebook Albums import status",
+            "GET /facebook/albums": "Get list of all Facebook albums",
+            "GET /facebook/albums/{album_id}/images": "Get all images for a specific Facebook album",
+            "GET /facebook/albums/images/{image_id}": "Get image data for a specific Facebook album image",
             "GET /emails/{email_id}/html": "Get email HTML content by ID",
             "GET /emails/{email_id}/text": "Get email plain text content by ID",
             "GET /emails/{email_id}/snippet": "Get email snippet by ID",
@@ -985,7 +1293,9 @@ async def get_chat_sessions():
                 func.max(IMessage.service).label('primary_service'),
                 func.count(case((IMessage.service.ilike('%iMessage%'), 1), else_=None)).label('imessage_count'),
                 func.count(case((IMessage.service.ilike('%SMS%'), 1), else_=None)).label('sms_count'),
-                func.count(case((IMessage.service == 'WhatsApp', 1), else_=None)).label('whatsapp_count')
+                func.count(case((IMessage.service == 'WhatsApp', 1), else_=None)).label('whatsapp_count'),
+                func.count(case((IMessage.service == 'Facebook Messenger', 1), else_=None)).label('facebook_count'),
+                func.count(case((IMessage.service == 'Instagram', 1), else_=None)).label('instagram_count')
             ).filter(
                 IMessage.chat_session.isnot(None)
             ).group_by(
@@ -1007,7 +1317,9 @@ async def get_chat_sessions():
                             MAX(service) as primary_service,
                             COUNT(CASE WHEN service ILIKE '%iMessage%' THEN 1 END) as imessage_count,
                             COUNT(CASE WHEN service ILIKE '%SMS%' THEN 1 END) as sms_count,
-                            COUNT(CASE WHEN service = 'WhatsApp' THEN 1 END) as whatsapp_count
+                            COUNT(CASE WHEN service = 'WhatsApp' THEN 1 END) as whatsapp_count,
+                            COUNT(CASE WHEN service = 'Facebook Messenger' THEN 1 END) as facebook_count,
+                            COUNT(CASE WHEN service = 'Instagram' THEN 1 END) as instagram_count
                         FROM imessages
                         WHERE chat_session IS NOT NULL
                         GROUP BY chat_session
@@ -1042,16 +1354,35 @@ async def get_chat_sessions():
             imessage_count = result[4] or 0
             sms_count = result[5] or 0
             whatsapp_count = result[6] or 0
+            facebook_count = result[7] if len(result) > 7 else 0
+            instagram_count = result[8] if len(result) > 8 else 0
             total_count = result[1] or 0
             
-            # Determine message type: 'imessage', 'sms', 'whatsapp', or 'mixed'
-            if imessage_count > 0 and sms_count == 0 and whatsapp_count == 0:
-                message_type = 'imessage'
-            elif sms_count > 0 and imessage_count == 0 and whatsapp_count == 0:
-                message_type = 'sms'
-            elif whatsapp_count > 0 and imessage_count == 0 and sms_count == 0:
-                message_type = 'whatsapp'
-            elif (imessage_count > 0 and sms_count > 0) or (imessage_count > 0 and whatsapp_count > 0) or (sms_count > 0 and whatsapp_count > 0) or (imessage_count > 0 and sms_count > 0 and whatsapp_count > 0):
+            # Determine message type: 'imessage', 'sms', 'whatsapp', 'facebook', 'instagram', or 'mixed'
+            non_zero_counts = sum([
+                1 if imessage_count > 0 else 0,
+                1 if sms_count > 0 else 0,
+                1 if whatsapp_count > 0 else 0,
+                1 if facebook_count > 0 else 0,
+                1 if instagram_count > 0 else 0
+            ])
+            
+            if non_zero_counts == 1:
+                # Only one service type
+                if imessage_count > 0:
+                    message_type = 'imessage'
+                elif sms_count > 0:
+                    message_type = 'sms'
+                elif whatsapp_count > 0:
+                    message_type = 'whatsapp'
+                elif facebook_count > 0:
+                    message_type = 'facebook'
+                elif instagram_count > 0:
+                    message_type = 'instagram'
+                else:
+                    message_type = 'sms'  # Default fallback
+            elif non_zero_counts > 1:
+                # Multiple service types
                 message_type = 'mixed'
             else:
                 # Fallback to primary_service if available
@@ -1060,6 +1391,10 @@ async def get_chat_sessions():
                     message_type = 'imessage'
                 elif 'WhatsApp' in primary_service:
                     message_type = 'whatsapp'
+                elif 'Facebook Messenger' in primary_service:
+                    message_type = 'facebook'
+                elif 'Instagram' in primary_service:
+                    message_type = 'instagram'
                 elif 'SMS' in primary_service:
                     message_type = 'sms'
                 else:
@@ -1486,6 +1821,942 @@ async def get_whatsapp_import_status():
             "cancelled": whatsapp_import_cancelled.is_set(),
             **progress_state
         }
+
+
+def import_facebook_background(directory_path: str, export_root: Optional[str], user_name: Optional[str], result_dict: dict):
+    """Background function to import Facebook Messenger messages from directory."""
+    global facebook_import_in_progress
+    
+    # Mark processing as started
+    with facebook_import_lock:
+        facebook_import_in_progress = True
+        facebook_import_cancelled.clear()
+    
+    # Initialize progress state
+    update_facebook_progress_state(
+        current_conversation=None,
+        conversations_processed=0,
+        total_conversations=0,
+        messages_imported=0,
+        messages_created=0,
+        messages_updated=0,
+        attachments_found=0,
+        attachments_missing=0,
+        missing_attachment_filenames=[],
+        errors=0,
+        status="in_progress",
+        error_message=None
+    )
+    
+    # Broadcast initial progress event
+    broadcast_facebook_progress_event_sync("progress", get_facebook_progress_state())
+    
+    try:
+        def progress_callback(stats: Dict[str, Any]):
+            """Callback function to update progress state."""
+            # Check for cancellation
+            if facebook_import_cancelled.is_set():
+                return
+            
+            # Update progress state with current stats
+            update_facebook_progress_state(
+                current_conversation=stats.get("current_conversation"),
+                conversations_processed=stats.get("conversations_processed", 0),
+                total_conversations=stats.get("total_conversations", 0),
+                messages_imported=stats.get("messages_imported", 0),
+                messages_created=stats.get("messages_created", 0),
+                messages_updated=stats.get("messages_updated", 0),
+                attachments_found=stats.get("attachments_found", 0),
+                attachments_missing=stats.get("attachments_missing", 0),
+                missing_attachment_filenames=stats.get("missing_attachment_filenames", []),
+                errors=stats.get("errors", 0),
+                status="in_progress"
+            )
+            
+            # Broadcast progress event
+            broadcast_facebook_progress_event_sync("progress", get_facebook_progress_state())
+        
+        def cancelled_check() -> bool:
+            """Check if import should be cancelled."""
+            return facebook_import_cancelled.is_set()
+        
+        # Run import with progress callback
+        stats = import_facebook_from_directory(
+            directory_path,
+            progress_callback=progress_callback,
+            cancelled_check=cancelled_check,
+            export_root=export_root,
+            user_name=user_name
+        )
+        
+        result_dict.update(stats)
+        result_dict["success"] = True
+        
+        # Update final progress state
+        update_facebook_progress_state(
+            status="completed",
+            **{k: v for k, v in stats.items() if k in facebook_import_progress}
+        )
+        broadcast_facebook_progress_event_sync("completed", get_facebook_progress_state())
+        
+    except Exception as e:
+        error_msg = str(e)
+        result_dict["success"] = False
+        result_dict["error"] = error_msg
+        
+        update_facebook_progress_state(
+            status="error",
+            error_message=error_msg
+        )
+        broadcast_facebook_progress_event_sync("error", get_facebook_progress_state())
+        
+        print(f"[Background Task] Error importing Facebook Messenger messages: {error_msg}")
+    finally:
+        # Mark processing as completed
+        with facebook_import_lock:
+            facebook_import_in_progress = False
+
+
+@app.post("/facebook/import", response_model=ImportFacebookResponse)
+async def import_facebook(
+    request: ImportFacebookRequest,
+    background_tasks: BackgroundTasks
+):
+    """Import Facebook Messenger messages from a directory structure asynchronously.
+    
+    The directory should contain subdirectories, each representing a conversation.
+    Each subdirectory should contain JSON files (message_1.json, message_2.json, etc.) with the messages.
+    
+    Args:
+        request: ImportFacebookRequest with directory_path, optional export_root and user_name
+        background_tasks: FastAPI background tasks
+        
+    Returns:
+        ImportFacebookResponse with initial status
+        
+    Raises:
+        HTTPException: If directory doesn't exist or import already in progress
+    """
+    global facebook_import_in_progress
+    
+    # Check if import is already in progress
+    with facebook_import_lock:
+        if facebook_import_in_progress:
+            raise HTTPException(
+                status_code=409,
+                detail="Facebook Messenger import is already in progress. Please cancel it first or wait for it to complete."
+            )
+    
+    # Validate directory exists
+    directory = Path(request.directory_path)
+    if not directory.exists() or not directory.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Directory does not exist or is not a directory: {request.directory_path}"
+        )
+    
+    result_dict = {
+        "conversations_processed": 0,
+        "messages_imported": 0,
+        "messages_created": 0,
+        "messages_updated": 0,
+        "attachments_found": 0,
+        "attachments_missing": 0,
+        "missing_attachment_filenames": [],
+        "errors": 0,
+        "success": False
+    }
+    
+    # Start background processing
+    background_tasks.add_task(
+        import_facebook_background,
+        request.directory_path,
+        request.export_root,
+        request.user_name,
+        result_dict
+    )
+    
+    return ImportFacebookResponse(
+        message="Facebook Messenger import started",
+        directory_path=request.directory_path,
+        conversations_processed=0,
+        messages_imported=0,
+        messages_created=0,
+        messages_updated=0,
+        attachments_found=0,
+        attachments_missing=0,
+        missing_attachment_filenames=[],
+        errors=0,
+        timestamp=datetime.now()
+    )
+
+
+@app.get("/facebook/import/stream")
+async def stream_facebook_import_progress():
+    """Stream Facebook Messenger import progress updates via Server-Sent Events (SSE).
+    
+    Returns:
+        StreamingResponse with text/event-stream content type
+    """
+    async def event_generator():
+        # Create a queue for this client
+        client_queue = asyncio.Queue(maxsize=100)
+        
+        # Add client to the list
+        with facebook_sse_clients_lock:
+            facebook_sse_clients.append(client_queue)
+        
+        try:
+            # Send initial progress state
+            initial_state = get_facebook_progress_state()
+            event_data = {
+                "type": "progress",
+                "data": initial_state
+            }
+            yield f"data: {json.dumps(event_data)}\n\n"
+            
+            # Send heartbeat every 30 seconds to keep connection alive
+            heartbeat_interval = 30
+            last_heartbeat = asyncio.get_event_loop().time()
+            
+            while True:
+                try:
+                    # Wait for message with timeout for heartbeat
+                    timeout = max(1, heartbeat_interval - (asyncio.get_event_loop().time() - last_heartbeat))
+                    try:
+                        message = await asyncio.wait_for(client_queue.get(), timeout=timeout)
+                        yield message
+                    except asyncio.TimeoutError:
+                        # Send heartbeat
+                        heartbeat_data = {
+                            "type": "heartbeat",
+                            "data": {"timestamp": datetime.now().isoformat()}
+                        }
+                        yield f"data: {json.dumps(heartbeat_data)}\n\n"
+                        last_heartbeat = asyncio.get_event_loop().time()
+                    
+                    # Check if processing is complete
+                    progress_state = get_facebook_progress_state()
+                    if progress_state["status"] in ["completed", "cancelled", "error"]:
+                        # Send final state and close
+                        final_event = {
+                            "type": progress_state["status"],
+                            "data": progress_state
+                        }
+                        yield f"data: {json.dumps(final_event)}\n\n"
+                        break
+                        
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    # Send error and break
+                    error_event = {
+                        "type": "error",
+                        "data": {"error": str(e)}
+                    }
+                    yield f"data: {json.dumps(error_event)}\n\n"
+                    break
+        finally:
+            # Remove client from the list
+            with facebook_sse_clients_lock:
+                if client_queue in facebook_sse_clients:
+                    facebook_sse_clients.remove(client_queue)
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+
+@app.post("/facebook/import/cancel")
+async def cancel_facebook_import():
+    """Cancel Facebook Messenger import if it is in progress.
+    
+    Returns:
+        Success message indicating cancellation status
+    """
+    global facebook_import_in_progress
+    
+    with facebook_import_lock:
+        if not facebook_import_in_progress:
+            return {
+                "message": "No Facebook Messenger import is currently in progress",
+                "cancelled": False
+            }
+        
+        # Set cancellation flag
+        facebook_import_cancelled.set()
+        
+        return {
+            "message": "Facebook Messenger import cancellation requested. Processing will stop after current conversation completes.",
+            "cancelled": True
+        }
+
+
+@app.get("/facebook/import/status")
+async def get_facebook_import_status():
+    """Get the current status of Facebook Messenger import.
+    
+    Returns:
+        Status information about Facebook Messenger import
+    """
+    global facebook_import_in_progress
+    
+    progress_state = get_facebook_progress_state()
+    
+    with facebook_import_lock:
+        return {
+            "in_progress": facebook_import_in_progress,
+            "cancelled": facebook_import_cancelled.is_set(),
+            **progress_state
+        }
+
+
+def import_instagram_background(
+    directory_path: str,
+    export_root: Optional[str],
+    user_name: Optional[str],
+    result_dict: Dict[str, Any]
+):
+    """Background function to import Instagram messages from directory."""
+    global instagram_import_in_progress
+    
+    # Mark import as in progress
+    with instagram_import_lock:
+        instagram_import_in_progress = True
+        instagram_import_cancelled.clear()
+    
+    # Initialize progress state
+    update_instagram_progress_state(
+        current_conversation=None,
+        conversations_processed=0,
+        total_conversations=0,
+        messages_imported=0,
+        messages_created=0,
+        messages_updated=0,
+        errors=0,
+        status="in_progress",
+        error_message=None
+    )
+    
+    # Broadcast initial progress event
+    broadcast_instagram_progress_event_sync()
+    
+    try:
+        def progress_callback(stats: Dict[str, Any]):
+            """Callback function to update progress state."""
+            # Check for cancellation
+            if instagram_import_cancelled.is_set():
+                return
+            
+            # Update progress state with current stats
+            update_instagram_progress_state(
+                current_conversation=stats.get("current_conversation"),
+                conversations_processed=stats.get("conversations_processed", 0),
+                total_conversations=stats.get("total_conversations", 0),
+                messages_imported=stats.get("messages_imported", 0),
+                messages_created=stats.get("messages_created", 0),
+                messages_updated=stats.get("messages_updated", 0),
+                errors=stats.get("errors", 0),
+                status="in_progress"
+            )
+            
+            # Broadcast progress event
+            broadcast_instagram_progress_event_sync()
+        
+        def cancelled_check() -> bool:
+            """Check if import should be cancelled."""
+            return instagram_import_cancelled.is_set()
+        
+        # Run import with progress callback
+        stats = import_instagram_from_directory(
+            directory_path,
+            progress_callback=progress_callback,
+            cancelled_check=cancelled_check,
+            export_root=export_root,
+            user_name=user_name
+        )
+        
+        result_dict.update(stats)
+        result_dict["success"] = True
+        
+        # Update final progress state
+        update_instagram_progress_state(
+            status="completed",
+            **{k: v for k, v in stats.items() if k in instagram_import_progress}
+        )
+        broadcast_instagram_progress_event_sync()
+        
+    except Exception as e:
+        error_msg = str(e)
+        result_dict["success"] = False
+        result_dict["error"] = error_msg
+        
+        update_instagram_progress_state(
+            status="error",
+            error_message=error_msg
+        )
+        broadcast_instagram_progress_event_sync()
+        
+        print(f"[Background Task] Error importing Instagram messages: {error_msg}")
+    finally:
+        # Mark processing as completed
+        with instagram_import_lock:
+            instagram_import_in_progress = False
+
+
+@app.post("/instagram/import", response_model=ImportInstagramResponse)
+async def import_instagram(
+    request: ImportInstagramRequest,
+    background_tasks: BackgroundTasks
+):
+    """Import Instagram messages from a directory structure asynchronously.
+    
+    The directory should contain subdirectories, each representing a conversation.
+    Each subdirectory should contain JSON files (message_1.json, message_2.json, etc.) with the messages.
+    
+    Args:
+        request: ImportInstagramRequest with directory_path, optional export_root and user_name
+        background_tasks: FastAPI background tasks
+        
+    Returns:
+        ImportInstagramResponse with initial status
+        
+    Raises:
+        HTTPException: If directory doesn't exist or import already in progress
+    """
+    global instagram_import_in_progress
+    
+    # Check if import is already in progress
+    with instagram_import_lock:
+        if instagram_import_in_progress:
+            raise HTTPException(
+                status_code=409,
+                detail="Instagram import is already in progress. Please cancel it first or wait for it to complete."
+            )
+    
+    # Validate directory exists
+    directory = Path(request.directory_path)
+    if not directory.exists() or not directory.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Directory does not exist or is not a directory: {request.directory_path}"
+        )
+    
+    result_dict = {
+        "conversations_processed": 0,
+        "messages_imported": 0,
+        "messages_created": 0,
+        "messages_updated": 0,
+        "errors": 0,
+        "success": False
+    }
+    
+    # Start background processing
+    background_tasks.add_task(
+        import_instagram_background,
+        request.directory_path,
+        request.export_root,
+        request.user_name,
+        result_dict
+    )
+    
+    return ImportInstagramResponse(
+        message="Instagram import started",
+        directory_path=request.directory_path,
+        conversations_processed=0,
+        messages_imported=0,
+        messages_created=0,
+        messages_updated=0,
+        errors=0,
+        timestamp=datetime.now()
+    )
+
+
+@app.get("/instagram/import/stream")
+async def stream_instagram_import_progress():
+    """Stream Instagram import progress updates via Server-Sent Events (SSE).
+    
+    Returns:
+        StreamingResponse with text/event-stream content type
+    """
+    async def event_generator():
+        # Create a queue for this client
+        client_queue = asyncio.Queue(maxsize=100)
+        
+        # Add client to the list
+        with instagram_sse_clients_lock:
+            instagram_sse_clients.append(client_queue)
+        
+        try:
+            # Send initial progress state
+            initial_state = get_instagram_progress_state()
+            event_data = {
+                "type": "progress",
+                "data": initial_state
+            }
+            yield f"data: {json.dumps(event_data)}\n\n"
+            
+            # Send heartbeat every 30 seconds to keep connection alive
+            heartbeat_interval = 30
+            last_heartbeat = asyncio.get_event_loop().time()
+            
+            while True:
+                try:
+                    # Wait for message with timeout for heartbeat
+                    timeout = max(1, heartbeat_interval - (asyncio.get_event_loop().time() - last_heartbeat))
+                    try:
+                        message = await asyncio.wait_for(client_queue.get(), timeout=timeout)
+                        yield message
+                    except asyncio.TimeoutError:
+                        # Send heartbeat
+                        heartbeat_data = {
+                            "type": "heartbeat",
+                            "data": {"timestamp": datetime.now().isoformat()}
+                        }
+                        yield f"data: {json.dumps(heartbeat_data)}\n\n"
+                        last_heartbeat = asyncio.get_event_loop().time()
+                    
+                    # Check if processing is complete
+                    progress_state = get_instagram_progress_state()
+                    if progress_state["status"] in ["completed", "cancelled", "error"]:
+                        # Send final state and close
+                        final_event = {
+                            "type": progress_state["status"],
+                            "data": progress_state
+                        }
+                        yield f"data: {json.dumps(final_event)}\n\n"
+                        break
+                        
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    # Send error and break
+                    error_event = {
+                        "type": "error",
+                        "data": {"error": str(e)}
+                    }
+                    yield f"data: {json.dumps(error_event)}\n\n"
+                    break
+        finally:
+            # Remove client from the list
+            with instagram_sse_clients_lock:
+                if client_queue in instagram_sse_clients:
+                    instagram_sse_clients.remove(client_queue)
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+
+@app.post("/instagram/import/cancel")
+async def cancel_instagram_import():
+    """Cancel Instagram import if it is in progress.
+    
+    Returns:
+        Success message indicating cancellation status
+    """
+    global instagram_import_in_progress
+    
+    with instagram_import_lock:
+        if not instagram_import_in_progress:
+            return {
+                "message": "No Instagram import is currently in progress",
+                "cancelled": False
+            }
+        
+        instagram_import_cancelled.set()
+        
+        return {
+            "message": "Instagram import cancellation requested. Processing will stop after current conversation completes.",
+            "cancelled": True
+        }
+
+
+@app.get("/instagram/import/status")
+async def get_instagram_import_status():
+    """Get the current status of Instagram import.
+    
+    Returns:
+        Status information about Instagram import
+    """
+    global instagram_import_in_progress
+    
+    progress_state = get_instagram_progress_state()
+    
+    with instagram_import_lock:
+        return {
+            "in_progress": instagram_import_in_progress,
+            "cancelled": instagram_import_cancelled.is_set(),
+            **progress_state
+        }
+
+
+def import_facebook_albums_background(directory_path: str, export_root: Optional[str], result_dict: dict):
+    """Background function to import Facebook Albums from directory."""
+    global facebook_albums_import_in_progress
+    
+    # Mark processing as started
+    with facebook_albums_import_lock:
+        facebook_albums_import_in_progress = True
+        facebook_albums_import_cancelled.clear()
+    
+    # Initialize progress state
+    update_facebook_albums_progress_state(
+        current_album=None,
+        albums_processed=0,
+        total_albums=0,
+        albums_imported=0,
+        images_imported=0,
+        images_found=0,
+        images_missing=0,
+        missing_image_filenames=[],
+        errors=0,
+        status="in_progress",
+        error_message=None
+    )
+    
+    # Broadcast initial progress event
+    broadcast_facebook_albums_progress_event_sync("progress", get_facebook_albums_progress_state())
+    
+    try:
+        def progress_callback(stats: Dict[str, Any]):
+            """Callback function to update progress state."""
+            # Check for cancellation
+            if facebook_albums_import_cancelled.is_set():
+                return
+            
+            # Update progress state with current stats
+            update_facebook_albums_progress_state(
+                current_album=stats.get("current_album"),
+                albums_processed=stats.get("albums_processed", 0),
+                total_albums=stats.get("total_albums", 0),
+                albums_imported=stats.get("albums_imported", 0),
+                images_imported=stats.get("images_imported", 0),
+                images_found=stats.get("images_found", 0),
+                images_missing=stats.get("images_missing", 0),
+                missing_image_filenames=stats.get("missing_image_filenames", []),
+                errors=stats.get("errors", 0),
+                status="in_progress"
+            )
+            
+            # Broadcast progress event
+            broadcast_facebook_albums_progress_event_sync("progress", get_facebook_albums_progress_state())
+        
+        def cancelled_check() -> bool:
+            """Check if import should be cancelled."""
+            return facebook_albums_import_cancelled.is_set()
+        
+        # Run import with progress callback
+        stats = import_facebook_albums_from_directory(
+            directory_path,
+            progress_callback=progress_callback,
+            cancelled_check=cancelled_check,
+            export_root=export_root
+        )
+        
+        result_dict.update(stats)
+        result_dict["success"] = True
+        
+        # Update final progress state
+        update_facebook_albums_progress_state(
+            status="completed",
+            **{k: v for k, v in stats.items() if k in facebook_albums_import_progress}
+        )
+        broadcast_facebook_albums_progress_event_sync("completed", get_facebook_albums_progress_state())
+        
+    except Exception as e:
+        error_msg = str(e)
+        result_dict["success"] = False
+        result_dict["error"] = error_msg
+        
+        update_facebook_albums_progress_state(
+            status="error",
+            error_message=error_msg
+        )
+        broadcast_facebook_albums_progress_event_sync("error", get_facebook_albums_progress_state())
+        
+        print(f"[Background Task] Error importing Facebook Albums: {error_msg}")
+    finally:
+        # Mark processing as completed
+        with facebook_albums_import_lock:
+            facebook_albums_import_in_progress = False
+
+
+@app.post("/facebook/albums/import", response_model=ImportFacebookAlbumsResponse)
+async def import_facebook_albums(
+    request: ImportFacebookAlbumsRequest,
+    background_tasks: BackgroundTasks
+):
+    """Import Facebook Albums from a directory structure.
+    
+    Args:
+        request: Import request containing directory_path and optional export_root
+        
+    Returns:
+        Response indicating import has started
+        
+    Raises:
+        HTTPException: 400 if import is already in progress
+    """
+    global facebook_albums_import_in_progress
+    
+    with facebook_albums_import_lock:
+        if facebook_albums_import_in_progress:
+            raise HTTPException(
+                status_code=400,
+                detail="Facebook Albums import is already in progress"
+            )
+    
+    # Validate directory path
+    directory_path = Path(request.directory_path)
+    if not directory_path.exists() or not directory_path.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Directory does not exist or is not a directory: {request.directory_path}"
+        )
+    
+    # Prepare result dictionary for background task
+    result_dict = {}
+    
+    # Start background import task
+    background_tasks.add_task(
+        import_facebook_albums_background,
+        str(directory_path),
+        request.export_root,
+        result_dict
+    )
+    
+    return ImportFacebookAlbumsResponse(
+        message="Facebook Albums import started",
+        directory_path=request.directory_path,
+        albums_processed=0,
+        albums_imported=0,
+        images_imported=0,
+        images_found=0,
+        images_missing=0,
+        missing_image_filenames=[],
+        errors=0,
+        timestamp=datetime.utcnow()
+    )
+
+
+@app.get("/facebook/albums/import/stream")
+async def stream_facebook_albums_import_progress(request: Request):
+    """Stream Facebook Albums import progress via Server-Sent Events (SSE).
+    
+    Returns:
+        StreamingResponse with SSE events containing progress updates
+    """
+    async def event_generator():
+        # Create a queue for this client
+        client_queue = asyncio.Queue()
+        
+        # Add client queue to list
+        with facebook_albums_sse_clients_lock:
+            facebook_albums_sse_clients.append(client_queue)
+        
+        try:
+            # Send initial state
+            initial_state = get_facebook_albums_progress_state()
+            event_data = {
+                "type": "progress",
+                "data": initial_state
+            }
+            yield f"data: {json.dumps(event_data)}\n\n"
+            
+            # Keep connection alive and send events
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+                
+                try:
+                    # Wait for event with timeout
+                    message = await asyncio.wait_for(client_queue.get(), timeout=1.0)
+                    yield message
+                except asyncio.TimeoutError:
+                    # Send keepalive
+                    yield ": keepalive\n\n"
+                    continue
+                except Exception as e:
+                    print(f"Error in SSE stream: {e}")
+                    break
+        finally:
+            # Remove client queue from list
+            with facebook_albums_sse_clients_lock:
+                if client_queue in facebook_albums_sse_clients:
+                    facebook_albums_sse_clients.remove(client_queue)
+    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/facebook/albums/import/cancel")
+async def cancel_facebook_albums_import():
+    """Cancel Facebook Albums import if in progress.
+    
+    Returns:
+        Status message indicating cancellation request
+    """
+    global facebook_albums_import_in_progress
+    
+    with facebook_albums_import_lock:
+        if not facebook_albums_import_in_progress:
+            return {"message": "No Facebook Albums import in progress"}
+        
+        facebook_albums_import_cancelled.set()
+        return {"message": "Facebook Albums import cancellation requested"}
+
+
+@app.get("/facebook/albums/import/status")
+async def get_facebook_albums_import_status():
+    """Get current status of Facebook Albums import.
+    
+    Returns:
+        Status information about Facebook Albums import
+    """
+    global facebook_albums_import_in_progress
+    
+    progress_state = get_facebook_albums_progress_state()
+    
+    with facebook_albums_import_lock:
+        return {
+            "in_progress": facebook_albums_import_in_progress,
+            "cancelled": facebook_albums_import_cancelled.is_set(),
+            **progress_state
+        }
+
+
+@app.get("/facebook/albums")
+async def get_facebook_albums():
+    """Get list of all Facebook albums.
+    
+    Returns:
+        List of albums with id, name, description, cover_photo_uri, image_count
+    """
+    session = db.get_session()
+    try:
+        from sqlalchemy import func
+        albums = session.query(
+            FacebookAlbum.id,
+            FacebookAlbum.name,
+            FacebookAlbum.description,
+            FacebookAlbum.cover_photo_uri,
+            func.count(FacebookAlbumImage.id).label('image_count')
+        ).outerjoin(
+            FacebookAlbumImage, FacebookAlbum.id == FacebookAlbumImage.album_id
+        ).group_by(
+            FacebookAlbum.id
+        ).order_by(
+            FacebookAlbum.name
+        ).all()
+        
+        result = []
+        for album in albums:
+            result.append({
+                "id": album.id,
+                "name": album.name,
+                "description": album.description,
+                "cover_photo_uri": album.cover_photo_uri,
+                "image_count": album.image_count or 0
+            })
+        
+        return result
+    finally:
+        session.close()
+
+
+@app.get("/facebook/albums/{album_id}/images")
+async def get_facebook_album_images(album_id: int):
+    """Get all images for a specific Facebook album.
+    
+    Args:
+        album_id: The ID of the album
+        
+    Returns:
+        List of images with id, uri, filename, title, description, creation_timestamp, image_type
+    """
+    session = db.get_session()
+    try:
+        images = session.query(FacebookAlbumImage).filter(
+            FacebookAlbumImage.album_id == album_id
+        ).order_by(
+            FacebookAlbumImage.creation_timestamp.asc()
+        ).all()
+        
+        result = []
+        for image in images:
+            result.append({
+                "id": image.id,
+                "uri": image.uri,
+                "filename": image.filename,
+                "title": image.title,
+                "description": image.description,
+                "creation_timestamp": image.creation_timestamp.isoformat() if image.creation_timestamp else None,
+                "image_type": image.image_type
+            })
+        
+        return result
+    finally:
+        session.close()
+
+
+@app.get("/facebook/albums/images/{image_id}")
+async def get_facebook_album_image(image_id: int):
+    """Get image data for a specific Facebook album image.
+    
+    Args:
+        image_id: The ID of the image
+        
+    Returns:
+        Image file content with appropriate MIME type
+        
+    Raises:
+        HTTPException: 404 if image not found
+    """
+    session = db.get_session()
+    try:
+        image = session.query(FacebookAlbumImage).filter(
+            FacebookAlbumImage.id == image_id
+        ).first()
+    finally:
+        session.close()
+    
+    if not image:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Image with ID {image_id} not found"
+        )
+    
+    if not image.image_data:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Image with ID {image_id} has no image data"
+        )
+    
+    # Determine content type from image_type or filename
+    content_type = image.image_type or "image/jpeg"
+    if image.filename:
+        import mimetypes
+        guessed_type, _ = mimetypes.guess_type(image.filename)
+        if guessed_type:
+            content_type = guessed_type
+    
+    return Response(
+        content=image.image_data,
+        media_type=content_type
+    )
 
 
 @app.get("/imessages/{message_id}/attachment")

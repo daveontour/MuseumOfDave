@@ -447,8 +447,14 @@
                 <button class="config-tab-button" data-tab="images-grid">
                     <i class="fas fa-images"></i> Email Attachments
                 </button>
-                <button class="config-tab-button" data-tab="controls">
-                    <i class="fas fa-sliders-h"></i> Controls
+                <button class="config-tab-button" data-tab="email-controls">
+                    <i class="fas fa-envelope"></i> Email Controls
+                </button>
+                <button class="config-tab-button" data-tab="messaging-controls">
+                    <i class="fas fa-comments"></i> Messaging Controls
+                </button>
+                <button class="config-tab-button" data-tab="facebook-albums">
+                    <i class="fas fa-images"></i> Facebook Albums
                 </button>
             </div>
             <div class="config-content" style="height:calc(100vh - 170px)">
@@ -580,7 +586,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="config-tab-content" id="controls-tab">
+                <div class="config-tab-content" id="email-controls-tab">
                     <section class="config-section">
                         <h3>Email Processing Controls</h3>
                         <div class="setting-group">
@@ -631,7 +637,9 @@
                             <div id="processing-status-details" style="color: #666; font-size: 0.9em; margin-top: 10px;"></div>
                         </div>
                     </section>
-                    <section class="config-section" style="margin-top: 30px;">
+                </div>
+                <div class="config-tab-content" id="messaging-controls-tab">
+                    <section class="config-section">
                         <h3>WhatsApp Import Controls</h3>
                         <div class="setting-group">
                             <label for="whatsapp-import-directory">WhatsApp Export Directory:</label>
@@ -676,6 +684,113 @@
                                 </div>
                             </div>
                             <div id="whatsapp-import-status-details" style="color: #666; font-size: 0.9em; margin-top: 10px;"></div>
+                        </div>
+                    </section>
+                    <section class="config-section" style="margin-top: 30px;">
+                        <h3>Facebook Messenger Import Controls</h3>
+                        <div class="setting-group">
+                            <label for="facebook-import-directory">Facebook Messenger Export Directory:</label>
+                            <input type="text" id="facebook-import-directory" placeholder="e.g., G:\My Drive\meta-2026-Jan-11\your_facebook_activity\messages\e2ee_cutover" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                            <small style="color: #666; display: block; margin-top: 5px;">Path to directory containing Facebook Messenger conversation subdirectories</small>
+                        </div>
+                        <div class="setting-group" style="margin-top: 10px;">
+                            <label for="facebook-export-root">Export Root Directory (Optional):</label>
+                            <input type="text" id="facebook-export-root" placeholder="e.g., G:\My Drive\meta-2026-Jan-11\facebook-daveontour-2026-01-11" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                            <small style="color: #666; display: block; margin-top: 5px;">Root directory of Facebook export (for resolving attachment paths)</small>
+                        </div>
+                        <div class="setting-group" style="margin-top: 10px;">
+                            <label for="facebook-user-name">Your Name (Optional):</label>
+                            <input type="text" id="facebook-user-name" placeholder="e.g., Dave Burton" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                            <small style="color: #666; display: block; margin-top: 5px;">Your name to determine incoming vs outgoing messages</small>
+                        </div>
+                        <div class="setting-group" style="margin-top: 20px;">
+                            <button type="button" id="start-facebook-import-btn" class="modal-btn modal-btn-primary" style="margin-right: 10px;">
+                                <i class="fas fa-play"></i> Start Facebook Messenger Import
+                            </button>
+                            <button type="button" id="cancel-facebook-import-btn" class="modal-btn modal-btn-secondary" style="display: none;">
+                                <i class="fas fa-stop"></i> Cancel Import
+                            </button>
+                        </div>
+                        <div id="facebook-import-status" style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6; display: none;">
+                            <div id="facebook-import-status-message" style="color: #333; font-weight: bold; margin-bottom: 10px;"></div>
+                            <div id="facebook-import-progress-container" style="margin-top: 15px; display: none;">
+                                <div id="facebook-import-current-conversation" style="color: #333; font-size: 0.95em; margin-bottom: 8px;">
+                                    <strong>Current Conversation:</strong> <span id="facebook-current-conversation-name">-</span>
+                                </div>
+                                <div id="facebook-import-conversation-progress" style="color: #666; font-size: 0.9em; margin-bottom: 10px;">
+                                    <strong>Progress:</strong> <span id="facebook-conversation-progress-text">0 / 0</span>
+                                </div>
+                                <div id="facebook-import-progress-bar-container" style="width: 100%; background-color: #e9ecef; border-radius: 4px; height: 24px; margin-bottom: 10px; overflow: hidden;">
+                                    <div id="facebook-import-progress-bar" style="height: 100%; background-color: #28a745; width: 0%; transition: width 0.3s ease; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.85em; font-weight: bold;">
+                                        <span id="facebook-progress-bar-text">0%</span>
+                                    </div>
+                                </div>
+                                <div id="facebook-import-messages-count" style="color: #666; font-size: 0.9em;">
+                                    <strong>Messages Imported:</strong> <span id="facebook-messages-imported-count">0</span> (<span id="facebook-messages-created-count">0</span> new, <span id="facebook-messages-updated-count">0</span> updated)
+                                </div>
+                                <div id="facebook-import-attachments-count" style="color: #666; font-size: 0.9em;">
+                                    <strong>Attachments:</strong> <span id="facebook-attachments-found-count">0</span> found, <span id="facebook-attachments-missing-count">0</span> missing
+                                </div>
+                                <div id="facebook-import-errors-count" style="color: #dc3545; font-size: 0.9em;">
+                                    <strong>Errors:</strong> <span id="facebook-errors-count">0</span>
+                                </div>
+                                <div id="facebook-missing-attachments-list" style="margin-top: 15px; display: none;">
+                                    <strong style="color: #333; font-size: 0.95em;">Missing Attachment Files:</strong>
+                                    <div id="facebook-missing-filenames" style="max-height: 200px; overflow-y: auto; margin-top: 8px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; font-size: 0.85em; color: #856404;">
+                                        <!-- Missing filenames will be listed here -->
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="facebook-import-status-details" style="color: #666; font-size: 0.9em; margin-top: 10px;"></div>
+                        </div>
+                    </section>
+                    <section style="margin-top: 30px; padding: 20px; background-color: #fff; border-radius: 8px; border: 1px solid #dee2e6;">
+                        <h3>Instagram Import Controls</h3>
+                        <div class="setting-group" style="margin-top: 10px;">
+                            <label for="instagram-import-directory">Instagram Export Directory:</label>
+                            <input type="text" id="instagram-import-directory" placeholder="e.g., G:\My Drive\meta-2026-Jan-11\your_instagram_activity\messages\inbox" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                            <small style="color: #666; display: block; margin-top: 5px;">Path to directory containing conversation subdirectories</small>
+                        </div>
+                        <div class="setting-group" style="margin-top: 10px;">
+                            <label for="instagram-export-root">Export Root Directory (Optional):</label>
+                            <input type="text" id="instagram-export-root" placeholder="e.g., G:\My Drive\meta-2026-Jan-11\instagram-dave.on.tour-2026-01-11" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                            <small style="color: #666; display: block; margin-top: 5px;">Root directory of Instagram export (for consistency)</small>
+                        </div>
+                        <div class="setting-group" style="margin-top: 10px;">
+                            <label for="instagram-user-name">Your Name (Optional):</label>
+                            <input type="text" id="instagram-user-name" placeholder="e.g., Dave Burton" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                            <small style="color: #666; display: block; margin-top: 5px;">Your name to determine incoming/outgoing messages</small>
+                        </div>
+                        <div class="setting-group" style="margin-top: 20px;">
+                            <button type="button" id="start-instagram-import-btn" class="modal-btn modal-btn-primary" style="margin-right: 10px;">
+                                <i class="fas fa-play"></i> Start Instagram Import
+                            </button>
+                            <button type="button" id="cancel-instagram-import-btn" class="modal-btn modal-btn-secondary" style="display: none;">
+                                <i class="fas fa-stop"></i> Cancel Import
+                            </button>
+                        </div>
+                        <div id="instagram-import-status" style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6; display: none;">
+                            <div id="instagram-import-status-message" style="color: #333; font-weight: bold; margin-bottom: 10px;"></div>
+                            <div id="instagram-import-progress-container" style="margin-top: 15px; display: none;">
+                                <div id="instagram-import-current-conversation" style="color: #333; font-size: 0.95em; margin-bottom: 8px;">
+                                    <strong>Current Conversation:</strong> <span id="instagram-current-conversation-name">-</span>
+                                </div>
+                                <div id="instagram-import-conversation-progress" style="color: #666; font-size: 0.9em; margin-bottom: 10px;">
+                                    <strong>Progress:</strong> <span id="instagram-conversation-progress-text">0 / 0</span>
+                                </div>
+                                <div id="instagram-import-progress-bar-container" style="width: 100%; background-color: #e9ecef; border-radius: 4px; height: 24px; margin-bottom: 10px; overflow: hidden;">
+                                    <div id="instagram-import-progress-bar" style="height: 100%; background-color: #28a745; width: 0%; transition: width 0.3s ease; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.85em; font-weight: bold;">
+                                        <span id="instagram-progress-bar-text">0%</span>
+                                    </div>
+                                </div>
+                                <div id="instagram-import-messages-count" style="color: #666; font-size: 0.9em;">
+                                    <strong>Messages:</strong> <span id="instagram-messages-imported-count">0</span> imported (<span id="instagram-messages-created-count">0</span> created, <span id="instagram-messages-updated-count">0</span> updated)
+                                </div>
+                                <div id="instagram-import-errors-count" style="color: #dc3545; font-size: 0.9em;">
+                                    <strong>Errors:</strong> <span id="instagram-errors-count">0</span>
+                                </div>
+                            </div>
+                            <div id="instagram-import-status-details" style="color: #666; font-size: 0.9em; margin-top: 10px;"></div>
                         </div>
                     </section>
                     <section class="config-section" style="margin-top: 30px;">
@@ -726,6 +841,61 @@
                         </div>
                     </section>
                 </div>
+                <div class="config-tab-content" id="facebook-albums-tab">
+                    <section class="config-section">
+                        <h3>Facebook Albums Import Controls</h3>
+                        <div class="setting-group">
+                            <label for="facebook-albums-import-directory">Facebook Albums Export Directory:</label>
+                            <input type="text" id="facebook-albums-import-directory" placeholder="e.g., G:\My Drive\meta-2026-Jan-11\your_facebook_activity\posts" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                            <small style="color: #666; display: block; margin-top: 5px;">Path to directory containing album JSON files (or the album subdirectory)</small>
+                        </div>
+                        <div class="setting-group" style="margin-top: 10px;">
+                            <label for="facebook-albums-export-root">Export Root Directory (Optional):</label>
+                            <input type="text" id="facebook-albums-export-root" placeholder="e.g., G:\My Drive\meta-2026-Jan-11\facebook-daveontour-2026-01-11" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                            <small style="color: #666; display: block; margin-top: 5px;">Root directory of Facebook export (for resolving image paths)</small>
+                        </div>
+                        <div class="setting-group" style="margin-top: 20px;">
+                            <button type="button" id="start-facebook-albums-import-btn" class="modal-btn modal-btn-primary" style="margin-right: 10px;">
+                                <i class="fas fa-play"></i> Start Facebook Albums Import
+                            </button>
+                            <button type="button" id="cancel-facebook-albums-import-btn" class="modal-btn modal-btn-secondary" style="display: none;">
+                                <i class="fas fa-stop"></i> Cancel Import
+                            </button>
+                        </div>
+                        <div id="facebook-albums-import-status" style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6; display: none;">
+                            <div id="facebook-albums-import-status-message" style="color: #333; font-weight: bold; margin-bottom: 10px;"></div>
+                            <div id="facebook-albums-import-progress-container" style="margin-top: 15px; display: none;">
+                                <div id="facebook-albums-import-current-album" style="color: #333; font-size: 0.95em; margin-bottom: 8px;">
+                                    <strong>Current Album:</strong> <span id="facebook-albums-current-album-name">-</span>
+                                </div>
+                                <div id="facebook-albums-import-album-progress" style="color: #666; font-size: 0.9em; margin-bottom: 10px;">
+                                    <strong>Progress:</strong> <span id="facebook-albums-album-progress-text">0 / 0</span>
+                                </div>
+                                <div id="facebook-albums-import-progress-bar-container" style="width: 100%; background-color: #e9ecef; border-radius: 4px; height: 24px; margin-bottom: 10px; overflow: hidden;">
+                                    <div id="facebook-albums-import-progress-bar" style="height: 100%; background-color: #28a745; width: 0%; transition: width 0.3s ease; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.85em; font-weight: bold;">
+                                        <span id="facebook-albums-progress-bar-text">0%</span>
+                                    </div>
+                                </div>
+                                <div id="facebook-albums-import-albums-count" style="color: #666; font-size: 0.9em;">
+                                    <strong>Albums Imported:</strong> <span id="facebook-albums-albums-imported-count">0</span>
+                                </div>
+                                <div id="facebook-albums-import-images-count" style="color: #666; font-size: 0.9em;">
+                                    <strong>Images:</strong> <span id="facebook-albums-images-imported-count">0</span> imported, <span id="facebook-albums-images-found-count">0</span> found, <span id="facebook-albums-images-missing-count">0</span> missing
+                                </div>
+                                <div id="facebook-albums-import-errors-count" style="color: #dc3545; font-size: 0.9em;">
+                                    <strong>Errors:</strong> <span id="facebook-albums-errors-count">0</span>
+                                </div>
+                                <div id="facebook-albums-missing-images-list" style="margin-top: 15px; display: none;">
+                                    <strong style="color: #333; font-size: 0.95em;">Missing Image Files:</strong>
+                                    <div id="facebook-albums-missing-filenames" style="max-height: 200px; overflow-y: auto; margin-top: 8px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; font-size: 0.85em; color: #856404;">
+                                        <!-- Missing filenames will be listed here -->
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="facebook-albums-import-status-details" style="color: #666; font-size: 0.9em; margin-top: 10px;"></div>
+                        </div>
+                    </section>
+                </div>
             </div>
         </div>
 
@@ -733,21 +903,34 @@
 
         <!-- Facebook Choose Albums Modal  -->
         <div id="fb-albums-modal" class="modal">
-            <div class="modal-content">
-                <button id="close-fb-albums-modal" class="modal-close-btn">&times;</button>
-                <h2>Facebook Albums</h2>
-                <form id="fb-albums-form">
-                    <div class="setting-group">
-                        <label for="fb-albums-select">Select Album :</label>
-                        <select id="fb-albums-select" name="fb-albums-select">
-                            <!-- Album options will be populated dynamically -->
-                        </select>
+            <div class="modal-content" style="max-width: 1400px; width: 95vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 0; position: relative; display: flex; flex-direction: column; height: 90vh;">
+                <button class="modal-close-btn" id="close-fb-albums-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer; z-index: 10;">&times;</button>
+                <h2 style="margin: 0; padding: 1rem 2rem; color: #233366; font-size: 1.3em; border-bottom: 1px solid #dee2e6;">Facebook Albums</h2>
+                <div style="display: flex; flex: 1; overflow: hidden;">
+                    <!-- Master Pane (Left) - Resizable -->
+                    <div id="fb-albums-master-pane" style="width: 350px; min-width: 200px; max-width: 600px; border-right: 1px solid #dee2e6; display: flex; flex-direction: column; background-color: #f8f9fa; position: relative;">
+                        <div style="padding: 1rem; border-bottom: 1px solid #dee2e6; box-sizing: border-box;">
+                            <input type="text" id="fb-albums-search" placeholder="Search albums..." style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da; font-size: 14px; box-sizing: border-box;">
+                        </div>
+                        <div id="fb-albums-list" style="flex: 1; overflow-y: auto; padding: 0.5rem;">
+                            <!-- Albums will be loaded here -->
+                            <div style="text-align: center; padding: 2rem; color: #666;">Loading albums...</div>
+                        </div>
+                        <!-- Resize handle -->
+                        <div id="fb-albums-resize-handle" style="position: absolute; right: 0; top: 0; bottom: 0; width: 4px; cursor: col-resize; background-color: transparent; z-index: 5;"></div>
                     </div>
-                    <div class="modal-btn-row">
-                        <button type="button" id="fb-albums-ok-btn" class="modal-btn modal-btn-primary">OK</button>
-                        <button type="button" id="fb-albums-cancel-btn" class="modal-btn modal-btn-secondary">Cancel</button>
+                    <!-- Slave Pane (Right) -->
+                    <div id="fb-albums-slave-pane" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                        <div id="fb-albums-album-header" style="padding: 1rem; border-bottom: 1px solid #dee2e6; background-color: #f8f9fa;">
+                            <h3 id="fb-albums-album-title" style="margin: 0; color: #233366; font-size: 1.1em;">Select an album</h3>
+                            <p id="fb-albums-album-description" style="margin: 0.5rem 0 0 0; color: #666; font-size: 0.9em;"></p>
+                        </div>
+                        <div id="fb-albums-images-container" style="flex: 1; overflow-y: auto; padding: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; align-content: start; min-height: 0;">
+                            <!-- Images will be displayed here -->
+                            <div style="text-align: center; padding: 2rem; color: #666; grid-column: 1 / -1;">Select an album to view images</div>
+                        </div>
                     </div>
-                </form>
+                </div>
             </div>
         </div>
 
@@ -1168,6 +1351,14 @@
                                 <label style="display: flex; align-items: center; cursor: pointer; color: #233366;">
                                     <input type="checkbox" id="filter-whatsapp" class="sms-filter-checkbox" checked style="margin-right: 6px; cursor: pointer;">
                                     <i class="fab fa-whatsapp" style="color: #25D366; margin-right: 4px;"></i>WhatsApp
+                                </label>
+                                <label style="display: flex; align-items: center; cursor: pointer; color: #233366;">
+                                    <input type="checkbox" id="filter-facebook" class="sms-filter-checkbox" checked style="margin-right: 6px; cursor: pointer;">
+                                    <i class="fab fa-facebook-messenger" style="color: #0084FF; margin-right: 4px;"></i>Facebook
+                                </label>
+                                <label style="display: flex; align-items: center; cursor: pointer; color: #233366;">
+                                    <input type="checkbox" id="filter-instagram" class="sms-filter-checkbox" checked style="margin-right: 6px; cursor: pointer;">
+                                    <i class="fab fa-instagram" style="color: #E4405F; margin-right: 4px;"></i>Instagram
                                 </label>
                                 <label style="display: flex; align-items: center; cursor: pointer; color: #233366;">
                                     <input type="checkbox" id="filter-mixed" class="sms-filter-checkbox" checked style="margin-right: 6px; cursor: pointer;">

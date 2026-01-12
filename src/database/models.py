@@ -96,3 +96,42 @@ class IMessage(Base):
     image_processed = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class FacebookAlbum(Base):
+    """Facebook Album model."""
+
+    __tablename__ = "facebook_albums"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+    cover_photo_uri = Column(String(500), nullable=True)
+    last_modified_timestamp = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    images = relationship("FacebookAlbumImage", back_populates="album", cascade="all, delete-orphan")
+
+
+class FacebookAlbumImage(Base):
+    """Facebook Album Image model."""
+
+    __tablename__ = "facebook_album_images"
+
+    id = Column(Integer, primary_key=True)
+    album_id = Column(Integer, ForeignKey("facebook_albums.id", ondelete="CASCADE"), nullable=False)
+    uri = Column(String(500), nullable=False)
+    filename = Column(String(500), nullable=True)
+    creation_timestamp = Column(DateTime, nullable=True)
+    title = Column(String(1000), nullable=True)
+    description = Column(Text, nullable=True)
+    image_data = Column(LargeBinary, nullable=True)
+    image_type = Column(String(255), nullable=True)
+    processed = Column(Boolean, default=False, nullable=False)
+    location_processed = Column(Boolean, default=False, nullable=False)
+    image_processed = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    album = relationship("FacebookAlbum", back_populates="images")

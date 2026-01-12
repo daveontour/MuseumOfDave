@@ -124,10 +124,15 @@ document.addEventListener('DOMContentLoaded', () => {
         closeSuggestionsModalBtn: document.getElementById('modal-suggestions-close-btn'),
         suggestionsListContainer: document.getElementById('tile-suggestions-container'),
         fbAlbumsModal: document.getElementById('fb-albums-modal'),
-        fbAlbumsSelect: document.getElementById('fb-albums-select'),
+        fbAlbumsList: document.getElementById('fb-albums-list'),
+        fbAlbumsSearch: document.getElementById('fb-albums-search'),
+        fbAlbumsMasterPane: document.getElementById('fb-albums-master-pane'),
+        fbAlbumsSlavePane: document.getElementById('fb-albums-slave-pane'),
+        fbAlbumsResizeHandle: document.getElementById('fb-albums-resize-handle'),
+        fbAlbumsAlbumTitle: document.getElementById('fb-albums-album-title'),
+        fbAlbumsAlbumDescription: document.getElementById('fb-albums-album-description'),
+        fbAlbumsImagesContainer: document.getElementById('fb-albums-images-container'),
         closeFBAlbumsModalBtn: document.getElementById('close-fb-albums-modal'),
-        fbAlbumsCancelBtn: document.getElementById('fb-albums-cancel-btn'),
-        fbAlbumsOkBtn: document.getElementById('fb-albums-ok-btn'),
         fbImageModal: document.getElementById('fb-album-modal'),
         fbImageModalTitle: document.getElementById('fb-album-modal-title'),
         fbImageModalDescription: document.getElementById('fb-album-modal-description'),
@@ -1314,105 +1319,242 @@ document.addEventListener('DOMContentLoaded', () => {
         })(),
 
         FBAlbums: (() => {
-            async function open() {
-                Modals._openModal(DOM.fbAlbumsModal);
-                DOM.fbAlbumsSelect.disabled = true;
-                DOM.fbAlbumsSelect.innerHTML = '<option value="">Loading...</option>';
-                DOM.fbAlbumsOkBtn.disabled = true;
+            let albums = [];
+            let filteredAlbums = [];
+            let selectedAlbumId = null;
+            let resizeStartX = null;
+            let resizeStartWidth = null;
 
+            async function loadAlbums() {
+                if (!DOM.fbAlbumsList) return;
+                
+                DOM.fbAlbumsList.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;">Loading albums...</div>';
+                
                 try {
-                    const data = await ApiService.fetchAlbums();
-                    DOM.fbAlbumsSelect.innerHTML = '<option value="">Select Album</option>';
-                    for (const album of data) { // Assuming data is an array
-                        const option = document.createElement('option');
-                        // Store unique identifier. Here, combining name and description.
-                        // Or better, if album has an ID, use that. For now, stringified version.
-                        option.value = JSON.stringify({ name: album.name, description: album.description, attachments: album.attachments });
-                        option.textContent = `${album.name} (${album.number_of_photos} photos)`;
-                        DOM.fbAlbumsSelect.appendChild(option);
+                    const response = await fetch('/facebook/albums');
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
                     }
+                    albums = await response.json();
+                    filteredAlbums = albums;
+                    renderAlbums();
                 } catch (error) {
                     console.error("Failed to load FB albums:", error);
-                    DOM.fbAlbumsSelect.innerHTML = '<option value="">Failed to load albums</option>';
-                    UI.displayError("Could not load FB albums: " + error.message);
-                } finally {
-                    DOM.fbAlbumsSelect.disabled = false;
-                }
-            }
-            function close() { 
-                Modals._closeModal(DOM.fbAlbumsModal); 
-                Modals._closeModal(DOM.fbImageModal);
-            }
-
-            function handleSubmit() {
-                const selectedAlbumValue = DOM.fbAlbumsSelect.value;
-                if (!selectedAlbumValue) return;
-                try {
-                    const albumData = JSON.parse(selectedAlbumValue);
-                    close();
-                    _showTileModal(albumData.name, albumData.description, albumData.attachments);
-                } catch (e) {
-                    console.error("Error parsing album data from select: ", e);
-                    UI.displayError("Invalid album data selected.");
+                    DOM.fbAlbumsList.innerHTML = '<div style="text-align: center; padding: 2rem; color: #dc3545;">Failed to load albums: ' + error.message + '</div>';
                 }
             }
 
-            function _showTileModal(title, description, tiles) { // tiles are {uri, description}
-                if (!DOM.fbImageModal || !DOM.fbImageModalTitle || !DOM.fbImageModalDescription || !DOM.fbImageContainer) {
-                    console.error('Tile album modal elements not found');
+            function renderAlbums() {
+                if (!DOM.fbAlbumsList) return;
+                
+                if (filteredAlbums.length === 0) {
+                    DOM.fbAlbumsList.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;">No albums found</div>';
                     return;
                 }
-                DOM.fbImageModalTitle.textContent = title;
-                DOM.fbImageModalDescription.textContent = description;
-                DOM.fbImageContainer.innerHTML = ''; // Clear existing tiles
-
-                tiles.forEach((tileData, index) => {
-                    const tileElement = document.createElement('div');
-                    tileElement.className = 'tile-album';
-                    const img = document.createElement('img');
-                    img.src =  "/getImage?id="+tileData.file_id+"&preview=true&resize_to=200"; // Assuming uri is the direct image source
-                    img.alt = tileData.photo_description;
-                    img.loading = 'lazy';
-                    const desc = document.createElement('div');
-                    desc.className = 'tile-album-description';
-                    desc.textContent = tileData.description;
-
-                    tileElement.onclick = () => Modals.MultiImageDisplay.showMultiImageModal(tiles, tileData.file_id);
+                
+                DOM.fbAlbumsList.innerHTML = '';
+                
+                filteredAlbums.forEach(album => {
+                    const albumItem = document.createElement('div');
+                    albumItem.className = 'fb-album-item';
+                    albumItem.style.cssText = 'padding: 12px; margin-bottom: 8px; border-radius: 6px; cursor: pointer; transition: background-color 0.2s; border: 1px solid transparent;';
+                    albumItem.style.backgroundColor = selectedAlbumId === album.id ? '#e3f2fd' : 'transparent';
+                    albumItem.style.borderColor = selectedAlbumId === album.id ? '#2196F3' : 'transparent';
                     
-                    tileElement.appendChild(img);
-                    tileElement.appendChild(desc);
-                    DOM.fbImageContainer.appendChild(tileElement);
+                    albumItem.onmouseover = () => {
+                        if (selectedAlbumId !== album.id) {
+                            albumItem.style.backgroundColor = '#f0f0f0';
+                        }
+                    };
+                    albumItem.onmouseout = () => {
+                        if (selectedAlbumId !== album.id) {
+                            albumItem.style.backgroundColor = 'transparent';
+                        }
+                    };
+                    
+                    albumItem.onclick = () => selectAlbum(album.id);
+                    
+                    const title = document.createElement('div');
+                    title.style.cssText = 'font-weight: 600; color: #233366; margin-bottom: 4px; font-size: 14px;';
+                    title.textContent = album.name;
+                    
+                    const meta = document.createElement('div');
+                    meta.style.cssText = 'font-size: 12px; color: #666;';
+                    meta.textContent = `${album.image_count || 0} image${album.image_count !== 1 ? 's' : ''}`;
+                    
+                    albumItem.appendChild(title);
+                    albumItem.appendChild(meta);
+                    DOM.fbAlbumsList.appendChild(albumItem);
                 });
-                Modals._openModal(DOM.fbImageModal);
             }
 
-            async function openAlbum(albumTitle) {
-                const data = await ApiService.fetchAlbums();
+            async function selectAlbum(albumId) {
+                selectedAlbumId = albumId;
+                renderAlbums();
                 
-                for (const album of data) { // Assuming data is an array
-                    if (album.name.toLowerCase() === albumTitle.toLowerCase()) {
-                        _showTileModal(album.name, album.description, album.attachments);
-                    }
+                const album = albums.find(a => a.id === albumId);
+                if (!album) return;
+                
+                // Update header
+                if (DOM.fbAlbumsAlbumTitle) {
+                    DOM.fbAlbumsAlbumTitle.textContent = album.name;
+                }
+                if (DOM.fbAlbumsAlbumDescription) {
+                    DOM.fbAlbumsAlbumDescription.textContent = album.description || '';
                 }
                 
+                // Load images
+                if (!DOM.fbAlbumsImagesContainer) return;
+                
+                DOM.fbAlbumsImagesContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666; grid-column: 1 / -1;">Loading images...</div>';
+                
+                try {
+                    const response = await fetch(`/facebook/albums/${albumId}/images`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const images = await response.json();
+                    
+                    if (images.length === 0) {
+                        DOM.fbAlbumsImagesContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666; grid-column: 1 / -1;">No images in this album</div>';
+                        return;
+                    }
+                    
+                    DOM.fbAlbumsImagesContainer.innerHTML = '';
+                    
+                    images.forEach(image => {
+                        const imageCard = document.createElement('div');
+                        imageCard.style.cssText = 'position: relative; border-radius: 8px; overflow: hidden; background: #f8f9fa; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; min-height: 200px;';
+                        imageCard.onmouseover = () => {
+                            imageCard.style.transform = 'scale(1.02)';
+                            imageCard.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                        };
+                        imageCard.onmouseout = () => {
+                            imageCard.style.transform = 'scale(1)';
+                            imageCard.style.boxShadow = 'none';
+                        };
+                        
+                        const img = document.createElement('img');
+                        img.src = `/facebook/albums/images/${image.id}`;
+                        img.alt = image.title || image.filename || 'Album image';
+                        img.style.cssText = 'width: 100%; height: 200px; min-height: 200px; object-fit: cover; display: block;';
+                        img.loading = 'lazy';
+                        
+                        imageCard.onclick = () => {
+                            // Open full image view (could be enhanced later)
+                            window.open(img.src, '_blank');
+                        };
+                        
+                        // Show overlay with image description if available, otherwise album title
+                        // Priority: image.description > image.title > album.name
+                        const overlayText = image.description || image.title || album.name;
+                        const overlay = document.createElement('div');
+                        overlay.style.cssText = 'position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0,0,0,0.7), transparent); padding: 8px; color: white; font-size: 12px;';
+                        overlay.textContent = overlayText;
+                        imageCard.appendChild(overlay);
+                        
+                        imageCard.appendChild(img);
+                        DOM.fbAlbumsImagesContainer.appendChild(imageCard);
+                    });
+                } catch (error) {
+                    console.error("Failed to load album images:", error);
+                    DOM.fbAlbumsImagesContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #dc3545; grid-column: 1 / -1;">Failed to load images: ' + error.message + '</div>';
+                }
+            }
+
+            function searchAlbums(query) {
+                const searchTerm = query.toLowerCase().trim();
+                if (!searchTerm) {
+                    filteredAlbums = albums;
+                } else {
+                    filteredAlbums = albums.filter(album => 
+                        album.name.toLowerCase().includes(searchTerm) ||
+                        (album.description && album.description.toLowerCase().includes(searchTerm))
+                    );
+                }
+                renderAlbums();
+            }
+
+            function startResize(e) {
+                e.preventDefault();
+                resizeStartX = e.clientX;
+                resizeStartWidth = DOM.fbAlbumsMasterPane.offsetWidth;
+                document.addEventListener('mousemove', handleResize);
+                document.addEventListener('mouseup', stopResize);
+                if (DOM.fbAlbumsResizeHandle) {
+                    DOM.fbAlbumsResizeHandle.style.backgroundColor = '#2196F3';
+                }
+            }
+
+            function handleResize(e) {
+                if (resizeStartX === null || resizeStartWidth === null) return;
+                
+                const diff = e.clientX - resizeStartX;
+                const newWidth = resizeStartWidth + diff;
+                const minWidth = 200;
+                const maxWidth = 600;
+                
+                if (newWidth >= minWidth && newWidth <= maxWidth) {
+                    DOM.fbAlbumsMasterPane.style.width = newWidth + 'px';
+                }
+            }
+
+            function stopResize() {
+                resizeStartX = null;
+                resizeStartWidth = null;
+                document.removeEventListener('mousemove', handleResize);
+                document.removeEventListener('mouseup', stopResize);
+                if (DOM.fbAlbumsResizeHandle) {
+                    DOM.fbAlbumsResizeHandle.style.backgroundColor = 'transparent';
+                }
+            }
+
+            async function open() {
+                Modals._openModal(DOM.fbAlbumsModal);
+                selectedAlbumId = null;
+                await loadAlbums();
+                
+                // Reset slave pane
+                if (DOM.fbAlbumsAlbumTitle) {
+                    DOM.fbAlbumsAlbumTitle.textContent = 'Select an album';
+                }
+                if (DOM.fbAlbumsAlbumDescription) {
+                    DOM.fbAlbumsAlbumDescription.textContent = '';
+                }
+                if (DOM.fbAlbumsImagesContainer) {
+                    DOM.fbAlbumsImagesContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666; grid-column: 1 / -1;">Select an album to view images</div>';
+                }
+            }
+
+            function close() { 
+                Modals._closeModal(DOM.fbAlbumsModal);
             }
 
             function init() {
-                if (DOM.closeFBAlbumsModalBtn){ 
-                    DOM.closeFBAlbumsModalBtn.addEventListener('click', close); }
-                if (DOM.fbAlbumsCancelBtn) DOM.fbAlbumsCancelBtn.addEventListener('click', close);
-                if (DOM.fbAlbumsOkBtn) {
-                    DOM.fbAlbumsOkBtn.addEventListener('click', handleSubmit);
-                    DOM.fbAlbumsOkBtn.disabled = true; // Initial state
+                if (DOM.closeFBAlbumsModalBtn) {
+                    DOM.closeFBAlbumsModalBtn.addEventListener('click', close);
                 }
-                if (DOM.fbImageModalCloseBtn) DOM.fbImageModalCloseBtn.addEventListener('click', close);
-                if (DOM.fbAlbumsSelect) {
-                     DOM.fbAlbumsSelect.addEventListener('change', () => {
-                        DOM.fbAlbumsOkBtn.disabled = !(DOM.fbAlbumsSelect.value && DOM.fbAlbumsSelect.value !== '');
+                if (DOM.fbAlbumsModal) {
+                    DOM.fbAlbumsModal.addEventListener('click', (e) => {
+                        if (e.target === DOM.fbAlbumsModal) close();
                     });
                 }
-                if (DOM.fbAlbumsModal) DOM.fbAlbumsModal.addEventListener('click', (e) => { if (e.target === DOM.fbAlbumsModal) close(); });
+                if (DOM.fbAlbumsSearch) {
+                    DOM.fbAlbumsSearch.addEventListener('input', (e) => {
+                        searchAlbums(e.target.value);
+                    });
+                }
+                if (DOM.fbAlbumsResizeHandle) {
+                    DOM.fbAlbumsResizeHandle.addEventListener('mousedown', startResize);
+                }
             }
+
+            return {
+                open,
+                close,
+                init,
+                startResize  // Expose for global access
+            };
             return { init, open, openAlbum };
         })(),
         
@@ -2913,6 +3055,8 @@ ${content}
                 imessage: true,
                 sms: true,
                 whatsapp: true,
+                facebook: true,
+                instagram: true,
                 mixed: true
             };
 
@@ -2965,6 +3109,16 @@ ${content}
 
                 // First filter by message type
                 const typeFilteredSessions = filteredSessions.filter(session => {
+                    // If it's a mixed conversation, show it if ANY individual type is selected OR if mixed is selected
+                    if (session.message_type === 'mixed') {
+                        return messageTypeFilters.mixed === true || 
+                               messageTypeFilters.imessage === true || 
+                               messageTypeFilters.sms === true || 
+                               messageTypeFilters.whatsapp === true || 
+                               messageTypeFilters.facebook === true ||
+                               messageTypeFilters.instagram === true;
+                    }
+                    // For other types, use normal filter
                     return messageTypeFilters[session.message_type] === true;
                 });
 
@@ -3049,9 +3203,19 @@ ${content}
                         messageTypeIcon.title = 'WhatsApp';
                         messageTypeIcon.style.marginRight = '6px';
                         messageTypeIcon.style.color = '#25D366';
+                    } else if (session.message_type === 'facebook') {
+                        messageTypeIcon.className = 'fab fa-facebook-messenger';
+                        messageTypeIcon.title = 'Facebook Messenger';
+                        messageTypeIcon.style.marginRight = '6px';
+                        messageTypeIcon.style.color = '#0084FF';
+                    } else if (session.message_type === 'instagram') {
+                        messageTypeIcon.className = 'fab fa-instagram';
+                        messageTypeIcon.title = 'Instagram';
+                        messageTypeIcon.style.marginRight = '6px';
+                        messageTypeIcon.style.color = '#E4405F';
                     } else if (session.message_type === 'mixed') {
                         messageTypeIcon.className = 'fas fa-comments';
-                        messageTypeIcon.title = 'Mixed (SMS, iMessage & WhatsApp)';
+                        messageTypeIcon.title = 'Mixed (SMS, iMessage, WhatsApp, Facebook Messenger & Instagram)';
                         messageTypeIcon.style.marginRight = '6px';
                         messageTypeIcon.style.color = '#FF9500';
                     }
@@ -3128,9 +3292,17 @@ ${content}
                             icon.className = 'fab fa-whatsapp';
                             icon.title = 'WhatsApp';
                             icon.style.color = '#25D366';
+                        } else if (messageType === 'facebook') {
+                            icon.className = 'fab fa-facebook-messenger';
+                            icon.title = 'Facebook Messenger';
+                            icon.style.color = '#0084FF';
+                        } else if (messageType === 'instagram') {
+                            icon.className = 'fab fa-instagram';
+                            icon.title = 'Instagram';
+                            icon.style.color = '#E4405F';
                         } else if (messageType === 'mixed') {
                             icon.className = 'fas fa-comments';
-                            icon.title = 'Mixed (SMS, iMessage & WhatsApp)';
+                            icon.title = 'Mixed (SMS, iMessage, WhatsApp, Facebook Messenger & Instagram)';
                             icon.style.color = '#FF9500';
                         }
                         typeIconElement.appendChild(icon);
@@ -3184,19 +3356,64 @@ ${content}
                     const bubble = document.createElement('div');
                     bubble.className = 'sms-message-bubble';
 
-                    // Header with sender and date
+                    // Header with sender, service icon, and date
                     const header = document.createElement('div');
                     header.className = 'sms-message-header';
+                    header.style.display = 'flex';
+                    header.style.justifyContent = 'space-between';
+                    header.style.alignItems = 'center';
+                    
+                    // Container for icon and sender name (left side)
+                    const leftContainer = document.createElement('div');
+                    leftContainer.style.display = 'flex';
+                    leftContainer.style.alignItems = 'center';
+                    leftContainer.style.gap = '6px';
+                    
+                    // Service type icon
+                    const serviceIcon = document.createElement('i');
+                    serviceIcon.className = 'sms-message-service-icon';
+                    serviceIcon.style.fontSize = '12px';
+                    
+                    const service = message.service || '';
+                    if (service.toLowerCase().includes('imessage')) {
+                        serviceIcon.className = 'fab fa-apple sms-message-service-icon';
+                        serviceIcon.style.color = '#007AFF';
+                        serviceIcon.title = 'iMessage';
+                    } else if (service.toLowerCase().includes('sms')) {
+                        serviceIcon.className = 'fas fa-comment sms-message-service-icon';
+                        serviceIcon.style.color = '#34C759';
+                        serviceIcon.title = 'SMS';
+                    } else if (service === 'WhatsApp') {
+                        serviceIcon.className = 'fab fa-whatsapp sms-message-service-icon';
+                        serviceIcon.style.color = '#25D366';
+                        serviceIcon.title = 'WhatsApp';
+                    } else if (service === 'Facebook Messenger') {
+                        serviceIcon.className = 'fab fa-facebook-messenger sms-message-service-icon';
+                        serviceIcon.style.color = '#0084FF';
+                        serviceIcon.title = 'Facebook Messenger';
+                    } else if (service === 'Instagram') {
+                        serviceIcon.className = 'fab fa-instagram sms-message-service-icon';
+                        serviceIcon.style.color = '#E4405F';
+                        serviceIcon.title = 'Instagram';
+                    } else {
+                        // Default icon if service type is unknown
+                        serviceIcon.className = 'fas fa-comment sms-message-service-icon';
+                        serviceIcon.style.color = '#666';
+                        serviceIcon.title = service || 'Message';
+                    }
                     
                     const senderSpan = document.createElement('span');
                     senderSpan.className = 'sms-message-sender';
                     senderSpan.textContent = message.sender_name || message.sender_id || (isIncoming ? 'Incoming' : 'Outgoing');
                     
+                    leftContainer.appendChild(serviceIcon);
+                    leftContainer.appendChild(senderSpan);
+                    
                     const dateSpan = document.createElement('span');
                     dateSpan.className = 'sms-message-date';
                     dateSpan.textContent = formatAustralianDate(message.message_date);
                     
-                    header.appendChild(senderSpan);
+                    header.appendChild(leftContainer);
                     header.appendChild(dateSpan);
                     bubble.appendChild(header);
 
@@ -3380,6 +3597,8 @@ ${content}
                     'filter-imessage': 'imessage',
                     'filter-sms': 'sms',
                     'filter-whatsapp': 'whatsapp',
+                    'filter-facebook': 'facebook',
+                    'filter-instagram': 'instagram',
                     'filter-mixed': 'mixed'
                 };
 
@@ -5089,8 +5308,8 @@ ${content}
                         targetContent.classList.add('active');
                     }
                     
-                    // Load folders when controls tab is opened
-                    if (targetTab === 'controls') {
+                    // Load folders when email-controls tab is opened
+                    if (targetTab === 'email-controls') {
                         loadFolders();
                         checkInitialStatus();
                     }
@@ -6128,6 +6347,1016 @@ ${content}
 
             // Check initial status on page load
             checkInitialWhatsAppStatus();
+
+            // Facebook Messenger Import Controls
+            const startFacebookImportBtn = document.getElementById('start-facebook-import-btn');
+            const cancelFacebookImportBtn = document.getElementById('cancel-facebook-import-btn');
+            const facebookImportStatus = document.getElementById('facebook-import-status');
+            const facebookImportStatusMessage = document.getElementById('facebook-import-status-message');
+            const facebookImportStatusDetails = document.getElementById('facebook-import-status-details');
+            const facebookImportProgressContainer = document.getElementById('facebook-import-progress-container');
+            const facebookDirectoryPath = document.getElementById('facebook-import-directory');
+            const facebookExportRoot = document.getElementById('facebook-export-root');
+            const facebookUserName = document.getElementById('facebook-user-name');
+            const facebookMissingAttachmentsList = document.getElementById('facebook-missing-attachments-list');
+            const facebookMissingFilenames = document.getElementById('facebook-missing-filenames');
+            let facebookImportInProgress = false;
+            let facebookEventSource = null;
+
+            // Show Facebook Messenger import status
+            function showFacebookImportStatus(type, message, details = '') {
+                if (!facebookImportStatus || !facebookImportStatusMessage) return;
+                
+                facebookImportStatus.style.display = 'block';
+                facebookImportStatusMessage.textContent = message;
+                facebookImportStatusMessage.style.color = type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#333';
+                
+                if (facebookImportStatusDetails) {
+                    facebookImportStatusDetails.textContent = details;
+                }
+            }
+
+            // Close Facebook Messenger import SSE connection
+            function closeFacebookEventSource() {
+                if (facebookEventSource) {
+                    facebookEventSource.close();
+                    facebookEventSource = null;
+                }
+            }
+
+            // Connect to Facebook Messenger import SSE stream
+            function connectToFacebookProgressStream() {
+                // Close existing connection if any
+                closeFacebookEventSource();
+
+                // Create EventSource connection
+                facebookEventSource = new EventSource('/facebook/import/stream');
+
+                facebookEventSource.onmessage = (event) => {
+                    try {
+                        const eventData = JSON.parse(event.data);
+                        handleFacebookProgressEvent(eventData);
+                    } catch (error) {
+                        console.error('Error parsing Facebook Messenger SSE event:', error);
+                    }
+                };
+
+                facebookEventSource.onerror = (error) => {
+                    console.error('Facebook Messenger SSE connection error:', error);
+                    // Don't close on error - EventSource will attempt to reconnect
+                };
+
+                // Clean up on page unload
+                window.addEventListener('beforeunload', () => {
+                    closeFacebookEventSource();
+                });
+            }
+
+            // Handle Facebook Messenger import progress events
+            function handleFacebookProgressEvent(eventData) {
+                const { type, data } = eventData;
+
+                switch (type) {
+                    case 'progress':
+                        updateFacebookImportProgress(data);
+                        if (data.status === 'in_progress') {
+                            cancelFacebookImportBtn.style.display = 'inline-block';
+                            startFacebookImportBtn.disabled = true;
+                            showFacebookImportStatus('info', 'Import in progress...', `Processing conversation ${data.conversations_processed} of ${data.total_conversations}`);
+                        }
+                        break;
+
+                    case 'completed':
+                        updateFacebookImportProgress(data);
+                        cancelFacebookImportBtn.style.display = 'none';
+                        startFacebookImportBtn.disabled = false;
+                        facebookImportInProgress = false;
+                        const progressBar = document.getElementById('facebook-import-progress-bar');
+                        const progressBarText = document.getElementById('facebook-progress-bar-text');
+                        if (progressBar && progressBarText) {
+                            progressBar.style.width = '100%';
+                            progressBarText.textContent = '100%';
+                        }
+                        showFacebookImportStatus(
+                            'success',
+                            'Import completed successfully',
+                            `Processed ${data.conversations_processed} conversation(s). ` +
+                            `Imported ${data.messages_imported} message(s) ` +
+                            `(${data.messages_created} created, ${data.messages_updated} updated). ` +
+                            `Found ${data.attachments_found} attachment(s), ` +
+                            `${data.attachments_missing} missing, ` +
+                            `${data.errors} error(s).`
+                        );
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('Facebook Messenger Import Complete', {
+                                body: `Imported ${data.messages_imported} messages from ${data.conversations_processed} conversations.`,
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeFacebookEventSource();
+                        break;
+
+                    case 'error':
+                        updateFacebookImportProgress(data);
+                        cancelFacebookImportBtn.style.display = 'none';
+                        startFacebookImportBtn.disabled = false;
+                        facebookImportInProgress = false;
+                        showFacebookImportStatus('error', 'Import error', data.error_message || 'An error occurred during import.');
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('Facebook Messenger Import Error', {
+                                body: data.error_message || 'An error occurred during import.',
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeFacebookEventSource();
+                        break;
+
+                    case 'cancelled':
+                        updateFacebookImportProgress(data);
+                        cancelFacebookImportBtn.style.display = 'none';
+                        startFacebookImportBtn.disabled = false;
+                        facebookImportInProgress = false;
+                        showFacebookImportStatus('info', 'Import cancelled', data.error_message || 'Import was cancelled.');
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('Facebook Messenger Import Cancelled', {
+                                body: 'Import was cancelled by user.',
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeFacebookEventSource();
+                        break;
+
+                    case 'heartbeat':
+                        // Keep connection alive - no UI update needed
+                        break;
+
+                    default:
+                        console.log('Unknown Facebook Messenger event type:', type);
+                }
+            }
+
+            // Update Facebook Messenger import progress
+            function updateFacebookImportProgress(stats) {
+                if (!facebookImportProgressContainer) return;
+                
+                facebookImportProgressContainer.style.display = 'block';
+                
+                const currentConversationName = document.getElementById('facebook-current-conversation-name');
+                const facebookProgressText = document.getElementById('facebook-conversation-progress-text');
+                const facebookImportProgressBar = document.getElementById('facebook-import-progress-bar');
+                const facebookProgressBarText = document.getElementById('facebook-progress-bar-text');
+                const facebookMessagesImported = document.getElementById('facebook-messages-imported-count');
+                const facebookMessagesCreated = document.getElementById('facebook-messages-created-count');
+                const facebookMessagesUpdated = document.getElementById('facebook-messages-updated-count');
+                const facebookAttachmentsFound = document.getElementById('facebook-attachments-found-count');
+                const facebookAttachmentsMissing = document.getElementById('facebook-attachments-missing-count');
+                const facebookErrors = document.getElementById('facebook-errors-count');
+
+                if (currentConversationName) {
+                    currentConversationName.textContent = stats.current_conversation || '-';
+                }
+
+                if (facebookProgressText && stats.total_conversations > 0) {
+                    facebookProgressText.textContent = `${stats.conversations_processed} / ${stats.total_conversations}`;
+                }
+
+                if (facebookImportProgressBar && facebookProgressBarText && stats.total_conversations > 0) {
+                    const percentage = Math.round((stats.conversations_processed / stats.total_conversations) * 100);
+                    facebookImportProgressBar.style.width = `${percentage}%`;
+                    facebookProgressBarText.textContent = `${percentage}%`;
+                }
+
+                if (facebookMessagesImported) {
+                    facebookMessagesImported.textContent = stats.messages_imported || 0;
+                }
+                if (facebookMessagesCreated) {
+                    facebookMessagesCreated.textContent = stats.messages_created || 0;
+                }
+                if (facebookMessagesUpdated) {
+                    facebookMessagesUpdated.textContent = stats.messages_updated || 0;
+                }
+                if (facebookAttachmentsFound) {
+                    facebookAttachmentsFound.textContent = stats.attachments_found || 0;
+                }
+                if (facebookAttachmentsMissing) {
+                    facebookAttachmentsMissing.textContent = stats.attachments_missing || 0;
+                }
+                if (facebookErrors) {
+                    facebookErrors.textContent = stats.errors || 0;
+                }
+
+                // Update missing attachment filenames
+                if (stats.missing_attachment_filenames && stats.missing_attachment_filenames.length > 0) {
+                    if (facebookMissingAttachmentsList) {
+                        facebookMissingAttachmentsList.style.display = 'block';
+                    }
+                    if (facebookMissingFilenames) {
+                        facebookMissingFilenames.innerHTML = stats.missing_attachment_filenames
+                            .map(filename => `<div style="margin-bottom: 4px;">${filename}</div>`)
+                            .join('');
+                    }
+                } else {
+                    if (facebookMissingAttachmentsList) {
+                        facebookMissingAttachmentsList.style.display = 'none';
+                    }
+                }
+            }
+
+            // Check initial Facebook Messenger import status
+            async function checkInitialFacebookStatus() {
+                if (!facebookImportStatus) return;
+                
+                try {
+                    const response = await fetch('/facebook/import/status');
+                    if (!response.ok) {
+                        return;
+                    }
+                    const status = await response.json();
+                    
+                    if (status.in_progress) {
+                        cancelFacebookImportBtn.style.display = 'inline-block';
+                        startFacebookImportBtn.disabled = true;
+                        facebookImportInProgress = true;
+                        // Connect to stream to get updates
+                        connectToFacebookProgressStream();
+                        updateFacebookImportProgress(status);
+                    } else {
+                        cancelFacebookImportBtn.style.display = 'none';
+                        startFacebookImportBtn.disabled = false;
+                        facebookImportInProgress = false;
+                    }
+                } catch (error) {
+                    console.error('Error checking initial Facebook Messenger import status:', error);
+                }
+            }
+
+            // Start Facebook Messenger import
+            if (startFacebookImportBtn) {
+                startFacebookImportBtn.addEventListener('click', async () => {
+                    const directoryPath = facebookDirectoryPath?.value?.trim();
+                    
+                    if (!directoryPath) {
+                        showFacebookImportStatus('error', 'Directory path required', 'Please enter a directory path.');
+                        return;
+                    }
+                    
+                    if (facebookImportInProgress) {
+                        showFacebookImportStatus('error', 'Import already in progress', 'Please wait for the current import to complete.');
+                        return;
+                    }
+                    
+                    try {
+                        facebookImportInProgress = true;
+                        startFacebookImportBtn.disabled = true;
+                        cancelFacebookImportBtn.style.display = 'inline-block';
+                        showFacebookImportStatus('info', 'Starting import...', 'Sending request to server...');
+                        
+                        // Clear previous missing filenames
+                        if (facebookMissingFilenames) {
+                            facebookMissingFilenames.innerHTML = '';
+                        }
+                        if (facebookMissingAttachmentsList) {
+                            facebookMissingAttachmentsList.style.display = 'none';
+                        }
+                        
+                        updateFacebookImportProgress({
+                            conversations_processed: 0,
+                            total_conversations: 0,
+                            messages_imported: 0,
+                            messages_created: 0,
+                            messages_updated: 0,
+                            attachments_found: 0,
+                            attachments_missing: 0,
+                            missing_attachment_filenames: [],
+                            errors: 0
+                        });
+                        
+                        const requestBody = {
+                            directory_path: directoryPath
+                        };
+                        
+                        // Add optional fields if provided
+                        const exportRoot = facebookExportRoot?.value?.trim();
+                        if (exportRoot) {
+                            requestBody.export_root = exportRoot;
+                        }
+                        
+                        const userName = facebookUserName?.value?.trim();
+                        if (userName) {
+                            requestBody.user_name = userName;
+                        }
+                        
+                        const response = await fetch('/facebook/import', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(requestBody)
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (response.ok) {
+                            showFacebookImportStatus('info', 'Import started', result.message || 'Facebook Messenger import has been initiated.');
+                            
+                            // Connect to SSE stream for real-time updates
+                            connectToFacebookProgressStream();
+                        } else {
+                            showFacebookImportStatus('error', 'Failed to start import', result.detail || 'An error occurred while starting import.');
+                            facebookImportProgressContainer.style.display = 'none';
+                            facebookImportInProgress = false;
+                            startFacebookImportBtn.disabled = false;
+                            cancelFacebookImportBtn.style.display = 'none';
+                        }
+                    } catch (error) {
+                        showFacebookImportStatus('error', 'Error starting import', error.message);
+                        facebookImportProgressContainer.style.display = 'none';
+                        facebookImportInProgress = false;
+                        startFacebookImportBtn.disabled = false;
+                        cancelFacebookImportBtn.style.display = 'none';
+                    }
+                });
+            }
+
+            // Cancel Facebook Messenger import
+            if (cancelFacebookImportBtn) {
+                cancelFacebookImportBtn.addEventListener('click', async () => {
+                    try {
+                        cancelFacebookImportBtn.disabled = true;
+                        showFacebookImportStatus('info', 'Cancelling import...', 'Sending cancellation request...');
+                        
+                        const response = await fetch('/facebook/import/cancel', {
+                            method: 'POST'
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.cancelled) {
+                            showFacebookImportStatus('info', 'Cancellation requested', result.message || 'Import cancellation has been requested.');
+                            // The SSE stream will send the cancelled event
+                        } else {
+                            showFacebookImportStatus('info', 'No import in progress', result.message || 'No Facebook Messenger import is currently in progress.');
+                            closeFacebookEventSource();
+                        }
+                    } catch (error) {
+                        showFacebookImportStatus('error', 'Error cancelling import', error.message);
+                    } finally {
+                        cancelFacebookImportBtn.disabled = false;
+                    }
+                });
+            }
+
+            // Check initial status on page load
+            checkInitialFacebookStatus();
+
+            // Instagram Import Controls
+            const startInstagramImportBtn = document.getElementById('start-instagram-import-btn');
+            const cancelInstagramImportBtn = document.getElementById('cancel-instagram-import-btn');
+            const instagramImportStatus = document.getElementById('instagram-import-status');
+            const instagramImportStatusMessage = document.getElementById('instagram-import-status-message');
+            const instagramImportStatusDetails = document.getElementById('instagram-import-status-details');
+            const instagramImportProgressContainer = document.getElementById('instagram-import-progress-container');
+            const instagramDirectoryPath = document.getElementById('instagram-import-directory');
+            const instagramExportRoot = document.getElementById('instagram-export-root');
+            const instagramUserName = document.getElementById('instagram-user-name');
+            let instagramImportInProgress = false;
+            let instagramEventSource = null;
+
+            // Show Instagram import status
+            function showInstagramImportStatus(type, message, details = '') {
+                if (!instagramImportStatus || !instagramImportStatusMessage) return;
+                
+                instagramImportStatus.style.display = 'block';
+                instagramImportStatusMessage.textContent = message;
+                instagramImportStatusMessage.style.color = type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#333';
+                
+                if (instagramImportStatusDetails) {
+                    instagramImportStatusDetails.textContent = details;
+                }
+            }
+
+            // Close Instagram import SSE connection
+            function closeInstagramEventSource() {
+                if (instagramEventSource) {
+                    instagramEventSource.close();
+                    instagramEventSource = null;
+                }
+            }
+
+            // Connect to Instagram import progress stream
+            function connectToInstagramProgressStream() {
+                closeInstagramEventSource();
+                
+                instagramEventSource = new EventSource('/instagram/import/stream');
+                
+                instagramEventSource.onmessage = (event) => {
+                    try {
+                        const eventData = JSON.parse(event.data);
+                        handleInstagramProgressEvent(eventData);
+                    } catch (error) {
+                        console.error('Error parsing Instagram import SSE event:', error);
+                    }
+                };
+                
+                instagramEventSource.onerror = (error) => {
+                    console.error('Instagram import SSE error:', error);
+                    if (instagramEventSource.readyState === EventSource.CLOSED) {
+                        closeInstagramEventSource();
+                    }
+                };
+            }
+
+            function handleInstagramProgressEvent(eventData) {
+                const { type, data } = eventData;
+
+                switch (type) {
+                    case 'progress':
+                        updateInstagramImportProgress(data);
+                        if (data.status === 'in_progress') {
+                            cancelInstagramImportBtn.style.display = 'inline-block';
+                            startInstagramImportBtn.disabled = true;
+                            showInstagramImportStatus('info', 'Import in progress...', `Processing conversation ${data.conversations_processed} of ${data.total_conversations}`);
+                        }
+                        break;
+
+                    case 'completed':
+                        updateInstagramImportProgress(data);
+                        cancelInstagramImportBtn.style.display = 'none';
+                        startInstagramImportBtn.disabled = false;
+                        instagramImportInProgress = false;
+                        const progressBar = document.getElementById('instagram-import-progress-bar');
+                        const progressBarText = document.getElementById('instagram-progress-bar-text');
+                        if (progressBar && progressBarText) {
+                            progressBar.style.width = '100%';
+                            progressBarText.textContent = '100%';
+                        }
+                        showInstagramImportStatus(
+                            'success',
+                            'Import completed successfully',
+                            `Processed ${data.conversations_processed} conversation(s). ` +
+                            `Imported ${data.messages_imported} message(s) ` +
+                            `(${data.messages_created} created, ${data.messages_updated} updated). ` +
+                            `${data.errors} error(s).`
+                        );
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('Instagram Import Complete', {
+                                body: `Imported ${data.messages_imported} messages from ${data.conversations_processed} conversations.`,
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeInstagramEventSource();
+                        break;
+
+                    case 'error':
+                        updateInstagramImportProgress(data);
+                        cancelInstagramImportBtn.style.display = 'none';
+                        startInstagramImportBtn.disabled = false;
+                        instagramImportInProgress = false;
+                        showInstagramImportStatus('error', 'Import error', data.error_message || 'An error occurred during import.');
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('Instagram Import Error', {
+                                body: data.error_message || 'An error occurred during import.',
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeInstagramEventSource();
+                        break;
+
+                    case 'cancelled':
+                        updateInstagramImportProgress(data);
+                        cancelInstagramImportBtn.style.display = 'none';
+                        startInstagramImportBtn.disabled = false;
+                        instagramImportInProgress = false;
+                        showInstagramImportStatus('info', 'Import cancelled', data.error_message || 'Import was cancelled.');
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('Instagram Import Cancelled', {
+                                body: 'Import was cancelled by user.',
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeInstagramEventSource();
+                        break;
+
+                    case 'heartbeat':
+                        // Keep connection alive - no UI update needed
+                        break;
+
+                    default:
+                        console.log('Unknown Instagram event type:', type);
+                }
+            }
+
+            // Update Instagram import progress
+            function updateInstagramImportProgress(stats) {
+                if (!instagramImportProgressContainer) return;
+                
+                instagramImportProgressContainer.style.display = 'block';
+                
+                const currentConversationName = document.getElementById('instagram-current-conversation-name');
+                const instagramProgressText = document.getElementById('instagram-conversation-progress-text');
+                const instagramImportProgressBar = document.getElementById('instagram-import-progress-bar');
+                const instagramProgressBarText = document.getElementById('instagram-progress-bar-text');
+                const instagramMessagesImported = document.getElementById('instagram-messages-imported-count');
+                const instagramMessagesCreated = document.getElementById('instagram-messages-created-count');
+                const instagramMessagesUpdated = document.getElementById('instagram-messages-updated-count');
+                const instagramErrors = document.getElementById('instagram-errors-count');
+
+                if (currentConversationName) {
+                    currentConversationName.textContent = stats.current_conversation || '-';
+                }
+
+                if (instagramProgressText) {
+                    instagramProgressText.textContent = `${stats.conversations_processed || 0} / ${stats.total_conversations || 0}`;
+                }
+
+                if (instagramImportProgressBar && instagramProgressBarText) {
+                    const total = stats.total_conversations || 1;
+                    const processed = stats.conversations_processed || 0;
+                    const percentage = Math.round((processed / total) * 100);
+                    instagramImportProgressBar.style.width = `${percentage}%`;
+                    instagramProgressBarText.textContent = `${percentage}%`;
+                }
+
+                if (instagramMessagesImported) {
+                    instagramMessagesImported.textContent = stats.messages_imported || 0;
+                }
+
+                if (instagramMessagesCreated) {
+                    instagramMessagesCreated.textContent = stats.messages_created || 0;
+                }
+
+                if (instagramMessagesUpdated) {
+                    instagramMessagesUpdated.textContent = stats.messages_updated || 0;
+                }
+
+                if (instagramErrors) {
+                    instagramErrors.textContent = stats.errors || 0;
+                }
+            }
+
+            // Start Instagram import
+            if (startInstagramImportBtn) {
+                startInstagramImportBtn.addEventListener('click', async () => {
+                    const directoryPath = instagramDirectoryPath?.value?.trim();
+                    
+                    if (!directoryPath) {
+                        showInstagramImportStatus('error', 'Directory path required', 'Please enter a directory path.');
+                        return;
+                    }
+                    
+                    if (instagramImportInProgress) {
+                        showInstagramImportStatus('error', 'Import already in progress', 'Please wait for the current import to complete.');
+                        return;
+                    }
+                    
+                    try {
+                        instagramImportInProgress = true;
+                        startInstagramImportBtn.disabled = true;
+                        cancelInstagramImportBtn.style.display = 'inline-block';
+                        showInstagramImportStatus('info', 'Starting import...', 'Sending request to server...');
+                        
+                        updateInstagramImportProgress({
+                            conversations_processed: 0,
+                            total_conversations: 0,
+                            messages_imported: 0,
+                            messages_created: 0,
+                            messages_updated: 0,
+                            errors: 0
+                        });
+                        
+                        const requestBody = {
+                            directory_path: directoryPath
+                        };
+                        
+                        // Add optional fields if provided
+                        const exportRoot = instagramExportRoot?.value?.trim();
+                        if (exportRoot) {
+                            requestBody.export_root = exportRoot;
+                        }
+                        
+                        const userName = instagramUserName?.value?.trim();
+                        if (userName) {
+                            requestBody.user_name = userName;
+                        }
+                        
+                        const response = await fetch('/instagram/import', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(requestBody)
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (response.ok) {
+                            showInstagramImportStatus('info', 'Import started', result.message || 'Instagram import has been initiated.');
+                            
+                            // Connect to SSE stream for real-time updates
+                            connectToInstagramProgressStream();
+                        } else {
+                            showInstagramImportStatus('error', 'Failed to start import', result.detail || 'An error occurred while starting import.');
+                            instagramImportProgressContainer.style.display = 'none';
+                            instagramImportInProgress = false;
+                            startInstagramImportBtn.disabled = false;
+                            cancelInstagramImportBtn.style.display = 'none';
+                        }
+                    } catch (error) {
+                        showInstagramImportStatus('error', 'Error starting import', error.message);
+                        instagramImportProgressContainer.style.display = 'none';
+                        instagramImportInProgress = false;
+                        startInstagramImportBtn.disabled = false;
+                        cancelInstagramImportBtn.style.display = 'none';
+                    }
+                });
+            }
+
+            // Cancel Instagram import
+            if (cancelInstagramImportBtn) {
+                cancelInstagramImportBtn.addEventListener('click', async () => {
+                    try {
+                        cancelInstagramImportBtn.disabled = true;
+                        showInstagramImportStatus('info', 'Cancelling import...', 'Sending cancellation request...');
+                        
+                        const response = await fetch('/instagram/import/cancel', {
+                            method: 'POST'
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.cancelled) {
+                            showInstagramImportStatus('info', 'Cancellation requested', result.message || 'Import cancellation has been requested.');
+                            // The SSE stream will send the cancelled event
+                        } else {
+                            showInstagramImportStatus('info', 'No import in progress', result.message || 'No Instagram import is currently in progress.');
+                            closeInstagramEventSource();
+                        }
+                    } catch (error) {
+                        showInstagramImportStatus('error', 'Error cancelling import', error.message);
+                    } finally {
+                        cancelInstagramImportBtn.disabled = false;
+                    }
+                });
+            }
+
+            // Check initial Instagram import status
+            async function checkInitialInstagramStatus() {
+                try {
+                    const response = await fetch('/instagram/import/status');
+                    const status = await response.json();
+                    
+                    if (status.in_progress) {
+                        instagramImportInProgress = true;
+                        startInstagramImportBtn.disabled = true;
+                        cancelInstagramImportBtn.style.display = 'inline-block';
+                        showInstagramImportStatus('info', 'Import in progress', 'An import is already in progress.');
+                        updateInstagramImportProgress(status.progress || {});
+                        connectToInstagramProgressStream();
+                    }
+                } catch (error) {
+                    console.error('Error checking Instagram import status:', error);
+                }
+            }
+
+            // Check initial status on page load
+            checkInitialInstagramStatus();
+
+            // Facebook Albums Import Controls
+            const startFacebookAlbumsImportBtn = document.getElementById('start-facebook-albums-import-btn');
+            const cancelFacebookAlbumsImportBtn = document.getElementById('cancel-facebook-albums-import-btn');
+            const facebookAlbumsImportStatus = document.getElementById('facebook-albums-import-status');
+            const facebookAlbumsImportStatusMessage = document.getElementById('facebook-albums-import-status-message');
+            const facebookAlbumsImportStatusDetails = document.getElementById('facebook-albums-import-status-details');
+            const facebookAlbumsImportProgressContainer = document.getElementById('facebook-albums-import-progress-container');
+            const facebookAlbumsDirectoryPath = document.getElementById('facebook-albums-import-directory');
+            const facebookAlbumsExportRoot = document.getElementById('facebook-albums-export-root');
+            const facebookAlbumsMissingImagesList = document.getElementById('facebook-albums-missing-images-list');
+            const facebookAlbumsMissingFilenames = document.getElementById('facebook-albums-missing-filenames');
+            let facebookAlbumsImportInProgress = false;
+            let facebookAlbumsEventSource = null;
+
+            // Show Facebook Albums import status
+            function showFacebookAlbumsImportStatus(type, message, details = '') {
+                if (!facebookAlbumsImportStatus || !facebookAlbumsImportStatusMessage) return;
+                
+                facebookAlbumsImportStatus.style.display = 'block';
+                facebookAlbumsImportStatusMessage.textContent = message;
+                facebookAlbumsImportStatusMessage.style.color = type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#333';
+                
+                if (facebookAlbumsImportStatusDetails) {
+                    facebookAlbumsImportStatusDetails.textContent = details;
+                }
+            }
+
+            // Close Facebook Albums import SSE connection
+            function closeFacebookAlbumsEventSource() {
+                if (facebookAlbumsEventSource) {
+                    facebookAlbumsEventSource.close();
+                    facebookAlbumsEventSource = null;
+                }
+            }
+
+            // Connect to Facebook Albums import SSE stream
+            function connectToFacebookAlbumsProgressStream() {
+                // Close existing connection if any
+                closeFacebookAlbumsEventSource();
+
+                // Create EventSource connection
+                facebookAlbumsEventSource = new EventSource('/facebook/albums/import/stream');
+
+                facebookAlbumsEventSource.onmessage = (event) => {
+                    try {
+                        const eventData = JSON.parse(event.data);
+                        handleFacebookAlbumsProgressEvent(eventData);
+                    } catch (error) {
+                        console.error('Error parsing Facebook Albums SSE event:', error);
+                    }
+                };
+
+                facebookAlbumsEventSource.onerror = (error) => {
+                    console.error('Facebook Albums SSE connection error:', error);
+                    // Don't close on error - EventSource will attempt to reconnect
+                };
+
+                // Clean up on page unload
+                window.addEventListener('beforeunload', () => {
+                    closeFacebookAlbumsEventSource();
+                });
+            }
+
+            // Handle Facebook Albums import progress events
+            function handleFacebookAlbumsProgressEvent(eventData) {
+                const { type, data } = eventData;
+
+                switch (type) {
+                    case 'progress':
+                        updateFacebookAlbumsImportProgress(data);
+                        if (data.status === 'in_progress') {
+                            cancelFacebookAlbumsImportBtn.style.display = 'inline-block';
+                            startFacebookAlbumsImportBtn.disabled = true;
+                            showFacebookAlbumsImportStatus('info', 'Import in progress...', `Processing album ${data.albums_processed} of ${data.total_albums}`);
+                        }
+                        break;
+
+                    case 'completed':
+                        updateFacebookAlbumsImportProgress(data);
+                        cancelFacebookAlbumsImportBtn.style.display = 'none';
+                        startFacebookAlbumsImportBtn.disabled = false;
+                        facebookAlbumsImportInProgress = false;
+                        const progressBar = document.getElementById('facebook-albums-import-progress-bar');
+                        const progressBarText = document.getElementById('facebook-albums-progress-bar-text');
+                        if (progressBar && progressBarText) {
+                            progressBar.style.width = '100%';
+                            progressBarText.textContent = '100%';
+                        }
+                        showFacebookAlbumsImportStatus(
+                            'success',
+                            'Import completed successfully',
+                            `Processed ${data.albums_processed} album(s). ` +
+                            `Imported ${data.albums_imported} album(s) with ${data.images_imported} image(s). ` +
+                            `Found ${data.images_found} image(s), ` +
+                            `${data.images_missing} missing, ` +
+                            `${data.errors} error(s).`
+                        );
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('Facebook Albums Import Complete', {
+                                body: `Imported ${data.albums_imported} albums with ${data.images_imported} images.`,
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeFacebookAlbumsEventSource();
+                        break;
+
+                    case 'error':
+                        updateFacebookAlbumsImportProgress(data);
+                        cancelFacebookAlbumsImportBtn.style.display = 'none';
+                        startFacebookAlbumsImportBtn.disabled = false;
+                        facebookAlbumsImportInProgress = false;
+                        showFacebookAlbumsImportStatus('error', 'Import error', data.error_message || 'An error occurred during import.');
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('Facebook Albums Import Error', {
+                                body: data.error_message || 'An error occurred during import.',
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeFacebookAlbumsEventSource();
+                        break;
+
+                    case 'cancelled':
+                        updateFacebookAlbumsImportProgress(data);
+                        cancelFacebookAlbumsImportBtn.style.display = 'none';
+                        startFacebookAlbumsImportBtn.disabled = false;
+                        facebookAlbumsImportInProgress = false;
+                        showFacebookAlbumsImportStatus('info', 'Import cancelled', data.error_message || 'Import was cancelled.');
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('Facebook Albums Import Cancelled', {
+                                body: 'Import was cancelled by user.',
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeFacebookAlbumsEventSource();
+                        break;
+
+                    case 'heartbeat':
+                        // Keep connection alive - no UI update needed
+                        break;
+
+                    default:
+                        console.log('Unknown Facebook Albums event type:', type);
+                }
+            }
+
+            // Update Facebook Albums import progress
+            function updateFacebookAlbumsImportProgress(stats) {
+                if (!facebookAlbumsImportProgressContainer) return;
+                
+                facebookAlbumsImportProgressContainer.style.display = 'block';
+                
+                const currentAlbumName = document.getElementById('facebook-albums-current-album-name');
+                const facebookAlbumsProgressText = document.getElementById('facebook-albums-album-progress-text');
+                const facebookAlbumsImportProgressBar = document.getElementById('facebook-albums-import-progress-bar');
+                const facebookAlbumsProgressBarText = document.getElementById('facebook-albums-progress-bar-text');
+                const facebookAlbumsAlbumsImported = document.getElementById('facebook-albums-albums-imported-count');
+                const facebookAlbumsImagesImported = document.getElementById('facebook-albums-images-imported-count');
+                const facebookAlbumsImagesFound = document.getElementById('facebook-albums-images-found-count');
+                const facebookAlbumsImagesMissing = document.getElementById('facebook-albums-images-missing-count');
+                const facebookAlbumsErrors = document.getElementById('facebook-albums-errors-count');
+
+                if (currentAlbumName) {
+                    currentAlbumName.textContent = stats.current_album || '-';
+                }
+
+                if (facebookAlbumsProgressText && stats.total_albums > 0) {
+                    facebookAlbumsProgressText.textContent = `${stats.albums_processed} / ${stats.total_albums}`;
+                }
+
+                if (facebookAlbumsImportProgressBar && facebookAlbumsProgressBarText && stats.total_albums > 0) {
+                    const percentage = Math.round((stats.albums_processed / stats.total_albums) * 100);
+                    facebookAlbumsImportProgressBar.style.width = `${percentage}%`;
+                    facebookAlbumsProgressBarText.textContent = `${percentage}%`;
+                }
+
+                if (facebookAlbumsAlbumsImported) {
+                    facebookAlbumsAlbumsImported.textContent = stats.albums_imported || 0;
+                }
+                if (facebookAlbumsImagesImported) {
+                    facebookAlbumsImagesImported.textContent = stats.images_imported || 0;
+                }
+                if (facebookAlbumsImagesFound) {
+                    facebookAlbumsImagesFound.textContent = stats.images_found || 0;
+                }
+                if (facebookAlbumsImagesMissing) {
+                    facebookAlbumsImagesMissing.textContent = stats.images_missing || 0;
+                }
+                if (facebookAlbumsErrors) {
+                    facebookAlbumsErrors.textContent = stats.errors || 0;
+                }
+
+                // Update missing image filenames
+                if (stats.missing_image_filenames && stats.missing_image_filenames.length > 0) {
+                    if (facebookAlbumsMissingImagesList) {
+                        facebookAlbumsMissingImagesList.style.display = 'block';
+                    }
+                    if (facebookAlbumsMissingFilenames) {
+                        facebookAlbumsMissingFilenames.innerHTML = stats.missing_image_filenames
+                            .map(filename => `<div style="margin-bottom: 4px;">${filename}</div>`)
+                            .join('');
+                    }
+                } else {
+                    if (facebookAlbumsMissingImagesList) {
+                        facebookAlbumsMissingImagesList.style.display = 'none';
+                    }
+                }
+            }
+
+            // Check initial Facebook Albums import status
+            async function checkInitialFacebookAlbumsStatus() {
+                if (!facebookAlbumsImportStatus) return;
+                
+                try {
+                    const response = await fetch('/facebook/albums/import/status');
+                    if (!response.ok) {
+                        return;
+                    }
+                    const status = await response.json();
+                    
+                    if (status.in_progress) {
+                        cancelFacebookAlbumsImportBtn.style.display = 'inline-block';
+                        startFacebookAlbumsImportBtn.disabled = true;
+                        facebookAlbumsImportInProgress = true;
+                        // Connect to stream to get updates
+                        connectToFacebookAlbumsProgressStream();
+                        updateFacebookAlbumsImportProgress(status);
+                    } else {
+                        cancelFacebookAlbumsImportBtn.style.display = 'none';
+                        startFacebookAlbumsImportBtn.disabled = false;
+                        facebookAlbumsImportInProgress = false;
+                    }
+                } catch (error) {
+                    console.error('Error checking initial Facebook Albums import status:', error);
+                }
+            }
+
+            // Start Facebook Albums import
+            if (startFacebookAlbumsImportBtn) {
+                startFacebookAlbumsImportBtn.addEventListener('click', async () => {
+                    const directoryPath = facebookAlbumsDirectoryPath?.value?.trim();
+                    
+                    if (!directoryPath) {
+                        showFacebookAlbumsImportStatus('error', 'Directory path required', 'Please enter a directory path.');
+                        return;
+                    }
+                    
+                    if (facebookAlbumsImportInProgress) {
+                        showFacebookAlbumsImportStatus('error', 'Import already in progress', 'Please wait for the current import to complete.');
+                        return;
+                    }
+                    
+                    try {
+                        facebookAlbumsImportInProgress = true;
+                        startFacebookAlbumsImportBtn.disabled = true;
+                        cancelFacebookAlbumsImportBtn.style.display = 'inline-block';
+                        showFacebookAlbumsImportStatus('info', 'Starting import...', 'Sending request to server...');
+                        
+                        // Clear previous missing filenames
+                        if (facebookAlbumsMissingFilenames) {
+                            facebookAlbumsMissingFilenames.innerHTML = '';
+                        }
+                        if (facebookAlbumsMissingImagesList) {
+                            facebookAlbumsMissingImagesList.style.display = 'none';
+                        }
+                        
+                        updateFacebookAlbumsImportProgress({
+                            albums_processed: 0,
+                            total_albums: 0,
+                            albums_imported: 0,
+                            images_imported: 0,
+                            images_found: 0,
+                            images_missing: 0,
+                            missing_image_filenames: [],
+                            errors: 0
+                        });
+                        
+                        const requestBody = {
+                            directory_path: directoryPath
+                        };
+                        
+                        // Add optional fields if provided
+                        const exportRoot = facebookAlbumsExportRoot?.value?.trim();
+                        if (exportRoot) {
+                            requestBody.export_root = exportRoot;
+                        }
+                        
+                        const response = await fetch('/facebook/albums/import', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(requestBody)
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (response.ok) {
+                            showFacebookAlbumsImportStatus('info', 'Import started', result.message || 'Facebook Albums import has been initiated.');
+                            
+                            // Connect to SSE stream for real-time updates
+                            connectToFacebookAlbumsProgressStream();
+                        } else {
+                            showFacebookAlbumsImportStatus('error', 'Failed to start import', result.detail || 'An error occurred while starting import.');
+                            facebookAlbumsImportProgressContainer.style.display = 'none';
+                            facebookAlbumsImportInProgress = false;
+                            startFacebookAlbumsImportBtn.disabled = false;
+                            cancelFacebookAlbumsImportBtn.style.display = 'none';
+                        }
+                    } catch (error) {
+                        showFacebookAlbumsImportStatus('error', 'Error starting import', error.message);
+                        facebookAlbumsImportProgressContainer.style.display = 'none';
+                        facebookAlbumsImportInProgress = false;
+                        startFacebookAlbumsImportBtn.disabled = false;
+                        cancelFacebookAlbumsImportBtn.style.display = 'none';
+                    }
+                });
+            }
+
+            // Cancel Facebook Albums import
+            if (cancelFacebookAlbumsImportBtn) {
+                cancelFacebookAlbumsImportBtn.addEventListener('click', async () => {
+                    try {
+                        const response = await fetch('/facebook/albums/import/cancel', {
+                            method: 'POST'
+                        });
+                        
+                        const result = await response.json();
+                        showFacebookAlbumsImportStatus('info', 'Cancellation requested', result.message || 'Cancellation request sent.');
+                    } catch (error) {
+                        showFacebookAlbumsImportStatus('error', 'Error cancelling import', error.message);
+                    }
+                });
+            }
+
+            // Check initial status on page load
+            checkInitialFacebookAlbumsStatus();
 
             // Sidebar button event listeners
             if (DOM.fbAlbumsSidebarBtn) {

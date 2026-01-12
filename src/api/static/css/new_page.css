@@ -3873,3 +3873,32 @@ body {
         max-width: 90%;
     }
 }
+
+/* Facebook Albums Modal Styles */
+#fb-albums-resize-handle:hover {
+    background-color: #2196F3 !important;
+    opacity: 0.5;
+}
+
+.fb-album-item {
+    user-select: none;
+}
+
+#fb-albums-images-container {
+    min-height: 0; /* Important for flex scrolling */
+}
+
+#fb-albums-images-container > div {
+    min-height: 200px; /* Prevent grid items from being compressed */
+    height: auto;
+}
+
+#fb-albums-images-container img {
+    transition: opacity 0.2s;
+    min-height: 200px;
+    height: 200px;
+}
+
+#fb-albums-images-container img:hover {
+    opacity: 0.9;
+}
