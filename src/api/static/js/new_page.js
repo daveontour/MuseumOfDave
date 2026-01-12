@@ -123,12 +123,6 @@ document.addEventListener('DOMContentLoaded', () => {
         suggestionsModal: document.getElementById('tile-suggestions-modal'),
         closeSuggestionsModalBtn: document.getElementById('modal-suggestions-close-btn'),
         suggestionsListContainer: document.getElementById('tile-suggestions-container'),
-        fbMessengerOptionsModal: document.getElementById('fb-messenger-options-modal'),
-        fbSelect: document.getElementById('fb-select'),
-        closeFBMessengerModalBtn: document.getElementById('close-fb-messenger-modal'),
-        fbCancelBtn: document.getElementById('fb-cancel-btn'),
-        fbOkBtn: document.getElementById('fb-ok-btn'),
-        oneToOneOnlyCheckbox: document.getElementById('oneToOneOnly'),
         fbAlbumsModal: document.getElementById('fb-albums-modal'),
         fbAlbumsSelect: document.getElementById('fb-albums-select'),
         closeFBAlbumsModalBtn: document.getElementById('close-fb-albums-modal'),
@@ -233,7 +227,6 @@ document.addEventListener('DOMContentLoaded', () => {
         dropupBtn: document.getElementById('dropup-btn'),
         dropupContainer: document.querySelector('.dropup'),
         fbAlbumsDropupBtn: document.getElementById('fb-albums-dropup-btn'),
-        fbMessengerDropupBtn: document.getElementById('fb-messenger-dropup-btn'),
         imageGalleryDropupBtn: document.getElementById('image-gallery-dropup-btn'),
         locationsDropupBtn: document.getElementById('locations-dropup-btn'),
         emailGalleryDropupBtn: document.getElementById('email-gallery-dropup-btn'),
@@ -241,7 +234,6 @@ document.addEventListener('DOMContentLoaded', () => {
         haveYourSayDropupBtn: document.getElementById('have-your-say-dropup-btn'),
         // New sidebar buttons
         fbAlbumsSidebarBtn: document.getElementById('fb-albums-sidebar-btn'),
-        fbMessengerSidebarBtn: document.getElementById('fb-messenger-sidebar-btn'),
         imageGallerySidebarBtn: document.getElementById('image-gallery-sidebar-btn'),
         locationsSidebarBtn: document.getElementById('locations-sidebar-btn'),
         emailGallerySidebarBtn: document.getElementById('email-gallery-sidebar-btn'),
@@ -1317,114 +1309,6 @@ document.addEventListener('DOMContentLoaded', () => {
            //     DOM.suggestionsBtn.addEventListener('click', open);
                 DOM.closeSuggestionsModalBtn.addEventListener('click', close);
                 DOM.suggestionsModal.addEventListener('click', (e) => { if (e.target === DOM.suggestionsModal) close(); });
-            }
-            return { init, open };
-        })(),
-
-        FBMessenger: (() => {
-            async function open() {
-                Modals._openModal(DOM.fbMessengerOptionsModal);
-                DOM.fbSelect.disabled = true;
-                DOM.fbSelect.innerHTML = '<option value="">Loading...</option>';
-                DOM.fbOkBtn.disabled = true;
-
-                try {
-                    const data = await ApiService.fetchContacts();
-                    DOM.fbSelect.innerHTML = '<option value="">Select Conversation</option>';
-                    const optgroup1 = document.createElement('optgroup');
-                    optgroup1.label = 'One to One';
-                    const optgroup2 = document.createElement('optgroup');
-                    optgroup2.label = 'Only in Group Chats';
-                    DOM.fbSelect.appendChild(optgroup1);
-
-                    for (const [_, contact] of Object.entries(data)) {
-                        let source = [];
-                        if (contact.facebook) source.push("Facebook");
-                        if (contact.instagram) source.push("Instagram");
-                        if (contact.whatsapp) source.push("WhatsApp");
-
-                        source = source.join(", ");
-
-                        const optionLabel = `${contact.name} (${source}: ${contact.number_of_messages})`;
-                        const option = document.createElement('option');
-                        option.value = contact.name;
-                        option.textContent = optionLabel;
-                        if (contact.number_of_one_to_one_messages > 0) {
-                            optgroup1.appendChild(option);
-                        } else {
-                            optgroup2.appendChild(option);
-                        }
-                    }
-                    if (optgroup2.childNodes.length > 0) DOM.fbSelect.appendChild(optgroup2);
-
-                } catch (error) {
-                    console.error("Failed to load FB conversations:", error);
-                    DOM.fbSelect.innerHTML = '<option value="">Failed to load conversations</option>';
-                    UI.displayError("Could not load FB conversations: " + error.message);
-                } finally {
-                    DOM.fbSelect.disabled = false;
-                }
-            }
-            function close() { Modals._closeModal(DOM.fbMessengerOptionsModal); }
-            
-            async function handleSubmit() {
-                const selectedConversation = DOM.fbSelect.value;
-                const radio = document.querySelector('input[name="fb-radio"]:checked');
-                if (!radio || !selectedConversation) return; // Basic validation
-
-                const radioValue = radio.value;
-                const one_to_one = DOM.oneToOneOnlyCheckbox.checked;
-                const category = "Facebook Messenger";
-                let prompt, title;
-                UI.clearError();
-                DOM.infoBox.classList.add('hidden');
-
-                switch (radioValue) {
-                    case 'summariseconversation':
-                        title = "Summarise the conversation between " + selectedConversation + " and " + "Dave Burton";
-                        prompt = one_to_one ?
-                            `Using the get_all_chat_messages_by_contact to understand the context, Summarise the conversations with ${selectedConversation} in one to one chats` :
-                            `Using the get_all_chat_messages_by_contact to understand the context, Summarise the conversations with ${selectedConversation} in one to one and group chats`;
-                        App.processFormSubmit(prompt, category, title);
-                        break;
-                    case 'wholeconversation':
-                        title = "Show the entire conversation between " + selectedConversation + " and " + "Dave Burton";
-                        UI.showLoadingIndicator();
-                        UI.setControlsEnabled(false);
-                        try {
-                            const messagesData = await ApiService.fetchMessagesByContactV2(selectedConversation, one_to_one);
-                            Chat.addConversation(messagesData);
-                        } catch (error) {
-                            UI.displayError("Failed to fetch whole conversation: " + error.message);
-                        } finally {
-                            UI.hideLoadingIndicator();
-                            UI.setControlsEnabled(true);
-                        }
-                        break;
-                    case 'makeupconversation':
-                        title = "Make up a conversation between " + selectedConversation + " and " + "Dave Burton";
-                        prompt = one_to_one ?
-                            `Using the get_all_chat_messages_by_contact to understand the context, Make up a conversation between ${selectedConversation} and Dave Burton by referencing their one to one messages` :
-                            `Using the get_all_chat_messages_by_contact to understand the context, Make up a conversation between ${selectedConversation} and Dave Burton by referencing their one to one and group chat messages`;
-                        App.processFormSubmit(prompt, category, title);
-                        break;
-                }
-                close();
-            }
-
-            function init() {
-                if (DOM.closeFBMessengerModalBtn) DOM.closeFBMessengerModalBtn.addEventListener('click', close);
-                if (DOM.fbCancelBtn) DOM.fbCancelBtn.addEventListener('click', close);
-                if (DOM.fbOkBtn) {
-                    DOM.fbOkBtn.addEventListener('click', handleSubmit);
-                    DOM.fbOkBtn.disabled = true; // Initial state
-                }
-                if (DOM.fbSelect) {
-                    DOM.fbSelect.addEventListener('change', () => {
-                        DOM.fbOkBtn.disabled = !(DOM.fbSelect.value && DOM.fbSelect.value !== '');
-                    });
-                }
-                if (DOM.fbMessengerOptionsModal) DOM.fbMessengerOptionsModal.addEventListener('click', (e) => { if (e.target === DOM.fbMessengerOptionsModal) close(); });
             }
             return { init, open };
         })(),
@@ -3023,7 +2907,14 @@ ${content}
         SMSMessages: (() => {
             let chatSessions = [];
             let filteredSessions = [];
+            let originalChatData = null;
             let currentSession = null;
+            let messageTypeFilters = {
+                imessage: true,
+                sms: true,
+                whatsapp: true,
+                mixed: true
+            };
 
             function formatAustralianDate(dateString) {
                 if (!dateString) return '';
@@ -3049,12 +2940,22 @@ ${content}
                         throw new Error('Failed to load chat sessions');
                     }
                     const data = await response.json();
-                    chatSessions = data.chat_sessions || [];
+                    // Store original data structure
+                    originalChatData = data;
+                    // Combine both categories for filtering
+                    chatSessions = [
+                        ...(data.contacts_and_groups || []),
+                        ...(data.other || [])
+                    ];
                     filteredSessions = [...chatSessions];
                     renderChatSessions();
                 } catch (error) {
                     console.error('Error loading chat sessions:', error);
-                    listContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #dc3545;">Error loading conversations</div>';
+                    let errorMessage = 'Error loading conversations';
+                    if (error.message) {
+                        errorMessage += ': ' + error.message;
+                    }
+                    listContainer.innerHTML = `<div style="text-align: center; padding: 2rem; color: #dc3545;">${errorMessage}</div>`;
                 }
             }
 
@@ -3062,20 +2963,102 @@ ${content}
                 const listContainer = document.getElementById('sms-chat-sessions-list');
                 if (!listContainer) return;
 
-                if (filteredSessions.length === 0) {
+                // First filter by message type
+                const typeFilteredSessions = filteredSessions.filter(session => {
+                    return messageTypeFilters[session.message_type] === true;
+                });
+
+                // Get data from API response structure
+                const contactsAndGroups = typeFilteredSessions.filter(session => {
+                    // Check if it's a phone number (same logic as backend)
+                    const chatSession = session.chat_session || '';
+                    const cleaned = chatSession.replace(/[\s\-\(\)]/g, '');
+                    if (cleaned.startsWith('+')) {
+                        return !cleaned.substring(1).match(/^\d{7,}$/);
+                    }
+                    const digitCount = (chatSession.match(/\d/g) || []).length;
+                    return !(digitCount >= 7 && cleaned.length <= 20);
+                });
+                
+                const otherSessions = typeFilteredSessions.filter(session => {
+                    const chatSession = session.chat_session || '';
+                    const cleaned = chatSession.replace(/[\s\-\(\)]/g, '');
+                    if (cleaned.startsWith('+')) {
+                        return cleaned.substring(1).match(/^\d{7,}$/);
+                    }
+                    const digitCount = (chatSession.match(/\d/g) || []).length;
+                    return digitCount >= 7 && cleaned.length <= 20;
+                });
+
+                if (typeFilteredSessions.length === 0) {
                     listContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;">No conversations found</div>';
                     return;
                 }
 
                 listContainer.innerHTML = '';
-                filteredSessions.forEach(session => {
+                
+                // Render Contacts and Groups section
+                if (contactsAndGroups.length > 0) {
+                    const categoryHeader = document.createElement('div');
+                    categoryHeader.className = 'sms-chat-category-header';
+                    categoryHeader.textContent = 'Contacts and Groups';
+                    categoryHeader.style.cssText = 'padding: 12px 16px; font-weight: 600; font-size: 13px; color: #233366; background-color: #e9ecef; border-bottom: 1px solid #dee2e6; text-transform: uppercase; letter-spacing: 0.5px;';
+                    listContainer.appendChild(categoryHeader);
+                    
+                    contactsAndGroups.forEach(session => {
+                        renderChatSessionItem(session, listContainer);
+                    });
+                }
+                
+                // Render Other section
+                if (otherSessions.length > 0) {
+                    const categoryHeader = document.createElement('div');
+                    categoryHeader.className = 'sms-chat-category-header';
+                    categoryHeader.textContent = 'Other';
+                    categoryHeader.style.cssText = 'padding: 12px 16px; font-weight: 600; font-size: 13px; color: #233366; background-color: #e9ecef; border-bottom: 1px solid #dee2e6; border-top: 1px solid #dee2e6; margin-top: ' + (contactsAndGroups.length > 0 ? '8px' : '0') + '; text-transform: uppercase; letter-spacing: 0.5px;';
+                    listContainer.appendChild(categoryHeader);
+                    
+                    otherSessions.forEach(session => {
+                        renderChatSessionItem(session, listContainer);
+                    });
+                }
+            }
+
+            function renderChatSessionItem(session, listContainer) {
                     const item = document.createElement('div');
                     item.className = 'sms-chat-session-item';
                     item.dataset.session = session.chat_session;
                     
                     const nameSpan = document.createElement('span');
                     nameSpan.className = 'sms-chat-session-name';
-                    nameSpan.textContent = session.chat_session || 'Unknown';
+                    
+                    // Message type icon (SMS or iMessage)
+                    const messageTypeIcon = document.createElement('i');
+                    if (session.message_type === 'imessage') {
+                        messageTypeIcon.className = 'fab fa-apple';
+                        messageTypeIcon.title = 'iMessage';
+                        messageTypeIcon.style.marginRight = '6px';
+                        messageTypeIcon.style.color = '#007AFF';
+                    } else if (session.message_type === 'sms') {
+                        messageTypeIcon.className = 'fas fa-comment';
+                        messageTypeIcon.title = 'SMS';
+                        messageTypeIcon.style.marginRight = '6px';
+                        messageTypeIcon.style.color = '#34C759';
+                    } else if (session.message_type === 'whatsapp') {
+                        messageTypeIcon.className = 'fab fa-whatsapp';
+                        messageTypeIcon.title = 'WhatsApp';
+                        messageTypeIcon.style.marginRight = '6px';
+                        messageTypeIcon.style.color = '#25D366';
+                    } else if (session.message_type === 'mixed') {
+                        messageTypeIcon.className = 'fas fa-comments';
+                        messageTypeIcon.title = 'Mixed (SMS, iMessage & WhatsApp)';
+                        messageTypeIcon.style.marginRight = '6px';
+                        messageTypeIcon.style.color = '#FF9500';
+                    }
+                    nameSpan.appendChild(messageTypeIcon);
+                    
+                    const nameText = document.createTextNode(session.chat_session || 'Unknown');
+                    nameSpan.appendChild(nameText);
                     
                     // Attachment indicator
                     if (session.has_attachments) {
@@ -3098,7 +3081,6 @@ ${content}
                     item.addEventListener('click', () => selectChatSession(session.chat_session));
                     
                     listContainer.appendChild(item);
-                });
             }
 
             async function selectChatSession(sessionName) {
@@ -3113,15 +3095,54 @@ ${content}
                 });
 
                 currentSession = sessionName;
-                const titleElement = document.getElementById('sms-conversation-title');
+                
+                // Find the selected session to get its message_type
+                const selectedSession = chatSessions.find(s => s.chat_session === sessionName);
+                const messageType = selectedSession?.message_type || 'sms';
+                
+                const titleElement = document.getElementById('sms-conversation-title-text');
+                const typeIconElement = document.getElementById('sms-conversation-type-icon');
                 const deleteBtn = document.getElementById('sms-delete-conversation-btn');
+                const askAIBtn = document.getElementById('sms-ask-ai-btn');
                 
                 if (titleElement) {
                     titleElement.textContent = sessionName || 'Unknown Conversation';
                 }
                 
+                // Update conversation type icon
+                if (typeIconElement) {
+                    typeIconElement.innerHTML = ''; // Clear previous icon
+                    typeIconElement.style.display = sessionName ? 'inline-block' : 'none';
+                    
+                    if (sessionName) {
+                        const icon = document.createElement('i');
+                        if (messageType === 'imessage') {
+                            icon.className = 'fab fa-apple';
+                            icon.title = 'iMessage';
+                            icon.style.color = '#007AFF';
+                        } else if (messageType === 'sms') {
+                            icon.className = 'fas fa-comment';
+                            icon.title = 'SMS';
+                            icon.style.color = '#34C759';
+                        } else if (messageType === 'whatsapp') {
+                            icon.className = 'fab fa-whatsapp';
+                            icon.title = 'WhatsApp';
+                            icon.style.color = '#25D366';
+                        } else if (messageType === 'mixed') {
+                            icon.className = 'fas fa-comments';
+                            icon.title = 'Mixed (SMS, iMessage & WhatsApp)';
+                            icon.style.color = '#FF9500';
+                        }
+                        typeIconElement.appendChild(icon);
+                    }
+                }
+                
                 if (deleteBtn) {
                     deleteBtn.style.display = sessionName ? 'block' : 'none';
+                }
+                
+                if (askAIBtn) {
+                    askAIBtn.style.display = sessionName ? 'block' : 'none';
                 }
 
                 const messagesContainer = document.getElementById('sms-conversation-messages');
@@ -3354,11 +3375,96 @@ ${content}
                     });
                 }
 
+                // Add event listeners for message type filter checkboxes
+                const filterCheckboxes = {
+                    'filter-imessage': 'imessage',
+                    'filter-sms': 'sms',
+                    'filter-whatsapp': 'whatsapp',
+                    'filter-mixed': 'mixed'
+                };
+
+                Object.keys(filterCheckboxes).forEach(checkboxId => {
+                    const checkbox = document.getElementById(checkboxId);
+                    if (checkbox) {
+                        checkbox.addEventListener('change', (e) => {
+                            messageTypeFilters[filterCheckboxes[checkboxId]] = e.target.checked;
+                            renderChatSessions();
+                        });
+                    }
+                });
+
                 const deleteBtn = document.getElementById('sms-delete-conversation-btn');
                 if (deleteBtn) {
                     deleteBtn.addEventListener('click', (e) => {
                         e.stopPropagation(); // Prevent any event bubbling
                         deleteConversation();
+                    });
+                }
+
+                // Ask AI button and modal handlers
+                const askAIBtn = document.getElementById('sms-ask-ai-btn');
+                const askAIModal = document.getElementById('sms-ask-ai-modal');
+                const askAICloseBtn = document.getElementById('sms-ask-ai-close');
+                const askAICancelBtn = document.getElementById('sms-ask-ai-cancel');
+                const askAISubmitBtn = document.getElementById('sms-ask-ai-submit');
+                const askAIRadioButtons = document.querySelectorAll('input[name="sms-ask-ai-option"]');
+                const askAIOtherTextarea = document.getElementById('sms-ask-ai-other-text');
+                const askAIOtherInput = document.getElementById('sms-ask-ai-other-input');
+
+                if (askAIBtn && askAIModal) {
+                    askAIBtn.addEventListener('click', () => {
+                        // Update conversation title in modal
+                        const conversationTitleEl = document.getElementById('sms-ask-ai-conversation-title');
+                        const conversationTitle = document.getElementById('sms-conversation-title');
+                        if (conversationTitleEl && conversationTitle) {
+                            conversationTitleEl.textContent = conversationTitle.textContent || 'Unknown Conversation';
+                        }
+                        askAIModal.style.display = 'flex';
+                    });
+                }
+
+                if (askAICloseBtn && askAIModal) {
+                    askAICloseBtn.addEventListener('click', () => {
+                        askAIModal.style.display = 'none';
+                    });
+                }
+
+                if (askAICancelBtn && askAIModal) {
+                    askAICancelBtn.addEventListener('click', () => {
+                        askAIModal.style.display = 'none';
+                    });
+                }
+
+                if (askAISubmitBtn) {
+                    askAISubmitBtn.addEventListener('click', () => {
+                        // Functionality will be added later
+                        const selectedOption = document.querySelector('input[name="sms-ask-ai-option"]:checked')?.value;
+                        const otherText = askAIOtherInput?.value || '';
+                        console.log('Ask AI - Selected option:', selectedOption, 'Other text:', otherText);
+                        // TODO: Implement AI functionality
+                        askAIModal.style.display = 'none';
+                    });
+                }
+
+                // Toggle textarea visibility based on radio selection
+                if (askAIRadioButtons.length > 0 && askAIOtherTextarea) {
+                    askAIRadioButtons.forEach(radio => {
+                        radio.addEventListener('change', () => {
+                            if (radio.value === 'other') {
+                                askAIOtherTextarea.style.display = 'block';
+                            } else {
+                                askAIOtherTextarea.style.display = 'none';
+                            }
+                        });
+                    });
+                }
+
+                // Close modal when clicking outside
+                if (askAIModal) {
+                    askAIModal.addEventListener('click', (e) => {
+                        if (e.target === askAIModal) {
+                            askAIModal.style.display = 'none';
+                        }
                     });
                 }
 
@@ -3870,7 +3976,6 @@ ${content}
 
         initAll: () => {
             Modals.Suggestions.init();
-            Modals.FBMessenger.init();
             Modals.FBAlbums.init();
             Modals.MultiImageDisplay.init();
             Modals.HaveYourSay.init();
@@ -4852,7 +4957,6 @@ ${content}
                 UI.hideLoadingIndicator();
             }
         },
-        [CONSTANTS.FUNCTION_NAMES.SecondFunction]: () => Modals.FBMessenger.open(), // showFBMessengerOptions
         [CONSTANTS.FUNCTION_NAMES.ThirdFunction]: () => Modals.FBAlbums.open(),    // showFBAlbumsOptions
         [CONSTANTS.FUNCTION_NAMES.FourthFunction]: () => Modals.Locations.open(), // showGeoMetadataOptions
         [CONSTANTS.FUNCTION_NAMES.FifthFunction]: () => SSE.browserFunctions.showLocationInfo(), // showTileAlbumOptions
@@ -5679,16 +5783,356 @@ ${content}
             // Check initial status on page load
             checkInitialImessageStatus();
 
+            // WhatsApp Import Controls
+            const startWhatsAppImportBtn = document.getElementById('start-whatsapp-import-btn');
+            const cancelWhatsAppImportBtn = document.getElementById('cancel-whatsapp-import-btn');
+            const whatsAppImportStatus = document.getElementById('whatsapp-import-status');
+            const whatsAppImportStatusMessage = document.getElementById('whatsapp-import-status-message');
+            const whatsAppImportStatusDetails = document.getElementById('whatsapp-import-status-details');
+            const whatsAppImportProgressContainer = document.getElementById('whatsapp-import-progress-container');
+            const whatsAppDirectoryPath = document.getElementById('whatsapp-import-directory');
+            const whatsAppMissingAttachmentsList = document.getElementById('whatsapp-missing-attachments-list');
+            const whatsAppMissingFilenames = document.getElementById('whatsapp-missing-filenames');
+            let whatsAppImportInProgress = false;
+            let whatsAppEventSource = null;
+
+            // Show WhatsApp import status
+            function showWhatsAppImportStatus(type, message, details = '') {
+                if (!whatsAppImportStatus || !whatsAppImportStatusMessage) return;
+                
+                whatsAppImportStatus.style.display = 'block';
+                whatsAppImportStatusMessage.textContent = message;
+                whatsAppImportStatusMessage.style.color = type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#333';
+                
+                if (whatsAppImportStatusDetails) {
+                    whatsAppImportStatusDetails.textContent = details;
+                }
+            }
+
+            // Close WhatsApp import SSE connection
+            function closeWhatsAppEventSource() {
+                if (whatsAppEventSource) {
+                    whatsAppEventSource.close();
+                    whatsAppEventSource = null;
+                }
+            }
+
+            // Connect to WhatsApp import SSE stream
+            function connectToWhatsAppProgressStream() {
+                // Close existing connection if any
+                closeWhatsAppEventSource();
+
+                // Create EventSource connection
+                whatsAppEventSource = new EventSource('/whatsapp/import/stream');
+
+                whatsAppEventSource.onmessage = (event) => {
+                    try {
+                        const eventData = JSON.parse(event.data);
+                        handleWhatsAppProgressEvent(eventData);
+                    } catch (error) {
+                        console.error('Error parsing WhatsApp SSE event:', error);
+                    }
+                };
+
+                whatsAppEventSource.onerror = (error) => {
+                    console.error('WhatsApp SSE connection error:', error);
+                    // Don't close on error - EventSource will attempt to reconnect
+                };
+
+                // Clean up on page unload
+                window.addEventListener('beforeunload', () => {
+                    closeWhatsAppEventSource();
+                });
+            }
+
+            // Handle WhatsApp import progress events
+            function handleWhatsAppProgressEvent(eventData) {
+                const { type, data } = eventData;
+
+                switch (type) {
+                    case 'progress':
+                        updateWhatsAppImportProgress(data);
+                        if (data.status === 'in_progress') {
+                            cancelWhatsAppImportBtn.style.display = 'inline-block';
+                            startWhatsAppImportBtn.disabled = true;
+                            showWhatsAppImportStatus('info', 'Import in progress...', `Processing conversation ${data.conversations_processed} of ${data.total_conversations}`);
+                        }
+                        break;
+
+                    case 'completed':
+                        updateWhatsAppImportProgress(data);
+                        cancelWhatsAppImportBtn.style.display = 'none';
+                        startWhatsAppImportBtn.disabled = false;
+                        whatsAppImportInProgress = false;
+                        const progressBar = document.getElementById('whatsapp-import-progress-bar');
+                        const progressBarText = document.getElementById('whatsapp-progress-bar-text');
+                        if (progressBar && progressBarText) {
+                            progressBar.style.width = '100%';
+                            progressBarText.textContent = '100%';
+                        }
+                        showWhatsAppImportStatus(
+                            'success',
+                            'Import completed successfully',
+                            `Processed ${data.conversations_processed} conversation(s). ` +
+                            `Imported ${data.messages_imported} message(s) ` +
+                            `(${data.messages_created} created, ${data.messages_updated} updated). ` +
+                            `Found ${data.attachments_found} attachment(s), ` +
+                            `${data.attachments_missing} missing, ` +
+                            `${data.errors} error(s).`
+                        );
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('WhatsApp Import Complete', {
+                                body: `Imported ${data.messages_imported} messages from ${data.conversations_processed} conversations.`,
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeWhatsAppEventSource();
+                        break;
+
+                    case 'error':
+                        updateWhatsAppImportProgress(data);
+                        cancelWhatsAppImportBtn.style.display = 'none';
+                        startWhatsAppImportBtn.disabled = false;
+                        whatsAppImportInProgress = false;
+                        showWhatsAppImportStatus('error', 'Import error', data.error_message || 'An error occurred during import.');
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('WhatsApp Import Error', {
+                                body: data.error_message || 'An error occurred during import.',
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeWhatsAppEventSource();
+                        break;
+
+                    case 'cancelled':
+                        updateWhatsAppImportProgress(data);
+                        cancelWhatsAppImportBtn.style.display = 'none';
+                        startWhatsAppImportBtn.disabled = false;
+                        whatsAppImportInProgress = false;
+                        showWhatsAppImportStatus('info', 'Import cancelled', data.error_message || 'Import was cancelled.');
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('WhatsApp Import Cancelled', {
+                                body: 'Import was cancelled by user.',
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeWhatsAppEventSource();
+                        break;
+
+                    case 'heartbeat':
+                        // Keep connection alive - no UI update needed
+                        break;
+
+                    default:
+                        console.log('Unknown WhatsApp event type:', type);
+                }
+            }
+
+            // Update WhatsApp import progress
+            function updateWhatsAppImportProgress(stats) {
+                if (!whatsAppImportProgressContainer) return;
+                
+                whatsAppImportProgressContainer.style.display = 'block';
+                
+                const currentConversationName = document.getElementById('whatsapp-current-conversation-name');
+                const whatsAppProgressText = document.getElementById('whatsapp-conversation-progress-text');
+                const whatsAppImportProgressBar = document.getElementById('whatsapp-import-progress-bar');
+                const whatsAppProgressBarText = document.getElementById('whatsapp-progress-bar-text');
+                const whatsAppMessagesImported = document.getElementById('whatsapp-messages-imported-count');
+                const whatsAppMessagesCreated = document.getElementById('whatsapp-messages-created-count');
+                const whatsAppMessagesUpdated = document.getElementById('whatsapp-messages-updated-count');
+                const whatsAppAttachmentsFound = document.getElementById('whatsapp-attachments-found-count');
+                const whatsAppAttachmentsMissing = document.getElementById('whatsapp-attachments-missing-count');
+                const whatsAppErrors = document.getElementById('whatsapp-errors-count');
+
+                if (currentConversationName) {
+                    currentConversationName.textContent = stats.current_conversation || '-';
+                }
+
+                if (whatsAppProgressText && stats.total_conversations > 0) {
+                    whatsAppProgressText.textContent = `${stats.conversations_processed} / ${stats.total_conversations}`;
+                }
+
+                if (whatsAppImportProgressBar && whatsAppProgressBarText && stats.total_conversations > 0) {
+                    const percentage = Math.round((stats.conversations_processed / stats.total_conversations) * 100);
+                    whatsAppImportProgressBar.style.width = `${percentage}%`;
+                    whatsAppProgressBarText.textContent = `${percentage}%`;
+                }
+
+                if (whatsAppMessagesImported) {
+                    whatsAppMessagesImported.textContent = stats.messages_imported || 0;
+                }
+                if (whatsAppMessagesCreated) {
+                    whatsAppMessagesCreated.textContent = stats.messages_created || 0;
+                }
+                if (whatsAppMessagesUpdated) {
+                    whatsAppMessagesUpdated.textContent = stats.messages_updated || 0;
+                }
+                if (whatsAppAttachmentsFound) {
+                    whatsAppAttachmentsFound.textContent = stats.attachments_found || 0;
+                }
+                if (whatsAppAttachmentsMissing) {
+                    whatsAppAttachmentsMissing.textContent = stats.attachments_missing || 0;
+                }
+                if (whatsAppErrors) {
+                    whatsAppErrors.textContent = stats.errors || 0;
+                }
+
+                // Update missing attachment filenames
+                if (stats.missing_attachment_filenames && stats.missing_attachment_filenames.length > 0) {
+                    if (whatsAppMissingAttachmentsList) {
+                        whatsAppMissingAttachmentsList.style.display = 'block';
+                    }
+                    if (whatsAppMissingFilenames) {
+                        whatsAppMissingFilenames.innerHTML = stats.missing_attachment_filenames
+                            .map(filename => `<div style="margin-bottom: 4px;">${filename}</div>`)
+                            .join('');
+                    }
+                } else {
+                    if (whatsAppMissingAttachmentsList) {
+                        whatsAppMissingAttachmentsList.style.display = 'none';
+                    }
+                }
+            }
+
+            // Check initial WhatsApp import status
+            async function checkInitialWhatsAppStatus() {
+                if (!whatsAppImportStatus) return;
+                
+                try {
+                    const response = await fetch('/whatsapp/import/status');
+                    if (!response.ok) {
+                        return;
+                    }
+                    const status = await response.json();
+                    
+                    if (status.in_progress) {
+                        cancelWhatsAppImportBtn.style.display = 'inline-block';
+                        startWhatsAppImportBtn.disabled = true;
+                        whatsAppImportInProgress = true;
+                        // Connect to stream to get updates
+                        connectToWhatsAppProgressStream();
+                        updateWhatsAppImportProgress(status);
+                    } else {
+                        cancelWhatsAppImportBtn.style.display = 'none';
+                        startWhatsAppImportBtn.disabled = false;
+                        whatsAppImportInProgress = false;
+                    }
+                } catch (error) {
+                    console.error('Error checking initial WhatsApp import status:', error);
+                }
+            }
+
+            // Start WhatsApp import
+            if (startWhatsAppImportBtn) {
+                startWhatsAppImportBtn.addEventListener('click', async () => {
+                    const directoryPath = whatsAppDirectoryPath?.value?.trim();
+                    
+                    if (!directoryPath) {
+                        showWhatsAppImportStatus('error', 'Directory path required', 'Please enter a directory path.');
+                        return;
+                    }
+                    
+                    if (whatsAppImportInProgress) {
+                        showWhatsAppImportStatus('error', 'Import already in progress', 'Please wait for the current import to complete.');
+                        return;
+                    }
+                    
+                    try {
+                        whatsAppImportInProgress = true;
+                        startWhatsAppImportBtn.disabled = true;
+                        cancelWhatsAppImportBtn.style.display = 'inline-block';
+                        showWhatsAppImportStatus('info', 'Starting import...', 'Sending request to server...');
+                        
+                        // Clear previous missing filenames
+                        if (whatsAppMissingFilenames) {
+                            whatsAppMissingFilenames.innerHTML = '';
+                        }
+                        if (whatsAppMissingAttachmentsList) {
+                            whatsAppMissingAttachmentsList.style.display = 'none';
+                        }
+                        
+                        updateWhatsAppImportProgress({
+                            conversations_processed: 0,
+                            total_conversations: 0,
+                            messages_imported: 0,
+                            messages_created: 0,
+                            messages_updated: 0,
+                            attachments_found: 0,
+                            attachments_missing: 0,
+                            missing_attachment_filenames: [],
+                            errors: 0
+                        });
+                        
+                        const response = await fetch('/whatsapp/import', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                directory_path: directoryPath
+                            })
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (response.ok) {
+                            showWhatsAppImportStatus('info', 'Import started', result.message || 'WhatsApp import has been initiated.');
+                            
+                            // Connect to SSE stream for real-time updates
+                            connectToWhatsAppProgressStream();
+                        } else {
+                            showWhatsAppImportStatus('error', 'Failed to start import', result.detail || 'An error occurred while starting import.');
+                            whatsAppImportProgressContainer.style.display = 'none';
+                            whatsAppImportInProgress = false;
+                            startWhatsAppImportBtn.disabled = false;
+                            cancelWhatsAppImportBtn.style.display = 'none';
+                        }
+                    } catch (error) {
+                        showWhatsAppImportStatus('error', 'Error starting import', error.message);
+                        whatsAppImportProgressContainer.style.display = 'none';
+                        whatsAppImportInProgress = false;
+                        startWhatsAppImportBtn.disabled = false;
+                        cancelWhatsAppImportBtn.style.display = 'none';
+                    }
+                });
+            }
+
+            // Cancel WhatsApp import
+            if (cancelWhatsAppImportBtn) {
+                cancelWhatsAppImportBtn.addEventListener('click', async () => {
+                    try {
+                        cancelWhatsAppImportBtn.disabled = true;
+                        showWhatsAppImportStatus('info', 'Cancelling import...', 'Sending cancellation request...');
+                        
+                        const response = await fetch('/whatsapp/import/cancel', {
+                            method: 'POST'
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.cancelled) {
+                            showWhatsAppImportStatus('info', 'Cancellation requested', result.message || 'Import cancellation has been requested.');
+                            // The SSE stream will send the cancelled event
+                        } else {
+                            showWhatsAppImportStatus('info', 'No import in progress', result.message || 'No WhatsApp import is currently in progress.');
+                            closeWhatsAppEventSource();
+                        }
+                    } catch (error) {
+                        showWhatsAppImportStatus('error', 'Error cancelling import', error.message);
+                    } finally {
+                        cancelWhatsAppImportBtn.disabled = false;
+                    }
+                });
+            }
+
+            // Check initial status on page load
+            checkInitialWhatsAppStatus();
+
             // Sidebar button event listeners
             if (DOM.fbAlbumsSidebarBtn) {
                 DOM.fbAlbumsSidebarBtn.addEventListener('click', () => {
                     Modals.FBAlbums.open();
-                });
-            }
-
-            if (DOM.fbMessengerSidebarBtn) {
-                DOM.fbMessengerSidebarBtn.addEventListener('click', () => {
-                    Modals.FBMessenger.open();
                 });
             }
 

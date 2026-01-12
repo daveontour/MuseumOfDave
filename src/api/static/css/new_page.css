@@ -1557,6 +1557,11 @@ body {
 #single-image-modal {
     z-index: 3000 !important;
 }
+
+/* Ask AI modal should appear above conversation modal */
+#sms-ask-ai-modal {
+    z-index: 4000 !important;
+}
 /* Ensure JS-shown modals are actually flexed */
 .modal[style*="display: flex"] {
     display: flex !important;
@@ -1813,36 +1818,6 @@ body {
 
 
 /* FB Messenger Options Modal */
-#fb-messenger-options-modal .modal-content {
-    max-width: 400px; /* Narrower modal */
-    animation: modal-pop-in 0.25s cubic-bezier(.4,2,.6,1) 1;
-}
-#fb-messenger-options-modal h2 {
-    margin-top: 0; margin-bottom: 1.2em; color: #233366;
-    font-size: 1.4em; font-weight: 600; text-align: center;
-}
-#fb-messenger-options-modal .setting-group { margin-bottom: 1.2em; }
-#fb-messenger-options-modal label {
-    font-weight: 500; color: #2c3e50;
-    margin-bottom: 0.3em; display: block;
-}
-#fb-messenger-options-modal select {
-    width: 100%; padding: 0.5em; border-radius: 6px;
-    border: 1px solid #bfc9da; font-size: 1em;
-    background: #f7faff; margin-top: 0.2em;
-}
-#fb-messenger-options-modal .radio-group > div { /* For radio button items */
-    display: flex; align-items: center;
-    gap: 0.5em; margin-bottom: 0.3em;
-}
-#fb-messenger-options-modal input[type="radio"] { accent-color: #4a90e2; margin-right: 0; }
-#fb-messenger-options-modal .radio-group label { /* Label next to radio */
-    margin-bottom: 0; display: inline;
-    font-weight: 400; color: #2c3e50;
-}
-#fb-messenger-options-modal input[type="checkbox"] { accent-color: #4a90e2; margin-right: 0.5em; }
-
-
 /* FB Albums Modal */
 #fb-albums-modal .modal-content { /* Similar to FB Messenger modal */
     max-width: 400px;
@@ -2073,7 +2048,6 @@ body {
         max-height: 95vh; /* Allow more height on smaller screens */
         width: 95vw;
     }
-    #fb-messenger-options-modal .modal-content,
     #fb-albums-modal .modal-content { /* Specific small screen adjustments */
         padding: 1.2rem 0.7rem;
     }
@@ -2425,6 +2399,26 @@ body {
 
 .sms-chat-session-item.active .sms-chat-session-name i {
     color: rgba(255, 255, 255, 0.9);
+}
+
+.sms-chat-session-name i.fa-whatsapp {
+    font-size: 14px;
+}
+
+.sms-chat-session-item.active .sms-chat-session-name i.fa-whatsapp {
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.sms-chat-session-name i.fa-apple,
+.sms-chat-session-name i.fa-comment,
+.sms-chat-session-name i.fa-comments {
+    font-size: 14px;
+}
+
+.sms-chat-session-item.active .sms-chat-session-name i.fa-apple,
+.sms-chat-session-item.active .sms-chat-session-name i.fa-comment,
+.sms-chat-session-item.active .sms-chat-session-name i.fa-comments {
+    color: rgba(255, 255, 255, 0.95);
 }
 
 #sms-delete-conversation-btn:hover {

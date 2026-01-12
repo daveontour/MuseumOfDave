@@ -20,6 +20,7 @@ from ..database.storage import EmailStorage
 from ..loader import EmailDatabaseLoader
 from ..config import get_config
 from ..messageimport.imessageimport import import_imessages_from_directory
+from ..messageimport.whatsappimport import import_whatsapp_from_directory
 
 # Create FastAPI app instance
 app = FastAPI(
@@ -86,6 +87,31 @@ imessage_import_progress: Dict[str, Any] = {
 imessage_sse_clients: List[asyncio.Queue] = []
 imessage_sse_clients_lock = threading.Lock()
 
+# WhatsApp import state management
+whatsapp_import_lock = threading.Lock()
+whatsapp_import_cancelled = threading.Event()
+whatsapp_import_in_progress = False
+
+# Progress state for WhatsApp import SSE streaming
+whatsapp_import_progress: Dict[str, Any] = {
+    "current_conversation": None,
+    "conversations_processed": 0,
+    "total_conversations": 0,
+    "messages_imported": 0,
+    "messages_created": 0,
+    "messages_updated": 0,
+    "attachments_found": 0,
+    "attachments_missing": 0,
+    "missing_attachment_filenames": [],
+    "errors": 0,
+    "status": "idle",  # idle, in_progress, completed, cancelled, error
+    "error_message": None
+}
+
+# SSE event queue for WhatsApp import progress updates
+whatsapp_sse_clients: List[asyncio.Queue] = []
+whatsapp_sse_clients_lock = threading.Lock()
+
 
 def update_imessage_progress_state(**kwargs):
     """Thread-safe function to update iMessage import progress state."""
@@ -133,6 +159,54 @@ def broadcast_imessage_progress_event_sync(event_type: str, data: Dict[str, Any]
         for client in disconnected_clients:
             if client in imessage_sse_clients:
                 imessage_sse_clients.remove(client)
+
+
+def update_whatsapp_progress_state(**kwargs):
+    """Thread-safe function to update WhatsApp import progress state."""
+    global whatsapp_import_progress
+    with whatsapp_import_lock:
+        for key, value in kwargs.items():
+            if key in whatsapp_import_progress:
+                if key == "missing_attachment_filenames" and isinstance(value, list):
+                    # Replace the list with the new one (which already contains all missing files)
+                    whatsapp_import_progress[key] = value.copy()
+                else:
+                    whatsapp_import_progress[key] = value
+
+
+def get_whatsapp_progress_state() -> Dict[str, Any]:
+    """Thread-safe function to get current WhatsApp import progress state."""
+    global whatsapp_import_progress
+    with whatsapp_import_lock:
+        return whatsapp_import_progress.copy()
+
+
+def broadcast_whatsapp_progress_event_sync(event_type: str, data: Dict[str, Any]):
+    """Thread-safe function to queue WhatsApp import progress event for SSE clients."""
+    global whatsapp_sse_clients
+    event_data = {
+        "type": event_type,
+        "data": data
+    }
+    message = f"data: {json.dumps(event_data)}\n\n"
+    
+    # Queue message for all connected clients
+    with whatsapp_sse_clients_lock:
+        disconnected_clients = []
+        for client_queue in whatsapp_sse_clients:
+            try:
+                # Use put_nowait to avoid blocking
+                client_queue.put_nowait(message)
+            except asyncio.QueueFull:
+                # Queue is full, skip this client
+                pass
+            except Exception:
+                disconnected_clients.append(client_queue)
+        
+        # Remove disconnected clients
+        for client in disconnected_clients:
+            if client in whatsapp_sse_clients:
+                whatsapp_sse_clients.remove(client)
 
 
 def update_progress_state(**kwargs):
@@ -207,6 +281,26 @@ class ImportIMessagesRequest(BaseModel):
 
 class ImportIMessagesResponse(BaseModel):
     """Response model for iMessage import."""
+    message: str
+    directory_path: str
+    conversations_processed: int
+    messages_imported: int
+    messages_created: int
+    messages_updated: int
+    attachments_found: int
+    attachments_missing: int
+    missing_attachment_filenames: List[str] = []
+    errors: int
+    timestamp: datetime
+
+
+class ImportWhatsAppRequest(BaseModel):
+    """Request model for WhatsApp import."""
+    directory_path: str
+
+
+class ImportWhatsAppResponse(BaseModel):
+    """Response model for WhatsApp import."""
     message: str
     directory_path: str
     conversations_processed: int
@@ -872,40 +966,132 @@ async def get_imessage_import_status():
 
 @app.get("/imessages/chat-sessions")
 async def get_chat_sessions():
-    """Get list of unique chat session names from imessages table.
+    """Get list of unique chat session names from messages table.
     
     Returns:
-        List of chat sessions with optional message counts and attachment indicators
+        Dictionary with contacts_and_groups and other arrays
     """
     session = db.get_session()
     try:
-        # Query distinct chat_session values with message counts and attachment counts
-        from sqlalchemy import func, case
-        results = session.query(
-            IMessage.chat_session,
-            func.count(IMessage.id).label('message_count'),
-            func.sum(
-                case((IMessage.attachment_data.isnot(None), 1), else_=0)
-            ).label('attachment_count')
-        ).filter(
-            IMessage.chat_session.isnot(None)
-        ).group_by(
-            IMessage.chat_session
-        ).order_by(
-            IMessage.chat_session
-        ).all()
+        # Query distinct chat_session values with message counts, attachment counts, and service types
+        from sqlalchemy import func, case, text
+        try:
+            results = session.query(
+                IMessage.chat_session,
+                func.count(IMessage.id).label('message_count'),
+                func.sum(
+                    case((IMessage.attachment_data.isnot(None), 1), else_=0)
+                ).label('attachment_count'),
+                func.max(IMessage.service).label('primary_service'),
+                func.count(case((IMessage.service.ilike('%iMessage%'), 1), else_=None)).label('imessage_count'),
+                func.count(case((IMessage.service.ilike('%SMS%'), 1), else_=None)).label('sms_count'),
+                func.count(case((IMessage.service == 'WhatsApp', 1), else_=None)).label('whatsapp_count')
+            ).filter(
+                IMessage.chat_session.isnot(None)
+            ).group_by(
+                IMessage.chat_session
+            ).order_by(
+                IMessage.chat_session
+            ).all()
+        except Exception as table_error:
+            # If table doesn't exist or has wrong name, try querying the old table name directly
+            error_msg = str(table_error).lower()
+            if 'does not exist' in error_msg or 'relation' in error_msg or 'table' in error_msg:
+                # Try querying the old 'imessages' table name
+                try:
+                    results = session.execute(text("""
+                        SELECT 
+                            chat_session,
+                            COUNT(id) as message_count,
+                            SUM(CASE WHEN attachment_data IS NOT NULL THEN 1 ELSE 0 END) as attachment_count,
+                            MAX(service) as primary_service,
+                            COUNT(CASE WHEN service ILIKE '%iMessage%' THEN 1 END) as imessage_count,
+                            COUNT(CASE WHEN service ILIKE '%SMS%' THEN 1 END) as sms_count,
+                            COUNT(CASE WHEN service = 'WhatsApp' THEN 1 END) as whatsapp_count
+                        FROM imessages
+                        WHERE chat_session IS NOT NULL
+                        GROUP BY chat_session
+                        ORDER BY chat_session
+                    """)).fetchall()
+                except Exception:
+                    # If that also fails, return empty results
+                    results = []
+            else:
+                raise
         
-        chat_sessions = [
-            {
+        import re
+        
+        def is_phone_number(chat_session: str) -> bool:
+            """Check if chat_session is primarily a phone number."""
+            if not chat_session:
+                return False
+            # Remove common separators and check if it's mostly digits
+            cleaned = re.sub(r'[\s\-\(\)]', '', chat_session)
+            # Check if it starts with + followed by digits, or is mostly digits
+            if cleaned.startswith('+'):
+                # Remove + and check if rest is digits
+                return cleaned[1:].isdigit() and len(cleaned[1:]) >= 7
+            # Check if it's mostly digits (at least 7 digits)
+            digit_count = sum(1 for c in cleaned if c.isdigit())
+            return digit_count >= 7 and len(cleaned) <= 20
+        
+        contacts_and_groups = []
+        other_sessions = []
+        
+        for result in results:
+            imessage_count = result[4] or 0
+            sms_count = result[5] or 0
+            whatsapp_count = result[6] or 0
+            total_count = result[1] or 0
+            
+            # Determine message type: 'imessage', 'sms', 'whatsapp', or 'mixed'
+            if imessage_count > 0 and sms_count == 0 and whatsapp_count == 0:
+                message_type = 'imessage'
+            elif sms_count > 0 and imessage_count == 0 and whatsapp_count == 0:
+                message_type = 'sms'
+            elif whatsapp_count > 0 and imessage_count == 0 and sms_count == 0:
+                message_type = 'whatsapp'
+            elif (imessage_count > 0 and sms_count > 0) or (imessage_count > 0 and whatsapp_count > 0) or (sms_count > 0 and whatsapp_count > 0) or (imessage_count > 0 and sms_count > 0 and whatsapp_count > 0):
+                message_type = 'mixed'
+            else:
+                # Fallback to primary_service if available
+                primary_service = result[3] or ''
+                if 'iMessage' in primary_service:
+                    message_type = 'imessage'
+                elif 'WhatsApp' in primary_service:
+                    message_type = 'whatsapp'
+                elif 'SMS' in primary_service:
+                    message_type = 'sms'
+                else:
+                    message_type = 'sms'  # Default to SMS
+            
+            session_data = {
                 "chat_session": result[0],
                 "message_count": result[1],
                 "has_attachments": (result[2] or 0) > 0,
-                "attachment_count": result[2] or 0
+                "attachment_count": result[2] or 0,
+                "message_type": message_type
             }
-            for result in results
-        ]
+            
+            # Categorize based on whether it's a phone number
+            if is_phone_number(result[0]):
+                other_sessions.append(session_data)
+            else:
+                contacts_and_groups.append(session_data)
         
-        return {"chat_sessions": chat_sessions}
+        return {
+            "contacts_and_groups": contacts_and_groups,
+            "other": other_sessions
+        }
+    except Exception as e:
+        import traceback
+        print(f"Error in get_chat_sessions: {e}")
+        traceback.print_exc()
+        # Return empty arrays on error instead of crashing
+        return {
+            "contacts_and_groups": [],
+            "other": []
+        }
     finally:
         session.close()
 
@@ -1010,6 +1196,296 @@ async def delete_conversation(chat_session: str):
         )
     finally:
         session.close()
+
+
+def import_whatsapp_background(directory_path: str, result_dict: dict):
+    """Background function to import WhatsApp messages from directory."""
+    global whatsapp_import_in_progress
+    
+    # Mark processing as started
+    with whatsapp_import_lock:
+        whatsapp_import_in_progress = True
+        whatsapp_import_cancelled.clear()
+    
+    # Initialize progress state
+    update_whatsapp_progress_state(
+        current_conversation=None,
+        conversations_processed=0,
+        total_conversations=0,
+        messages_imported=0,
+        messages_created=0,
+        messages_updated=0,
+        attachments_found=0,
+        attachments_missing=0,
+        missing_attachment_filenames=[],
+        errors=0,
+        status="in_progress",
+        error_message=None
+    )
+    
+    # Broadcast initial progress event
+    broadcast_whatsapp_progress_event_sync("progress", get_whatsapp_progress_state())
+    
+    try:
+        def progress_callback(stats: Dict[str, Any]):
+            """Callback function to update progress state."""
+            # Check for cancellation
+            if whatsapp_import_cancelled.is_set():
+                return
+            
+            # Update progress state with current stats
+            update_whatsapp_progress_state(
+                current_conversation=stats.get("current_conversation"),
+                conversations_processed=stats.get("conversations_processed", 0),
+                total_conversations=stats.get("total_conversations", 0),
+                messages_imported=stats.get("messages_imported", 0),
+                messages_created=stats.get("messages_created", 0),
+                messages_updated=stats.get("messages_updated", 0),
+                attachments_found=stats.get("attachments_found", 0),
+                attachments_missing=stats.get("attachments_missing", 0),
+                missing_attachment_filenames=stats.get("missing_attachment_filenames", []),
+                errors=stats.get("errors", 0),
+                status="in_progress"
+            )
+            
+            # Broadcast progress event
+            broadcast_whatsapp_progress_event_sync("progress", get_whatsapp_progress_state())
+        
+        def cancelled_check() -> bool:
+            """Check if import should be cancelled."""
+            return whatsapp_import_cancelled.is_set()
+        
+        # Run import with progress callback
+        stats = import_whatsapp_from_directory(
+            directory_path,
+            progress_callback=progress_callback,
+            cancelled_check=cancelled_check
+        )
+        
+        result_dict.update(stats)
+        result_dict["success"] = True
+        
+        # Update final progress state
+        update_whatsapp_progress_state(
+            status="completed",
+            **{k: v for k, v in stats.items() if k in whatsapp_import_progress}
+        )
+        broadcast_whatsapp_progress_event_sync("completed", get_whatsapp_progress_state())
+        
+    except Exception as e:
+        error_msg = str(e)
+        result_dict["success"] = False
+        result_dict["error"] = error_msg
+        
+        update_whatsapp_progress_state(
+            status="error",
+            error_message=error_msg
+        )
+        broadcast_whatsapp_progress_event_sync("error", get_whatsapp_progress_state())
+        
+        print(f"[Background Task] Error importing WhatsApp messages: {error_msg}")
+    finally:
+        # Mark processing as completed
+        with whatsapp_import_lock:
+            whatsapp_import_in_progress = False
+
+
+@app.post("/whatsapp/import", response_model=ImportWhatsAppResponse)
+async def import_whatsapp(
+    request: ImportWhatsAppRequest,
+    background_tasks: BackgroundTasks
+):
+    """Import WhatsApp messages from a directory structure asynchronously.
+    
+    The directory should contain subdirectories, each representing a conversation.
+    Each subdirectory should contain a CSV file with the messages.
+    
+    Args:
+        request: ImportWhatsAppRequest with directory_path
+        background_tasks: FastAPI background tasks
+        
+    Returns:
+        ImportWhatsAppResponse with initial status
+        
+    Raises:
+        HTTPException: If directory doesn't exist or import already in progress
+    """
+    global whatsapp_import_in_progress
+    
+    # Check if import is already in progress
+    with whatsapp_import_lock:
+        if whatsapp_import_in_progress:
+            raise HTTPException(
+                status_code=409,
+                detail="WhatsApp import is already in progress. Please cancel it first or wait for it to complete."
+            )
+    
+    # Validate directory exists
+    directory = Path(request.directory_path)
+    if not directory.exists() or not directory.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Directory does not exist or is not a directory: {request.directory_path}"
+        )
+    
+    result_dict = {
+        "conversations_processed": 0,
+        "messages_imported": 0,
+        "messages_created": 0,
+        "messages_updated": 0,
+        "attachments_found": 0,
+        "attachments_missing": 0,
+        "missing_attachment_filenames": [],
+        "errors": 0,
+        "success": False
+    }
+    
+    # Start background processing
+    background_tasks.add_task(
+        import_whatsapp_background,
+        request.directory_path,
+        result_dict
+    )
+    
+    return ImportWhatsAppResponse(
+        message="WhatsApp import started",
+        directory_path=request.directory_path,
+        conversations_processed=0,
+        messages_imported=0,
+        messages_created=0,
+        messages_updated=0,
+        attachments_found=0,
+        attachments_missing=0,
+        missing_attachment_filenames=[],
+        errors=0,
+        timestamp=datetime.now()
+    )
+
+
+@app.get("/whatsapp/import/stream")
+async def stream_whatsapp_import_progress():
+    """Stream WhatsApp import progress updates via Server-Sent Events (SSE).
+    
+    Returns:
+        StreamingResponse with text/event-stream content type
+    """
+    async def event_generator():
+        # Create a queue for this client
+        client_queue = asyncio.Queue(maxsize=100)
+        
+        # Add client to the list
+        with whatsapp_sse_clients_lock:
+            whatsapp_sse_clients.append(client_queue)
+        
+        try:
+            # Send initial progress state
+            initial_state = get_whatsapp_progress_state()
+            event_data = {
+                "type": "progress",
+                "data": initial_state
+            }
+            yield f"data: {json.dumps(event_data)}\n\n"
+            
+            # Send heartbeat every 30 seconds to keep connection alive
+            heartbeat_interval = 30
+            last_heartbeat = asyncio.get_event_loop().time()
+            
+            while True:
+                try:
+                    # Wait for message with timeout for heartbeat
+                    timeout = max(1, heartbeat_interval - (asyncio.get_event_loop().time() - last_heartbeat))
+                    try:
+                        message = await asyncio.wait_for(client_queue.get(), timeout=timeout)
+                        yield message
+                    except asyncio.TimeoutError:
+                        # Send heartbeat
+                        heartbeat_data = {
+                            "type": "heartbeat",
+                            "data": {"timestamp": datetime.now().isoformat()}
+                        }
+                        yield f"data: {json.dumps(heartbeat_data)}\n\n"
+                        last_heartbeat = asyncio.get_event_loop().time()
+                    
+                    # Check if processing is complete
+                    progress_state = get_whatsapp_progress_state()
+                    if progress_state["status"] in ["completed", "cancelled", "error"]:
+                        # Send final state and close
+                        final_event = {
+                            "type": progress_state["status"],
+                            "data": progress_state
+                        }
+                        yield f"data: {json.dumps(final_event)}\n\n"
+                        break
+                        
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    # Send error and break
+                    error_event = {
+                        "type": "error",
+                        "data": {"error": str(e)}
+                    }
+                    yield f"data: {json.dumps(error_event)}\n\n"
+                    break
+        finally:
+            # Remove client from the list
+            with whatsapp_sse_clients_lock:
+                if client_queue in whatsapp_sse_clients:
+                    whatsapp_sse_clients.remove(client_queue)
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+
+@app.post("/whatsapp/import/cancel")
+async def cancel_whatsapp_import():
+    """Cancel WhatsApp import if it is in progress.
+    
+    Returns:
+        Success message indicating cancellation status
+    """
+    global whatsapp_import_in_progress
+    
+    with whatsapp_import_lock:
+        if not whatsapp_import_in_progress:
+            return {
+                "message": "No WhatsApp import is currently in progress",
+                "cancelled": False
+            }
+        
+        # Set cancellation flag
+        whatsapp_import_cancelled.set()
+        
+        return {
+            "message": "WhatsApp import cancellation requested. Processing will stop after current conversation completes.",
+            "cancelled": True
+        }
+
+
+@app.get("/whatsapp/import/status")
+async def get_whatsapp_import_status():
+    """Get the current status of WhatsApp import.
+    
+    Returns:
+        Status information about WhatsApp import
+    """
+    global whatsapp_import_in_progress
+    
+    progress_state = get_whatsapp_progress_state()
+    
+    with whatsapp_import_lock:
+        return {
+            "in_progress": whatsapp_import_in_progress,
+            "cancelled": whatsapp_import_cancelled.is_set(),
+            **progress_state
+        }
 
 
 @app.get("/imessages/{message_id}/attachment")

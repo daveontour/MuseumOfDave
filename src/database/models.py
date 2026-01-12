@@ -70,9 +70,9 @@ class Attachment(Base):
 
 
 class IMessage(Base):
-    """iMessage model."""
+    """Message model (supports iMessage, SMS, and WhatsApp)."""
 
-    __tablename__ = "imessages"
+    __tablename__ = "messages"
 
     id = Column(Integer, primary_key=True)
     chat_session = Column(String(500))
@@ -91,5 +91,8 @@ class IMessage(Base):
     attachment_filename = Column(String(500), nullable=True)
     attachment_type = Column(String(255), nullable=True)
     attachment_data = Column(LargeBinary, nullable=True)
+    processed = Column(Boolean, default=False, nullable=False)
+    location_processed = Column(Boolean, default=False, nullable=False)
+    image_processed = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

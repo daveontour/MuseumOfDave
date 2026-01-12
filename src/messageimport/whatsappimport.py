@@ -1,4 +1,4 @@
-"""iMessage import functionality."""
+"""WhatsApp import functionality."""
 
 import csv
 from datetime import datetime
@@ -20,13 +20,27 @@ def parse_date(date_str: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def import_imessages_from_directory(
+def find_attachment_file(base_dir: Path, filename: str) -> Optional[Path]:
+    """Helper function to find attachment file by exact match or ending with filename."""
+    # First try exact match
+    exact_path = base_dir / filename
+    if exact_path.exists() and exact_path.is_file():
+        return exact_path
+    
+    # Search for files ending with the filename
+    for file_path in base_dir.iterdir():
+        if file_path.is_file() and file_path.name.endswith(filename):
+            return file_path
+    return None
+
+
+def import_whatsapp_from_directory(
     directory_path: str,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     cancelled_check: Optional[Callable[[], bool]] = None
 ) -> Dict[str, Any]:
     """
-    Import iMessages from a directory structure.
+    Import WhatsApp messages from a directory structure.
     
     The directory should contain subdirectories, each representing a conversation.
     Each subdirectory should contain a CSV file with the messages.
@@ -69,7 +83,7 @@ def import_imessages_from_directory(
         
         # Check for cancellation
         if cancelled_check and cancelled_check():
-            print("Import cancelled by user")
+            print("WhatsApp import cancelled by user")
             break
         
         conversation_name = subdir.name
@@ -96,40 +110,21 @@ def import_imessages_from_directory(
                         try:
                             # Parse dates
                             message_date = parse_date(row.get('Message Date', '').strip())
-                            delivered_date = parse_date(row.get('Delivered Date', '').strip())
-                            read_date = parse_date(row.get('Read Date', '').strip())
-                            edited_date = parse_date(row.get('Edited Date', '').strip())
+                            sent_date = parse_date(row.get('Sent Date', '').strip())
                             
                             # Parse attachment information
                             attachment_filename = row.get('Attachment', '').strip() or None
                             attachment_type = row.get('Attachment type', '').strip() or None
                             attachment_data = None
                             
-                            # Read attachment file if it exists
-                            # Note: Filesystem filenames may have prefixes, so search for files ending with the attachment filename
+                            # Handle attachments
                             if attachment_filename:
-                                attachment_path = None
-                                
-                                def find_attachment_file(filename):
-                                    """Helper function to find attachment file by exact match or ending with filename."""
-                                    # First try exact match
-                                    exact_path = csv_file.parent / filename
-                                    if exact_path.exists() and exact_path.is_file():
-                                        return exact_path
-                                    
-                                    # Search for files ending with the filename
-                                    for file_path in csv_file.parent.iterdir():
-                                        if file_path.is_file() and file_path.name.endswith(filename):
-                                            return file_path
-                                    return None
-                                
-                                # Try to find the attachment file
-                                attachment_path = find_attachment_file(attachment_filename)
+                                attachment_path = find_attachment_file(csv_file.parent, attachment_filename)
                                 
                                 # If not found and filename has .heic extension, try .jpg instead
                                 if not attachment_path and attachment_filename.lower().endswith('.heic'):
                                     jpg_filename = attachment_filename[:-5] + '.jpg'  # Replace .heic with .jpg
-                                    attachment_path = find_attachment_file(jpg_filename)
+                                    attachment_path = find_attachment_file(csv_file.parent, jpg_filename)
                                     if attachment_path:
                                         print(f"Found .jpg version instead of .heic: {attachment_path.name}")
                                         attachment_filename = jpg_filename
@@ -138,13 +133,13 @@ def import_imessages_from_directory(
                                 # If not found and filename has .opus extension, try .mp3 instead
                                 if not attachment_path and attachment_filename.lower().endswith('.opus'):
                                     mp3_filename = attachment_filename[:-5] + '.mp3'  # Replace .opus with .mp3
-                                    attachment_path = find_attachment_file(mp3_filename)
+                                    attachment_path = find_attachment_file(csv_file.parent, mp3_filename)
                                     if attachment_path:
                                         print(f"Found .mp3 version instead of .opus: {attachment_path.name}")
                                         attachment_filename = mp3_filename
                                         attachment_type = "audio/mpeg"
                                 
-                                if attachment_path and attachment_path.exists() and attachment_path.is_file():
+                                if attachment_path:
                                     try:
                                         with open(attachment_path, 'rb') as att_file:
                                             attachment_data = att_file.read()
@@ -157,36 +152,38 @@ def import_imessages_from_directory(
                                             stats["missing_attachment_filenames"].append(missing_filename)
                                 else:
                                     missing_filename = f"{conversation_name}/{attachment_filename}"
-                                    print(f"Warning: Attachment file not found (searched for files ending with '{attachment_filename}'): {csv_file.parent}")
+                                    print(f"Warning: Attachment file not found: {attachment_filename}")
                                     stats["attachments_missing"] += 1
                                     if missing_filename not in stats["missing_attachment_filenames"]:
                                         stats["missing_attachment_filenames"].append(missing_filename)
                             
-                            # Prepare message data
+                            # Build message data dictionary
                             message_data = {
-                                'chat_session': row.get('Chat Session', '').strip(),
-                                'message_date': message_date,
-                                'delivered_date': delivered_date,
-                                'read_date': read_date,
-                                'edited_date': edited_date,
-                                'service': row.get('Service', '').strip(),
-                                'type': row.get('Type', '').strip(),
-                                'sender_id': row.get('Sender ID', '').strip() or None,
-                                'sender_name': row.get('Sender Name', '').strip() or None,
-                                'status': row.get('Status', '').strip(),
-                                'replying_to': row.get('Replying to', '').strip() or None,
-                                'subject': row.get('Subject', '').strip() or None,
-                                'text': row.get('Text', '').strip() or None,
-                                'attachment_filename': attachment_filename,
-                                'attachment_type': attachment_type,
+                                "chat_session": row.get('Chat Session', '').strip() or None,
+                                "message_date": message_date,
+                                "delivered_date": sent_date,  # WhatsApp Sent Date maps to delivered_date
+                                "read_date": None,  # WhatsApp CSV doesn't have read date
+                                "edited_date": None,  # WhatsApp CSV doesn't have edited date
+                                "service": "WhatsApp",  # Always set to WhatsApp
+                                "type": row.get('Type', '').strip() or None,
+                                "sender_id": row.get('Sender ID', '').strip() or None,
+                                "sender_name": row.get('Sender Name', '').strip() or None,
+                                "status": row.get('Status', '').strip() or None,
+                                "replying_to": row.get('Replying to', '').strip() or None,
+                                "subject": None,  # WhatsApp CSV doesn't have subject
+                                "text": row.get('Text', '').strip() or None,
+                                "attachment_filename": attachment_filename,
+                                "attachment_type": attachment_type,
                             }
                             
-                            # Save to database
-                            _, is_update = storage.save_imessage(message_data, attachment_data)
+                            # Save message to database
+                            imessage, is_update = storage.save_imessage(message_data, attachment_data)
+                            
                             if is_update:
                                 stats["messages_updated"] += 1
                             else:
                                 stats["messages_created"] += 1
+                            
                             stats["messages_imported"] += 1
                             
                         except Exception as e:
@@ -213,13 +210,13 @@ def main():
     db.create_tables()
     
     # Test directory path - update this to your actual directory
-    test_directory = r"C:\NonOneDrive\iMazingBackup\David's iPhone (4729)\Messages"
+    test_directory = r"C:\NonOneDrive\iMazingBackup\David's iPhone (4729)\WhatsApp"
     
-    print(f"Starting iMessage import from: {test_directory}")
+    print(f"Starting WhatsApp import from: {test_directory}")
     print("-" * 60)
     
     try:
-        stats = import_imessages_from_directory(test_directory)
+        stats = import_whatsapp_from_directory(test_directory)
         
         print("-" * 60)
         print("Import completed!")
