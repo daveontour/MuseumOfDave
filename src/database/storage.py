@@ -1,10 +1,10 @@
 """Email storage operations."""
 
-from typing import List, Set, Optional, Dict, Any
+from typing import List, Set, Optional, Dict, Any, Tuple
 from sqlalchemy.orm import Session
 
 from .connection import Database
-from .models import Email, Attachment
+from .models import Email, Attachment, IMessage
 
 
 class EmailStorage:
@@ -125,5 +125,89 @@ class EmailStorage:
         session = self.db.get_session()
         try:
             return session.query(Email).filter(Email.id == email_id).first()
+        finally:
+            session.close()
+
+
+class IMessageStorage:
+    """Handle iMessage storage operations."""
+
+    def __init__(self, db: Optional[Database] = None):
+        """Initialize storage with database connection."""
+        if db is None:
+            db = Database()
+        self.db = db
+
+    def save_imessage(
+        self,
+        message_data: Dict[str, Any],
+        attachment_data: Optional[bytes] = None,
+    ) -> Tuple[IMessage, bool]:
+        """Save iMessage to database. Updates existing message if found, otherwise creates new one.
+        
+        A message is considered duplicate if it has the same:
+        - chat_session
+        - message_date
+        - sender_id
+        - type (Incoming/Outgoing)
+        
+        Returns:
+            tuple: (IMessage instance, is_update: bool) where is_update is True if message was updated, False if created
+        """
+        session = self.db.get_session()
+        try:
+            # Check if message already exists
+            existing = session.query(IMessage).filter(
+                IMessage.chat_session == message_data.get("chat_session"),
+                IMessage.message_date == message_data.get("message_date"),
+                IMessage.sender_id == message_data.get("sender_id"),
+                IMessage.type == message_data.get("type")
+            ).first()
+            
+            if existing:
+                # Update existing message
+                existing.delivered_date = message_data.get("delivered_date")
+                existing.read_date = message_data.get("read_date")
+                existing.edited_date = message_data.get("edited_date")
+                existing.service = message_data.get("service")
+                existing.sender_name = message_data.get("sender_name")
+                existing.status = message_data.get("status")
+                existing.replying_to = message_data.get("replying_to")
+                existing.subject = message_data.get("subject")
+                existing.text = message_data.get("text")
+                existing.attachment_filename = message_data.get("attachment_filename")
+                existing.attachment_type = message_data.get("attachment_type")
+                if attachment_data is not None:
+                    existing.attachment_data = attachment_data
+                imessage = existing
+                is_update = True
+            else:
+                # Create new message
+                imessage = IMessage(
+                    chat_session=message_data.get("chat_session"),
+                    message_date=message_data.get("message_date"),
+                    delivered_date=message_data.get("delivered_date"),
+                    read_date=message_data.get("read_date"),
+                    edited_date=message_data.get("edited_date"),
+                    service=message_data.get("service"),
+                    type=message_data.get("type"),
+                    sender_id=message_data.get("sender_id"),
+                    sender_name=message_data.get("sender_name"),
+                    status=message_data.get("status"),
+                    replying_to=message_data.get("replying_to"),
+                    subject=message_data.get("subject"),
+                    text=message_data.get("text"),
+                    attachment_filename=message_data.get("attachment_filename"),
+                    attachment_type=message_data.get("attachment_type"),
+                    attachment_data=attachment_data,
+                )
+                session.add(imessage)
+                is_update = False
+            
+            session.commit()
+            return (imessage, is_update)
+        except Exception:
+            session.rollback()
+            raise
         finally:
             session.close()

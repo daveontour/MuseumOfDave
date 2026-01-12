@@ -2126,7 +2126,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // }
 
             function _handleSearch() {
-                debugger;
+              
                 _renderImageGalleryList();
             }
             function _handleClear() {
@@ -2164,7 +2164,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectedLocation = DOM.imageGalleryLocationFilter.value;
                 searchQuery = DOM.imageGallerySearch.value;
 
-                debugger;
+          
                 let url = '/imagesmetadata?placeholder=true';
                 
                 
@@ -2357,6 +2357,25 @@ document.addEventListener('DOMContentLoaded', () => {
             let hasMoreData = true;
             let searchTimeout = null;
 
+            function formatDateAustralian(dateString) {
+              
+                if (!dateString) return 'No Date';
+                try {
+                    const date = new Date(dateString);
+                    if (isNaN(date.getTime())) return 'Invalid Date';
+                    
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const year = date.getFullYear();
+                    const hours = String(date.getHours()).padStart(2, '0');
+                    const minutes = String(date.getMinutes()).padStart(2, '0');
+                    
+                    return `${day}/${month}/${year} ${hours}:${minutes}`;
+                } catch (error) {
+                    return 'Invalid Date';
+                }
+            }
+
             function init() {
                 DOM.closeEmailGalleryModalBtn.addEventListener('click', close);
                 DOM.emailGallerySearchBtn.addEventListener('click', _handleSearch);
@@ -2426,10 +2445,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 DOM.emailGalleryYearFilter.value = currentYear;
 
                 try {
-                    fetch('/emailQuery?year='+currentYear+'&month='+currentMonth+'&initial=true')
+                    const params = new URLSearchParams();
+                    params.append('year', currentYear);
+                    params.append('month', currentMonth);
+                    
+                    fetch('/emails/search?' + params.toString())
                     .then(r => r.json())
                     .then(data => {
-                        emailData = data;
+                        // Transform response to match expected format
+                        emailData = data.map(email => ({
+                            id: email.id,
+                            subject: email.subject || 'No Subject',
+                            sender: email.from_address || 'Unknown Sender',
+                            recipient: email.to_addresses || 'Unknown Recipient',
+                            date: email.date ? formatDateAustralian(email.date) : 'No Date',
+                            folder: email.folder || 'Unknown Folder',
+                            body: email.snippet || 'No content',
+                            preview: email.snippet || 'No preview',
+                            attachments: email.attachment_ids.map(id => `/attachments/${id}`),
+                            emailId: email.id // Store email ID for fetching full content
+                        }));
                         _renderEmailList();
                         _showInstructions();
                     })
@@ -2451,6 +2486,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const years = [
                     { value: 0, text: 'All Years' },
+                    { value: 2032, text: '2032' },
+                    { value: 2031, text: '2031' },
+                    { value: 2030, text: '2030' },
+                    { value: 2029, text: '2029' },
+                    { value: 2028, text: '2028' },
+                    { value: 2027, text: '2027' },
+                    { value: 2026, text: '2026' },
                     { value: 2025, text: '2025' },
                     { value: 2024, text: '2024' },
                     { value: 2023, text: '2023' },
@@ -2530,52 +2572,74 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             function _handleSearch() {
-                const searchTerm = DOM.emailGallerySearch.value.toLowerCase();
-                const senderFilter = DOM.emailGallerySender.value.toLowerCase();
-                const recipientFilter = DOM.emailGalleryRecipient.value.toLowerCase();
-                const toFromFilter = DOM.emailGalleryToFrom.value.toLowerCase();
+                const searchTerm = DOM.emailGallerySearch.value.trim();
+                const senderFilter = DOM.emailGallerySender.value.trim();
+                const recipientFilter = DOM.emailGalleryRecipient.value.trim();
+                const toFromFilter = DOM.emailGalleryToFrom.value.trim();
                 const yearFilter = DOM.emailGalleryYearFilter.value;
                 const monthFilter = DOM.emailGalleryMonthFilter.value;
                 const businessFilter = DOM.emailGalleryBusinessFilter.checked;
+                const attachmentsFilter = DOM.emailGalleryAttachmentsFilter.checked;
                 //const folderFilter = DOM.emailGalleryFolderFilter.value;
 
-                let query = "?placeholder=true";
+                // Build query parameters for /emails/search endpoint
+                const params = new URLSearchParams();
+                
                 if (searchTerm) {
-                    query += "&textsearch="+searchTerm;
+                    params.append('subject', searchTerm);
                 }
                 if (senderFilter) {
-                    query += "&from="+senderFilter;
+                    params.append('from_address', senderFilter);
                 }
                 if (recipientFilter) {
-                    query += "&to="+recipientFilter;
+                    params.append('to_address', recipientFilter);
                 }
                 if (toFromFilter) {
-                    query += "&tofrom="+toFromFilter;
+                    params.append('to_from', toFromFilter);
                 }
-                if (yearFilter) {
-                    query += "&year="+yearFilter;
+                if (yearFilter && yearFilter !== '0' && yearFilter !== '') {
+                    params.append('year', yearFilter);
                 }
-                if (monthFilter) {
-                    query += "&month="+monthFilter;
+                if (monthFilter && monthFilter !== '0' && monthFilter !== '') {
+                    params.append('month', monthFilter);
                 }
-                if (businessFilter) {
-                    query += "&business=true";
+                if (attachmentsFilter) {
+                    params.append('has_attachments', 'true');
                 }
-
-                query = query.replace(" ", "%20");
+                // Note: business filter is not supported by the new endpoint
 
                 // Reset pagination for new search
                 currentPage = 0;
                 hasMoreData = true;
-                fetch('/emailQuery'+query)
+                
+                fetch('/emails/search?' + params.toString())
                 .then(r => r.json())
                 .then(data => {
-                    emailData = data;
+                    // Transform response to match expected format
+                
+                    emailData = data.map(email => ({
+                        id: email.id,
+                        subject: email.subject || 'No Subject',
+                        sender: email.from_address || 'Unknown Sender',
+                        recipient: email.to_addresses || 'Unknown Recipient',
+                        date: email.date ? formatDateAustralian(email.date) : 'No Date',
+                        folder: email.folder || 'Unknown Folder',
+                        body: email.snippet || 'No content',
+                        preview: email.snippet || 'No preview',
+                        attachments: email.attachment_ids.map(id => `/attachments/${id}`),
+                        emailId: email.id // Store email ID for fetching full content
+                    }));
                     selectedEmailIndex = -1;
                     _renderEmailList();
                     _showInstructions();
                     _updateEmailDetails();
                     _selectFirstEmail();
+             })
+             .catch(error => {
+                 console.error('Error searching emails:', error);
+                 emailData = [];
+                 _renderEmailList();
+                 _showInstructions();
              });
             }
 
@@ -2606,10 +2670,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             function _handleAttachmentsFilter() {
-                // Reset pagination for attachments filter
-                currentPage = 0;
-                hasMoreData = true;
-                _renderEmailList();
+                // Trigger new search with attachments filter
+                _handleSearch();
             }
 
             function _renderEmailList() {
@@ -2636,17 +2698,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 isLoading = true;
                 
-                // Apply attachments filter if checked
-                let filteredEmails = emailData;
-                if (DOM.emailGalleryAttachmentsFilter.checked) {
-                    filteredEmails = emailData.filter(email => 
-                        email.attachments && email.attachments.length > 0
-                    );
-                }
-                
+                // Note: Attachments filter is now handled server-side via has_attachments parameter
                 const startIndex = currentPage * itemsPerPage;
                 const endIndex = startIndex + itemsPerPage;
-                const emailsToRender = filteredEmails.slice(startIndex, endIndex);
+                const emailsToRender = emailData.slice(startIndex, endIndex);
 
                 if (emailsToRender.length === 0) {
                     hasMoreData = false;
@@ -2655,6 +2710,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 emailsToRender.forEach((email, localIndex) => {
+                 
                     const actualIndex = startIndex + localIndex;
                     const emailItem = document.createElement('div');
                     emailItem.className = 'email-list-item';
@@ -2677,7 +2733,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 currentPage++;
-                hasMoreData = endIndex < filteredEmails.length;
+                hasMoreData = endIndex < emailData.length;
                 isLoading = false;
 
                 // Add loading indicator if there's more data
@@ -2716,60 +2772,146 @@ document.addEventListener('DOMContentLoaded', () => {
             function _selectEmail(index) {
                 selectedEmailIndex = index;
                 
-                // Update visual selection
-                document.querySelectorAll('.email-list-item').forEach((item, i) => {
-                    item.classList.toggle('selected', i === index);
+                // Update visual selection using dataset.index to match actual emailData index
+                document.querySelectorAll('.email-list-item').forEach((item) => {
+                    const itemIndex = parseInt(item.dataset.index, 10);
+                    item.classList.toggle('selected', itemIndex === index);
                 });
 
-                // Get the actual email data considering filters
-                let filteredEmails = emailData;
-                if (DOM.emailGalleryAttachmentsFilter.checked) {
-                    filteredEmails = emailData.filter(email => 
-                        email.attachments && email.attachments.length > 0
-                    );
+                // Display email directly (filtering is now handled server-side)
+                if (emailData[index]) {
+                    _displayEmail(emailData[index]);
+                } else {
+                    console.error(`Email at index ${index} not found in emailData`);
                 }
-                
-                _displayEmail(filteredEmails[index]);
                 _updateEmailDetails();
             }
 
             function _displayEmail(email) {
+               
                // const emailDate = new Date(email.date);
                // const formattedDate = emailDate.toLocaleDateString() + ' ' + emailDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
-                // Update email content
-                DOM.emailGalleryEmailContent.querySelector('.email-subject').textContent = email.subject;
-                DOM.emailGalleryEmailContent.querySelector('.email-from').textContent = email.sender;
-                DOM.emailGalleryEmailContent.querySelector('.email-to').textContent = email.recipient;
-                DOM.emailGalleryEmailContent.querySelector('.email-date').textContent = email.date;
-                DOM.emailGalleryEmailContent.querySelector('.email-folder').textContent = email.folder;
-                DOM.emailGalleryEmailContent.querySelector('.email-body').textContent = email.body;
+                // Update email content with metadata
+                DOM.emailGalleryEmailContent.querySelector('.email-metadata .email-subject').textContent = email.subject || 'No Subject';
+                DOM.emailGalleryEmailContent.querySelector('.email-metadata .email-from').textContent = email.sender || 'Unknown Sender';
+                DOM.emailGalleryEmailContent.querySelector('.email-metadata .email-date').textContent = email.date || 'No Date';
+                DOM.emailGalleryEmailContent.querySelector('.email-metadata .email-folder').textContent = email.folder || 'Unknown Folder';
+                
+                // Show loading for email body
+                const emailBodyElement = DOM.emailGalleryEmailContent.querySelector('.email-body');
+                emailBodyElement.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">Loading email content...</div>';
+                
+                // Fetch full email content if emailId is available
+                if (email.emailId) {
+                    fetch(`/emails/${email.emailId}/html`)
+                        .then(response => {
+                            if (response.ok) {
+                                return response.text();
+                            } else {
+                                // Fallback to plain text
+                                return fetch(`/emails/${email.emailId}/text`)
+                                    .then(r => {
+                                        if (r.ok) {
+                                            return r.text();
+                                        } else {
+                                            throw new Error('Failed to fetch email content');
+                                        }
+                                    });
+                            }
+                        })
+                        .then(content => {
+                            // Clear the loading message
+                            emailBodyElement.innerHTML = '';
+                            
+                            let htmlContent = content;
+                            
+                            // If content is plain text, wrap it in HTML document structure
+                            if (!content.trim().startsWith('<!DOCTYPE') && !content.trim().startsWith('<html')) {
+                                htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+${content}
+</body>
+</html>`;
+                            }
+                            
+                            // Create an iframe to display the HTML email content
+                            const iframe = document.createElement('iframe');
+                            iframe.srcdoc = htmlContent;
+                            iframe.style.width = '100%';
+                            iframe.style.minHeight = '600px';
+                            iframe.style.border = 'none';
+                            iframe.style.borderRadius = '6px';
+                            emailBodyElement.appendChild(iframe);
+                        })
+                        .catch(error => {
+                            console.error('Error fetching email content:', error);
+                            emailBodyElement.innerHTML = `<div style="color: #c33; padding: 20px; text-align: center;">Error loading email: ${error.message}</div>`;
+                        });
+                } else {
+                    emailBodyElement.innerHTML = '<div style="padding: 20px; color: #666;">No content available</div>';
+                }
 
                 DOM.emailGalleryEmailContent.querySelector('.email-attachments').innerHTML = '';
-                email.attachments.forEach(attachment => {
-                    const attachmentItem = document.createElement('img');
-                    attachmentItem.className = 'email-attachment';
-                    attachmentItem.src = attachment+"&preview=true&resize_to=100";
-                    attachmentItem.style.maxWidth = '100px';
-                    attachmentItem.style.objectFit = 'cover';
-                    attachmentItem.style.cursor = 'pointer';
-                    attachmentItem.addEventListener('click', () => _imageSwitcher(email.attachments,  attachment));
-                    DOM.emailGalleryEmailContent.querySelector('.email-attachments').appendChild(attachmentItem);
-                });
+                if (email.attachments && email.attachments.length > 0) {
+                    debugger;
+                        email.attachments.forEach(attachment => {
+                        const attachmentItem = document.createElement('img');
+                        attachmentItem.className = 'email-attachment';
+                        // Add query parameters for preview
+                        attachmentItem.src = attachment + "?preview=true&resize_to=100";
+                        attachmentItem.style.maxWidth = '100px';
+                        attachmentItem.style.objectFit = 'cover';
+                        attachmentItem.style.cursor = 'pointer';
+                        attachmentItem.addEventListener('click', () => _attachmentsViewer(email.attachments,  attachment));
+                        DOM.emailGalleryEmailContent.querySelector('.email-attachments').appendChild(attachmentItem);
+                    });
+                }
 
                 // Show email content, hide instructions
                 DOM.emailGalleryInstructions.style.display = 'none';
                 DOM.emailGalleryEmailContent.style.display = 'block';
             }
 
-            function _imageSwitcher(images, uri){
+            function _attachmentsViewer(emailAttachments, selectedAttachment){
+                // Extract attachment ID from URL (e.g., "/attachments/123" -> "123")
+                const getAttachmentId = (url) => {
+                    const match = url.match(/\/attachments\/(\d+)/);
+                    return match ? match[1] : null;
+                };
 
-                if (images.length > 1) {
-                    Modals.MultiImageDisplay.showMultiImageModal(images, uri);
+                // Extract filename from URL or use default
+                const getFilename = (url) => {
+                    const id = getAttachmentId(url);
+                    return id ? `Attachment ${id}` : 'Attachment';
+                };
+
+                if (emailAttachments.length > 1) {
+                    // Show the attachments in a carousel with the selected attachment in the center
+                    // Remove query parameters from selectedAttachment for matching
+                    const cleanSelectedAttachment = selectedAttachment.split('?')[0];
+                    Modals.MultiImageDisplay.showMultiImageModal(emailAttachments, cleanSelectedAttachment);
                 } else {
-                    Modals.SingleImageDisplay.showSingleImageModal(images[0], uri, 0, 0, 0);
+                    // Show the attachment in a modal
+                    const attachmentUrl = emailAttachments[0].split('?')[0]; // Remove query params
+                    const filename = getFilename(attachmentUrl);
+                    Modals.SingleImageDisplay.showSingleImageModal(filename, attachmentUrl, 0, 0, 0);
                 }
-                    
             }
 
             function _showInstructions() {
@@ -2803,21 +2945,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (DOM.emailGalleryModal.style.display !== 'flex') return;
                 
 
-                // Get filtered emails for navigation
-                let filteredEmails = emailData;
-                if (DOM.emailGalleryAttachmentsFilter.checked) {
-                    filteredEmails = emailData.filter(email => 
-                        email.attachments && email.attachments.length > 0
-                    );
-                }
-
                 switch(event.key) {
                     case 'Escape':
                         close();
                         break;
                     case 'ArrowDown':
                         event.preventDefault();
-                        if (selectedEmailIndex < filteredEmails.length - 1) {
+                        if (selectedEmailIndex < emailData.length - 1) {
                             _selectEmail(selectedEmailIndex + 1);
                             _scrollToSelectedEmail();
                         }
@@ -2884,6 +3018,379 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             return { init,open };
+        })(),
+
+        SMSMessages: (() => {
+            let chatSessions = [];
+            let filteredSessions = [];
+            let currentSession = null;
+
+            function formatAustralianDate(dateString) {
+                if (!dateString) return '';
+                const date = new Date(dateString);
+                const day = String(date.getDate()).padStart(2, '0');
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const year = date.getFullYear();
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                const seconds = String(date.getSeconds()).padStart(2, '0');
+                return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+            }
+
+            async function loadChatSessions() {
+                const listContainer = document.getElementById('sms-chat-sessions-list');
+                if (!listContainer) return;
+
+                listContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;">Loading conversations...</div>';
+
+                try {
+                    const response = await fetch('/imessages/chat-sessions');
+                    if (!response.ok) {
+                        throw new Error('Failed to load chat sessions');
+                    }
+                    const data = await response.json();
+                    chatSessions = data.chat_sessions || [];
+                    filteredSessions = [...chatSessions];
+                    renderChatSessions();
+                } catch (error) {
+                    console.error('Error loading chat sessions:', error);
+                    listContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #dc3545;">Error loading conversations</div>';
+                }
+            }
+
+            function renderChatSessions() {
+                const listContainer = document.getElementById('sms-chat-sessions-list');
+                if (!listContainer) return;
+
+                if (filteredSessions.length === 0) {
+                    listContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;">No conversations found</div>';
+                    return;
+                }
+
+                listContainer.innerHTML = '';
+                filteredSessions.forEach(session => {
+                    const item = document.createElement('div');
+                    item.className = 'sms-chat-session-item';
+                    item.dataset.session = session.chat_session;
+                    
+                    const nameSpan = document.createElement('span');
+                    nameSpan.className = 'sms-chat-session-name';
+                    nameSpan.textContent = session.chat_session || 'Unknown';
+                    
+                    // Attachment indicator
+                    if (session.has_attachments) {
+                        const attachmentIcon = document.createElement('i');
+                        attachmentIcon.className = 'fas fa-paperclip';
+                        attachmentIcon.style.marginLeft = '8px';
+                        attachmentIcon.style.color = '#666';
+                        attachmentIcon.style.fontSize = '12px';
+                        attachmentIcon.title = `${session.attachment_count || 0} attachment(s)`;
+                        nameSpan.appendChild(attachmentIcon);
+                    }
+                    
+                    const countSpan = document.createElement('span');
+                    countSpan.className = 'sms-chat-session-count';
+                    countSpan.textContent = session.message_count || 0;
+                    
+                    item.appendChild(nameSpan);
+                    item.appendChild(countSpan);
+                    
+                    item.addEventListener('click', () => selectChatSession(session.chat_session));
+                    
+                    listContainer.appendChild(item);
+                });
+            }
+
+            async function selectChatSession(sessionName) {
+                // Update active state
+                const items = document.querySelectorAll('.sms-chat-session-item');
+                items.forEach(item => {
+                    if (item.dataset.session === sessionName) {
+                        item.classList.add('active');
+                    } else {
+                        item.classList.remove('active');
+                    }
+                });
+
+                currentSession = sessionName;
+                const titleElement = document.getElementById('sms-conversation-title');
+                const deleteBtn = document.getElementById('sms-delete-conversation-btn');
+                
+                if (titleElement) {
+                    titleElement.textContent = sessionName || 'Unknown Conversation';
+                }
+                
+                if (deleteBtn) {
+                    deleteBtn.style.display = sessionName ? 'block' : 'none';
+                }
+
+                const messagesContainer = document.getElementById('sms-conversation-messages');
+                const instructionsElement = document.getElementById('sms-conversation-instructions');
+                
+                if (instructionsElement) {
+                    instructionsElement.style.display = 'none';
+                }
+
+                if (!messagesContainer) return;
+
+                messagesContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;">Loading messages...</div>';
+
+                try {
+                    const encodedSession = encodeURIComponent(sessionName);
+                    const response = await fetch(`/imessages/conversation/${encodedSession}`);
+                    if (!response.ok) {
+                        throw new Error('Failed to load messages');
+                    }
+                    const data = await response.json();
+                    displayMessages(data.messages || []);
+                } catch (error) {
+                    console.error('Error loading messages:', error);
+                    messagesContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #dc3545;">Error loading messages</div>';
+                }
+            }
+
+            function displayMessages(messages) {
+                const messagesContainer = document.getElementById('sms-conversation-messages');
+                if (!messagesContainer) return;
+
+                messagesContainer.innerHTML = '';
+
+                messages.forEach(message => {
+                    const messageDiv = document.createElement('div');
+                    const isIncoming = message.type === 'Incoming';
+                    messageDiv.className = `sms-message ${isIncoming ? 'incoming' : 'outgoing'}`;
+
+                    const bubble = document.createElement('div');
+                    bubble.className = 'sms-message-bubble';
+
+                    // Header with sender and date
+                    const header = document.createElement('div');
+                    header.className = 'sms-message-header';
+                    
+                    const senderSpan = document.createElement('span');
+                    senderSpan.className = 'sms-message-sender';
+                    senderSpan.textContent = message.sender_name || message.sender_id || (isIncoming ? 'Incoming' : 'Outgoing');
+                    
+                    const dateSpan = document.createElement('span');
+                    dateSpan.className = 'sms-message-date';
+                    dateSpan.textContent = formatAustralianDate(message.message_date);
+                    
+                    header.appendChild(senderSpan);
+                    header.appendChild(dateSpan);
+                    bubble.appendChild(header);
+
+                    // Message text
+                    if (message.text) {
+                        const textDiv = document.createElement('div');
+                        textDiv.className = 'sms-message-text';
+                        textDiv.textContent = message.text;
+                        bubble.appendChild(textDiv);
+                    }
+
+                    // Attachment
+                    if (message.has_attachment && message.attachment_filename) {
+                        const attachmentDiv = document.createElement('div');
+                        attachmentDiv.className = 'sms-message-attachment';
+                        
+                        const img = document.createElement('img');
+                        img.src = `/imessages/${message.id}/attachment`;
+                        img.alt = message.attachment_filename;
+                        img.style.maxWidth = '200px';
+                        img.style.maxHeight = '200px';
+                        img.style.objectFit = 'contain';
+                        
+                        img.onerror = function() {
+                            // If image fails to load, show filename
+                            attachmentDiv.innerHTML = `<div style="padding: 8px; background-color: rgba(0,0,0,0.1); border-radius: 4px; font-size: 12px;">${message.attachment_filename}</div>`;
+                        };
+                        
+                        img.addEventListener('click', () => {
+                            showFullAttachment(message.id, message.attachment_filename, message.attachment_type);
+                        });
+                        
+                        attachmentDiv.appendChild(img);
+                        bubble.appendChild(attachmentDiv);
+                    }
+
+                    messageDiv.appendChild(bubble);
+                    messagesContainer.appendChild(messageDiv);
+                });
+
+                // Scroll to bottom
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+
+            function showFullAttachment(messageId, filename, contentType) {
+                // Use existing single image modal
+                const modal = document.getElementById('single-image-modal');
+                const modalImg = document.getElementById('single-image-modal-img');
+                const modalVideo = document.getElementById('single-image-modal-video');
+                const modalAudio = document.getElementById('single-image-modal-audio');
+                const modalPdf = document.getElementById('single-image-modal-pdf');
+                const modalDetails = document.getElementById('single-image-details');
+
+                if (!modal) return;
+
+                // Hide all media elements
+                modalImg.style.display = 'none';
+                modalVideo.style.display = 'none';
+                modalAudio.style.display = 'none';
+                modalPdf.style.display = 'none';
+
+                const attachmentUrl = `/imessages/${messageId}/attachment`;
+                const isImage = contentType && contentType.startsWith('image/');
+                const isVideo = contentType && contentType.startsWith('video/');
+                const isAudio = contentType && contentType.startsWith('audio/');
+                const isPdf = contentType === 'application/pdf';
+
+                if (modalDetails) {
+                    modalDetails.textContent = filename || 'Attachment';
+                }
+
+                if (isImage) {
+                    modalImg.src = attachmentUrl;
+                    modalImg.style.display = 'block';
+                } else if (isVideo) {
+                    modalVideo.src = attachmentUrl;
+                    modalVideo.style.display = 'block';
+                } else if (isAudio) {
+                    modalAudio.src = attachmentUrl;
+                    modalAudio.style.display = 'block';
+                } else if (isPdf) {
+                    modalPdf.src = attachmentUrl;
+                    modalPdf.style.display = 'block';
+                } else {
+                    // For other file types, try to show as image first
+                    modalImg.src = attachmentUrl;
+                    modalImg.style.display = 'block';
+                    modalImg.onerror = function() {
+                        // If it fails, show download link
+                        modalImg.style.display = 'none';
+                        if (modalDetails) {
+                            modalDetails.innerHTML = `<div style="padding: 20px; text-align: center;">
+                                <p>${filename || 'Attachment'}</p>
+                                <a href="${attachmentUrl}" download style="color: #4a90e2; text-decoration: underline;">Download</a>
+                            </div>`;
+                        }
+                    };
+                }
+
+                modal.style.display = 'flex';
+            }
+
+            function searchChatSessions(query) {
+                const searchTerm = query.toLowerCase().trim();
+                if (!searchTerm) {
+                    filteredSessions = [...chatSessions];
+                } else {
+                    filteredSessions = chatSessions.filter(session => 
+                        session.chat_session && session.chat_session.toLowerCase().includes(searchTerm)
+                    );
+                }
+                renderChatSessions();
+            }
+
+            async function deleteConversation() {
+                if (!currentSession) return;
+
+                // Show confirmation dialog
+                const confirmed = confirm(`Are you sure you want to delete the conversation "${currentSession}"?\n\nThis action cannot be undone.`);
+                if (!confirmed) {
+                    return;
+                }
+
+                try {
+                    const encodedSession = encodeURIComponent(currentSession);
+                    const response = await fetch(`/imessages/conversation/${encodedSession}`, {
+                        method: 'DELETE'
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.detail || 'Failed to delete conversation');
+                    }
+
+                    const result = await response.json();
+                    
+                    // Clear the conversation view
+                    currentSession = null;
+                    const titleElement = document.getElementById('sms-conversation-title');
+                    const deleteBtn = document.getElementById('sms-delete-conversation-btn');
+                    const messagesContainer = document.getElementById('sms-conversation-messages');
+                    const instructionsElement = document.getElementById('sms-conversation-instructions');
+                    
+                    if (titleElement) {
+                        titleElement.textContent = 'Select a conversation';
+                    }
+                    if (deleteBtn) {
+                        deleteBtn.style.display = 'none';
+                    }
+                    if (messagesContainer) {
+                        messagesContainer.innerHTML = '';
+                    }
+                    if (instructionsElement) {
+                        instructionsElement.style.display = 'block';
+                    }
+
+                    // Remove active state from all items
+                    const items = document.querySelectorAll('.sms-chat-session-item');
+                    items.forEach(item => item.classList.remove('active'));
+
+                    // Reload chat sessions list
+                    await loadChatSessions();
+                    
+                    alert(`Successfully deleted ${result.deleted_count} message(s) from the conversation.`);
+                } catch (error) {
+                    console.error('Error deleting conversation:', error);
+                    alert(`Error deleting conversation: ${error.message}`);
+                }
+            }
+
+            function init() {
+                const searchInput = document.getElementById('sms-chat-search');
+                if (searchInput) {
+                    searchInput.addEventListener('input', (e) => {
+                        searchChatSessions(e.target.value);
+                    });
+                }
+
+                const deleteBtn = document.getElementById('sms-delete-conversation-btn');
+                if (deleteBtn) {
+                    deleteBtn.addEventListener('click', (e) => {
+                        e.stopPropagation(); // Prevent any event bubbling
+                        deleteConversation();
+                    });
+                }
+
+                const closeBtn = document.getElementById('close-sms-messages-modal');
+                if (closeBtn) {
+                    closeBtn.addEventListener('click', () => {
+                        const modal = document.getElementById('sms-messages-modal');
+                        if (modal) {
+                            modal.style.display = 'none';
+                        }
+                    });
+                }
+
+                const modal = document.getElementById('sms-messages-modal');
+                if (modal) {
+                    modal.addEventListener('click', (e) => {
+                        if (e.target === modal) {
+                            modal.style.display = 'none';
+                        }
+                    });
+                }
+            }
+
+            function open() {
+                const modal = document.getElementById('sms-messages-modal');
+                if (modal) {
+                    modal.style.display = 'flex';
+                    loadChatSessions();
+                }
+            }
+
+            return { init, open };
         })(),
 
         ChangeUserId: (() => {
@@ -2980,7 +3487,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const updateGalleryImage = () => {
 
-                debugger;
+              
 
                 if (imageModalImgElement && currentGalleryImages.length > 0) {
                     const item = currentGalleryImages[currentGalleryIndex];
@@ -2989,6 +3496,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.log(item);
 
 
+                    debugger;
                     let src = "/getImage?id="+item.file_id
                     let alt = item.photo_description || `Image ${currentGalleryIndex + 1}`;
                     let srcType = item.file_type;
@@ -3369,6 +3877,7 @@ document.addEventListener('DOMContentLoaded', () => {
             Modals.Locations.init();
             Modals.ImageGallery.init();
             Modals.EmailGallery.init();
+            Modals.SMSMessages.init();
             Modals.SingleImageDisplay.init();
             Modals.ConfirmationModal.init();
             Modals.ChangeUserId.init();
@@ -3445,7 +3954,7 @@ document.addEventListener('DOMContentLoaded', () => {
             AppState.sseEventSource.onopen = () => {  console.log("SSE Connection Opened with clientId:", AppState.clientId);};
             AppState.sseEventSource.onmessage = (event) => {
                 console.log("SSE Message Received:", event.data);
-                debugger;
+       
                 try {
                     const data = JSON.parse(event.data);
                     if (data.action === "execute_js" && data.functionName && browserFunctions[data.functionName]) {
@@ -4472,11 +4981,703 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Add active class to clicked button and corresponding content
                     button.classList.add('active');
                     const targetContent = document.getElementById(`${targetTab}-tab`);
-                    if (targetContent) {
+                        if (targetContent) {
                         targetContent.classList.add('active');
+                    }
+                    
+                    // Load folders when controls tab is opened
+                    if (targetTab === 'controls') {
+                        loadFolders();
+                        checkInitialStatus();
+                    }
+                    
+                    // Initialize images grid when images-grid tab is opened
+                    if (targetTab === 'images-grid') {
+                        // Check if loadImages function exists and call it
+                        if (typeof loadImages === 'function') {
+                            setTimeout(() => {
+                                const imagesGrid = document.getElementById('images-grid');
+                                if (imagesGrid && (imagesGrid.innerHTML === '' || imagesGrid.style.display === 'none')) {
+                                    loadImages(1);
+                                }
+                            }, 100);
+                        }
                     }
                 });
             });
+
+            // Email Processing Controls
+            const processAllFoldersCheckbox = document.getElementById('process-all-folders');
+            const folderSelect = document.getElementById('folder-select');
+            const folderSelectionGroup = document.getElementById('folder-selection-group');
+            const newOnlyOption = document.getElementById('new-only-option');
+            const startProcessingBtn = document.getElementById('start-processing-btn');
+            const cancelProcessingBtn = document.getElementById('cancel-processing-btn');
+            const processingStatus = document.getElementById('processing-status');
+            const processingStatusMessage = document.getElementById('processing-status-message');
+            const processingStatusDetails = document.getElementById('processing-status-details');
+            const processingProgressContainer = document.getElementById('processing-progress-container');
+            const currentLabelName = document.getElementById('current-label-name');
+            const labelProgressText = document.getElementById('label-progress-text');
+            const processingProgressBar = document.getElementById('processing-progress-bar');
+            const progressBarText = document.getElementById('progress-bar-text');
+            const emailsProcessedCount = document.getElementById('emails-processed-count');
+            let eventSource = null;
+
+            // Toggle folder selection based on "Process All" checkbox
+            if (processAllFoldersCheckbox) {
+                // Set initial state
+                if (processAllFoldersCheckbox.checked) {
+                    folderSelectionGroup.style.display = 'none';
+                }
+                
+                processAllFoldersCheckbox.addEventListener('change', (e) => {
+                    if (e.target.checked) {
+                        folderSelectionGroup.style.display = 'none';
+                    } else {
+                        folderSelectionGroup.style.display = 'block';
+                    }
+                });
+            }
+
+            // Load folders from API
+            async function loadFolders() {
+                if (!folderSelect) return;
+                
+                try {
+                    const response = await fetch('/emails/folders');
+                    if (!response.ok) {
+                        throw new Error(`Failed to load folders: ${response.statusText}`);
+                    }
+                    const folders = await response.json();
+                    
+                    folderSelect.innerHTML = '';
+                    folders.forEach(folder => {
+                        const option = document.createElement('option');
+                        option.value = folder.name;
+                        option.textContent = folder.name;
+                        folderSelect.appendChild(option);
+                    });
+                } catch (error) {
+                    folderSelect.innerHTML = '<option value="">Error loading folders</option>';
+                    showProcessingStatus('error', 'Failed to load folders', error.message);
+                }
+            }
+
+            // Close SSE connection if open
+            function closeEventSource() {
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
+            }
+
+            // Request browser notification permission
+            async function requestNotificationPermission() {
+                if ('Notification' in window && Notification.permission === 'default') {
+                    await Notification.requestPermission();
+                }
+            }
+
+            // Show browser notification
+            function showNotification(title, body, icon = null) {
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification(title, {
+                        body: body,
+                        icon: icon || '/static/images/expert.png',
+                        tag: 'email-processing'
+                    });
+                }
+            }
+
+            // Update progress display
+            function updateProgressDisplay(progressData) {
+                if (!processingProgressContainer) return;
+
+                const {
+                    current_label,
+                    current_label_index,
+                    total_labels,
+                    emails_processed,
+                    status
+                } = progressData;
+
+                // Show progress container when processing starts
+                if (status === 'in_progress') {
+                    processingProgressContainer.style.display = 'block';
+                }
+
+                // Update current label
+                if (currentLabelName) {
+                    currentLabelName.textContent = current_label || 'Waiting...';
+                }
+
+                // Update label progress
+                if (labelProgressText) {
+                    labelProgressText.textContent = `${current_label_index} / ${total_labels}`;
+                }
+
+                // Update progress bar
+                if (total_labels > 0 && processingProgressBar && progressBarText) {
+                    const percentage = Math.round((current_label_index / total_labels) * 100);
+                    processingProgressBar.style.width = `${percentage}%`;
+                    progressBarText.textContent = `${percentage}%`;
+                }
+
+                // Update emails processed count
+                if (emailsProcessedCount) {
+                    emailsProcessedCount.textContent = emails_processed || 0;
+                }
+            }
+
+            // Connect to SSE stream
+            function connectToProgressStream() {
+                // Close existing connection if any
+                closeEventSource();
+
+                // Request notification permission
+                requestNotificationPermission();
+
+                // Create EventSource connection
+                eventSource = new EventSource('/emails/process/stream');
+
+                eventSource.onmessage = (event) => {
+                    try {
+                        const eventData = JSON.parse(event.data);
+                        handleProgressEvent(eventData);
+                    } catch (error) {
+                        console.error('Error parsing SSE event:', error);
+                    }
+                };
+
+                eventSource.onerror = (error) => {
+                    console.error('SSE connection error:', error);
+                    // Don't close on error - EventSource will attempt to reconnect
+                };
+
+                // Clean up on page unload
+                window.addEventListener('beforeunload', () => {
+                    closeEventSource();
+                });
+            }
+
+            // Handle progress events from SSE
+            function handleProgressEvent(eventData) {
+                const { type, data } = eventData;
+
+                switch (type) {
+                    case 'progress':
+                        updateProgressDisplay(data);
+                        if (data.status === 'in_progress') {
+                            cancelProcessingBtn.style.display = 'inline-block';
+                            startProcessingBtn.disabled = true;
+                            showProcessingStatus('info', 'Processing in progress...', `Processing label ${data.current_label_index} of ${data.total_labels}`);
+                        }
+                        break;
+
+                    case 'completed':
+                        updateProgressDisplay(data);
+                        cancelProcessingBtn.style.display = 'none';
+                        startProcessingBtn.disabled = false;
+                        showProcessingStatus('success', 'Processing completed', `Successfully processed ${data.emails_processed} emails from ${data.total_labels} label(s).`);
+                        showNotification('Email Processing Complete', `Processed ${data.emails_processed} emails from ${data.total_labels} label(s).`);
+                        closeEventSource();
+                        break;
+
+                    case 'error':
+                        updateProgressDisplay(data);
+                        cancelProcessingBtn.style.display = 'none';
+                        startProcessingBtn.disabled = false;
+                        showProcessingStatus('error', 'Processing error', data.error_message || 'An error occurred during processing.');
+                        showNotification('Email Processing Error', data.error_message || 'An error occurred during processing.');
+                        closeEventSource();
+                        break;
+
+                    case 'cancelled':
+                        updateProgressDisplay(data);
+                        cancelProcessingBtn.style.display = 'none';
+                        startProcessingBtn.disabled = false;
+                        showProcessingStatus('info', 'Processing cancelled', data.error_message || 'Processing was cancelled.');
+                        showNotification('Email Processing Cancelled', 'Processing was cancelled by user.');
+                        closeEventSource();
+                        break;
+
+                    case 'heartbeat':
+                        // Keep connection alive - no UI update needed
+                        break;
+
+                    default:
+                        console.log('Unknown event type:', type);
+                }
+            }
+
+            // Check initial processing status
+            async function checkInitialStatus() {
+                if (!processingStatus) return;
+                
+                try {
+                    const response = await fetch('/emails/process/status');
+                    if (!response.ok) {
+                        return;
+                    }
+                    const status = await response.json();
+                    
+                    if (status.in_progress) {
+                        cancelProcessingBtn.style.display = 'inline-block';
+                        startProcessingBtn.disabled = true;
+                        // Connect to stream to get updates
+                        connectToProgressStream();
+                    } else {
+                        cancelProcessingBtn.style.display = 'none';
+                        startProcessingBtn.disabled = false;
+                    }
+                } catch (error) {
+                    console.error('Error checking initial status:', error);
+                }
+            }
+
+            // Show processing status message
+            function showProcessingStatus(type, message, details = '') {
+                if (!processingStatus) return;
+                
+                // Remove all status classes
+                processingStatus.classList.remove('success', 'error', 'info');
+                // Add the new status class
+                processingStatus.classList.add(type);
+                processingStatus.style.display = 'block';
+                processingStatusMessage.textContent = message;
+                processingStatusDetails.textContent = details;
+            }
+
+            // Start processing
+            if (startProcessingBtn) {
+                startProcessingBtn.addEventListener('click', async () => {
+                    const allFolders = processAllFoldersCheckbox?.checked || false;
+                    const newOnly = newOnlyOption?.checked || false;
+                    let labels = null;
+                    
+                    if (!allFolders) {
+                        const selectedOptions = Array.from(folderSelect?.selectedOptions || []);
+                        labels = selectedOptions.map(opt => opt.value);
+                        
+                        if (labels.length === 0) {
+                            showProcessingStatus('error', 'No folders selected', 'Please select at least one folder or check "Process All Folders".');
+                            return;
+                        }
+                    }
+                    
+                    const requestBody = {
+                        all_folders: allFolders,
+                        new_only: newOnly,
+                        labels: labels
+                    };
+                    
+                    try {
+                        startProcessingBtn.disabled = true;
+                        showProcessingStatus('info', 'Starting processing...', 'Sending request to server...');
+                        
+                        const response = await fetch('/emails/process', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(requestBody)
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (response.ok) {
+                            showProcessingStatus('info', 'Processing started', result.message || 'Email processing has been initiated.');
+                            cancelProcessingBtn.style.display = 'inline-block';
+                            
+                            // Connect to SSE stream for real-time updates
+                            connectToProgressStream();
+                        } else {
+                            showProcessingStatus('error', 'Failed to start processing', result.detail || 'An error occurred while starting processing.');
+                            startProcessingBtn.disabled = false;
+                        }
+                    } catch (error) {
+                        showProcessingStatus('error', 'Error starting processing', error.message);
+                        startProcessingBtn.disabled = false;
+                    }
+                });
+            }
+
+            // Cancel processing
+            if (cancelProcessingBtn) {
+                cancelProcessingBtn.addEventListener('click', async () => {
+                    try {
+                        cancelProcessingBtn.disabled = true;
+                        showProcessingStatus('info', 'Cancelling processing...', 'Sending cancellation request...');
+                        
+                        const response = await fetch('/emails/process/cancel', {
+                            method: 'POST'
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.cancelled) {
+                            showProcessingStatus('info', 'Cancellation requested', result.message || 'Processing cancellation has been requested.');
+                            // The SSE stream will send the cancelled event
+                        } else {
+                            showProcessingStatus('info', 'No processing in progress', result.message || 'No email processing is currently in progress.');
+                            closeEventSource();
+                        }
+                    } catch (error) {
+                        showProcessingStatus('error', 'Error cancelling processing', error.message);
+                    } finally {
+                        cancelProcessingBtn.disabled = false;
+                    }
+                });
+            }
+
+            // iMessage Import Controls
+            const startImessageImportBtn = document.getElementById('start-imessage-import-btn');
+            const cancelImessageImportBtn = document.getElementById('cancel-imessage-import-btn');
+            const imessageImportStatus = document.getElementById('imessage-import-status');
+            const imessageImportStatusMessage = document.getElementById('imessage-import-status-message');
+            const imessageImportStatusDetails = document.getElementById('imessage-import-status-details');
+            const imessageImportProgressContainer = document.getElementById('imessage-import-progress-container');
+            const imessageDirectoryPath = document.getElementById('imessage-directory-path');
+            const imessageMissingAttachmentsList = document.getElementById('imessage-missing-attachments-list');
+            const imessageMissingFilenames = document.getElementById('imessage-missing-filenames');
+            let imessageImportInProgress = false;
+            let imessageEventSource = null;
+
+            // Show iMessage import status
+            function showImessageImportStatus(type, message, details = '') {
+                if (!imessageImportStatus) return;
+                
+                imessageImportStatus.classList.remove('success', 'error', 'info');
+                imessageImportStatus.classList.add(type);
+                imessageImportStatus.style.display = 'block';
+                if (imessageImportStatusMessage) {
+                    imessageImportStatusMessage.textContent = message;
+                }
+                if (imessageImportStatusDetails) {
+                    imessageImportStatusDetails.textContent = details;
+                }
+            }
+
+            // Close iMessage import SSE connection
+            function closeImessageEventSource() {
+                if (imessageEventSource) {
+                    imessageEventSource.close();
+                    imessageEventSource = null;
+                }
+            }
+
+            // Connect to iMessage import SSE stream
+            function connectToImessageProgressStream() {
+                // Close existing connection if any
+                closeImessageEventSource();
+
+                // Create EventSource connection
+                imessageEventSource = new EventSource('/imessages/import/stream');
+
+                imessageEventSource.onmessage = (event) => {
+                    try {
+                        const eventData = JSON.parse(event.data);
+                        handleImessageProgressEvent(eventData);
+                    } catch (error) {
+                        console.error('Error parsing iMessage SSE event:', error);
+                    }
+                };
+
+                imessageEventSource.onerror = (error) => {
+                    console.error('iMessage SSE connection error:', error);
+                    // Don't close on error - EventSource will attempt to reconnect
+                };
+
+                // Clean up on page unload
+                window.addEventListener('beforeunload', () => {
+                    closeImessageEventSource();
+                });
+            }
+
+            // Handle iMessage import progress events
+            function handleImessageProgressEvent(eventData) {
+                const { type, data } = eventData;
+
+                switch (type) {
+                    case 'progress':
+                        updateImessageImportProgress(data);
+                        if (data.status === 'in_progress') {
+                            cancelImessageImportBtn.style.display = 'inline-block';
+                            startImessageImportBtn.disabled = true;
+                            showImessageImportStatus('info', 'Import in progress...', `Processing conversation ${data.conversations_processed} of ${data.total_conversations}`);
+                        }
+                        break;
+
+                    case 'completed':
+                        updateImessageImportProgress(data);
+                        cancelImessageImportBtn.style.display = 'none';
+                        startImessageImportBtn.disabled = false;
+                        imessageImportInProgress = false;
+                        const progressBar = document.getElementById('imessage-import-progress-bar');
+                        const progressBarText = document.getElementById('imessage-progress-bar-text');
+                        if (progressBar && progressBarText) {
+                            progressBar.style.width = '100%';
+                            progressBarText.textContent = '100%';
+                        }
+                        showImessageImportStatus(
+                            'success',
+                            'Import completed successfully',
+                            `Processed ${data.conversations_processed} conversation(s). ` +
+                            `Imported ${data.messages_imported} message(s) ` +
+                            `(${data.messages_created} created, ${data.messages_updated} updated). ` +
+                            `Found ${data.attachments_found} attachment(s), ` +
+                            `${data.attachments_missing} missing, ` +
+                            `${data.errors} error(s).`
+                        );
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('iMessage Import Complete', {
+                                body: `Imported ${data.messages_imported} messages from ${data.conversations_processed} conversations.`,
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeImessageEventSource();
+                        break;
+
+                    case 'error':
+                        updateImessageImportProgress(data);
+                        cancelImessageImportBtn.style.display = 'none';
+                        startImessageImportBtn.disabled = false;
+                        imessageImportInProgress = false;
+                        showImessageImportStatus('error', 'Import error', data.error_message || 'An error occurred during import.');
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('iMessage Import Error', {
+                                body: data.error_message || 'An error occurred during import.',
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeImessageEventSource();
+                        break;
+
+                    case 'cancelled':
+                        updateImessageImportProgress(data);
+                        cancelImessageImportBtn.style.display = 'none';
+                        startImessageImportBtn.disabled = false;
+                        imessageImportInProgress = false;
+                        showImessageImportStatus('info', 'Import cancelled', data.error_message || 'Import was cancelled.');
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('iMessage Import Cancelled', {
+                                body: 'Import was cancelled by user.',
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeImessageEventSource();
+                        break;
+
+                    case 'heartbeat':
+                        // Keep connection alive - no UI update needed
+                        break;
+
+                    default:
+                        console.log('Unknown iMessage event type:', type);
+                }
+            }
+
+            // Update iMessage import progress
+            function updateImessageImportProgress(stats) {
+                if (!imessageImportProgressContainer) return;
+                
+                imessageImportProgressContainer.style.display = 'block';
+                
+                const currentConversationName = document.getElementById('current-conversation-name');
+                const imessageProgressText = document.getElementById('imessage-progress-text');
+                const imessageImportProgressBar = document.getElementById('imessage-import-progress-bar');
+                const imessageProgressBarText = document.getElementById('imessage-progress-bar-text');
+                const imessageMessagesImported = document.getElementById('imessage-messages-imported');
+                const imessageMessagesCreated = document.getElementById('imessage-messages-created');
+                const imessageMessagesUpdated = document.getElementById('imessage-messages-updated');
+                const imessageAttachmentsFound = document.getElementById('imessage-attachments-found');
+                const imessageAttachmentsMissing = document.getElementById('imessage-attachments-missing');
+                const imessageErrors = document.getElementById('imessage-errors');
+
+                if (currentConversationName) {
+                    currentConversationName.textContent = stats.current_conversation || '-';
+                }
+
+                if (imessageProgressText && stats.total_conversations > 0) {
+                    imessageProgressText.textContent = `${stats.conversations_processed} / ${stats.total_conversations}`;
+                }
+
+                if (imessageImportProgressBar && imessageProgressBarText && stats.total_conversations > 0) {
+                    const percentage = Math.round((stats.conversations_processed / stats.total_conversations) * 100);
+                    imessageImportProgressBar.style.width = `${percentage}%`;
+                    imessageProgressBarText.textContent = `${percentage}%`;
+                }
+
+                if (imessageMessagesImported) {
+                    imessageMessagesImported.textContent = stats.messages_imported || 0;
+                }
+                if (imessageMessagesCreated) {
+                    imessageMessagesCreated.textContent = stats.messages_created || 0;
+                }
+                if (imessageMessagesUpdated) {
+                    imessageMessagesUpdated.textContent = stats.messages_updated || 0;
+                }
+                if (imessageAttachmentsFound) {
+                    imessageAttachmentsFound.textContent = stats.attachments_found || 0;
+                }
+                if (imessageAttachmentsMissing) {
+                    imessageAttachmentsMissing.textContent = stats.attachments_missing || 0;
+                }
+                if (imessageErrors) {
+                    imessageErrors.textContent = stats.errors || 0;
+                }
+
+                // Update missing attachment filenames
+                if (stats.missing_attachment_filenames && stats.missing_attachment_filenames.length > 0) {
+                    if (imessageMissingAttachmentsList) {
+                        imessageMissingAttachmentsList.style.display = 'block';
+                    }
+                    if (imessageMissingFilenames) {
+                        imessageMissingFilenames.innerHTML = stats.missing_attachment_filenames
+                            .map(filename => `<div style="margin-bottom: 4px;">${filename}</div>`)
+                            .join('');
+                    }
+                } else {
+                    if (imessageMissingAttachmentsList) {
+                        imessageMissingAttachmentsList.style.display = 'none';
+                    }
+                }
+            }
+
+            // Check initial iMessage import status
+            async function checkInitialImessageStatus() {
+                if (!imessageImportStatus) return;
+                
+                try {
+                    const response = await fetch('/imessages/import/status');
+                    if (!response.ok) {
+                        return;
+                    }
+                    const status = await response.json();
+                    
+                    if (status.in_progress) {
+                        cancelImessageImportBtn.style.display = 'inline-block';
+                        startImessageImportBtn.disabled = true;
+                        imessageImportInProgress = true;
+                        // Connect to stream to get updates
+                        connectToImessageProgressStream();
+                        updateImessageImportProgress(status);
+                    } else {
+                        cancelImessageImportBtn.style.display = 'none';
+                        startImessageImportBtn.disabled = false;
+                        imessageImportInProgress = false;
+                    }
+                } catch (error) {
+                    console.error('Error checking initial iMessage import status:', error);
+                }
+            }
+
+            // Start iMessage import
+            if (startImessageImportBtn) {
+                startImessageImportBtn.addEventListener('click', async () => {
+                    const directoryPath = imessageDirectoryPath?.value?.trim();
+                    
+                    if (!directoryPath) {
+                        showImessageImportStatus('error', 'Directory path required', 'Please enter a directory path.');
+                        return;
+                    }
+                    
+                    if (imessageImportInProgress) {
+                        showImessageImportStatus('error', 'Import already in progress', 'Please wait for the current import to complete.');
+                        return;
+                    }
+                    
+                    try {
+                        imessageImportInProgress = true;
+                        startImessageImportBtn.disabled = true;
+                        cancelImessageImportBtn.style.display = 'inline-block';
+                        showImessageImportStatus('info', 'Starting import...', 'Sending request to server...');
+                        
+                        // Clear previous missing filenames
+                        if (imessageMissingFilenames) {
+                            imessageMissingFilenames.innerHTML = '';
+                        }
+                        if (imessageMissingAttachmentsList) {
+                            imessageMissingAttachmentsList.style.display = 'none';
+                        }
+                        
+                        updateImessageImportProgress({
+                            conversations_processed: 0,
+                            total_conversations: 0,
+                            messages_imported: 0,
+                            messages_created: 0,
+                            messages_updated: 0,
+                            attachments_found: 0,
+                            attachments_missing: 0,
+                            missing_attachment_filenames: [],
+                            errors: 0
+                        });
+                        
+                        const response = await fetch('/imessages/import', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                directory_path: directoryPath
+                            })
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (response.ok) {
+                            showImessageImportStatus('info', 'Import started', result.message || 'iMessage import has been initiated.');
+                            
+                            // Connect to SSE stream for real-time updates
+                            connectToImessageProgressStream();
+                        } else {
+                            showImessageImportStatus('error', 'Failed to start import', result.detail || 'An error occurred while starting import.');
+                            imessageImportProgressContainer.style.display = 'none';
+                            imessageImportInProgress = false;
+                            startImessageImportBtn.disabled = false;
+                            cancelImessageImportBtn.style.display = 'none';
+                        }
+                    } catch (error) {
+                        showImessageImportStatus('error', 'Error starting import', error.message);
+                        imessageImportProgressContainer.style.display = 'none';
+                        imessageImportInProgress = false;
+                        startImessageImportBtn.disabled = false;
+                        cancelImessageImportBtn.style.display = 'none';
+                    }
+                });
+            }
+
+            // Cancel iMessage import
+            if (cancelImessageImportBtn) {
+                cancelImessageImportBtn.addEventListener('click', async () => {
+                    try {
+                        cancelImessageImportBtn.disabled = true;
+                        showImessageImportStatus('info', 'Cancelling import...', 'Sending cancellation request...');
+                        
+                        const response = await fetch('/imessages/import/cancel', {
+                            method: 'POST'
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.cancelled) {
+                            showImessageImportStatus('info', 'Cancellation requested', result.message || 'Import cancellation has been requested.');
+                            // The SSE stream will send the cancelled event
+                        } else {
+                            showImessageImportStatus('info', 'No import in progress', result.message || 'No iMessage import is currently in progress.');
+                            closeImessageEventSource();
+                        }
+                    } catch (error) {
+                        showImessageImportStatus('error', 'Error cancelling import', error.message);
+                    } finally {
+                        cancelImessageImportBtn.disabled = false;
+                    }
+                });
+            }
+
+            // Check initial status on page load
+            checkInitialImessageStatus();
 
             // Sidebar button event listeners
             if (DOM.fbAlbumsSidebarBtn) {
@@ -4506,6 +5707,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (DOM.emailGallerySidebarBtn) {
                 DOM.emailGallerySidebarBtn.addEventListener('click', () => {
                     Modals.EmailGallery.open();
+                });
+            }
+
+            const smsMessagesSidebarBtn = document.getElementById('sms-messages-sidebar-btn');
+            if (smsMessagesSidebarBtn) {
+                smsMessagesSidebarBtn.addEventListener('click', () => {
+                    Modals.SMSMessages.open();
                 });
             }
 

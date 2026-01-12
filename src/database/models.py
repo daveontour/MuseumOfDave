@@ -67,3 +67,29 @@ class Attachment(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     email = relationship("Email", back_populates="attachments")
+
+
+class IMessage(Base):
+    """iMessage model."""
+
+    __tablename__ = "imessages"
+
+    id = Column(Integer, primary_key=True)
+    chat_session = Column(String(500))
+    message_date = Column(DateTime)
+    delivered_date = Column(DateTime, nullable=True)
+    read_date = Column(DateTime, nullable=True)
+    edited_date = Column(DateTime, nullable=True)
+    service = Column(String(100))
+    type = Column(String(50))  # Incoming or Outgoing
+    sender_id = Column(String(255), nullable=True)
+    sender_name = Column(String(500), nullable=True)
+    status = Column(String(100))
+    replying_to = Column(String(500), nullable=True)
+    subject = Column(String(1000), nullable=True)
+    text = Column(Text, nullable=True)
+    attachment_filename = Column(String(500), nullable=True)
+    attachment_type = Column(String(255), nullable=True)
+    attachment_data = Column(LargeBinary, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

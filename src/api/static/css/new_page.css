@@ -1244,12 +1244,155 @@ body {
     overflow: hidden;
 }
 
+#images-grid-tab.active {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
 #images-grid-iframe {
     width: 100%;
     border: none;
     flex: 1;
     min-height: 0;
     display: block;
+}
+
+#controls-tab {
+    padding: 20px;
+    overflow-y: auto;
+}
+
+#folder-select {
+    font-family: inherit;
+    font-size: 14px;
+}
+
+#processing-status {
+    transition: all 0.3s ease;
+}
+
+#processing-status.success {
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+}
+
+#processing-status.success #processing-status-message {
+    color: #155724;
+}
+
+#processing-status.success #processing-status-details {
+    color: #155724;
+}
+
+#processing-status.error {
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+}
+
+#processing-status.error #processing-status-message {
+    color: #721c24;
+}
+
+#processing-status.error #processing-status-details {
+    color: #721c24;
+}
+
+#processing-status.info {
+    background-color: #d1ecf1;
+    border-color: #bee5eb;
+}
+
+#processing-status.info #processing-status-message {
+    color: #0c5460;
+}
+
+#processing-status.info #processing-status-details {
+    color: #0c5460;
+}
+
+/* Progress display elements */
+#processing-progress-container {
+    margin-top: 15px;
+    padding: 15px;
+    background-color: rgba(255, 255, 255, 0.5);
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+}
+
+#processing-current-label {
+    color: #333;
+    font-size: 0.95em;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+#processing-current-label strong {
+    color: #495057;
+}
+
+#current-label-name {
+    color: #007bff;
+    font-weight: 600;
+}
+
+#processing-label-progress {
+    color: #666;
+    font-size: 0.9em;
+    margin-bottom: 10px;
+}
+
+#processing-label-progress strong {
+    color: #495057;
+}
+
+#label-progress-text {
+    color: #28a745;
+    font-weight: 600;
+}
+
+#processing-progress-bar-container {
+    width: 100%;
+    background-color: #e9ecef;
+    border-radius: 4px;
+    height: 24px;
+    margin-bottom: 10px;
+    overflow: hidden;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+#processing-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
+    width: 0%;
+    transition: width 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 0.85em;
+    font-weight: bold;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+#processing-progress-bar[style*="width: 0%"] {
+    background: #e9ecef;
+    color: #6c757d;
+}
+
+#processing-emails-count {
+    color: #666;
+    font-size: 0.9em;
+}
+
+#processing-emails-count strong {
+    color: #495057;
+}
+
+#emails-processed-count {
+    color: #007bff;
+    font-weight: 600;
+    font-size: 1.1em;
 }
 
 .close-btn, .hamburger-btn { /* Grouped similar button styles */
@@ -1408,6 +1551,11 @@ body {
     justify-content: center;
     align-items: center;
     overflow-y: auto; /* For modals taller than viewport */
+}
+
+/* Single image modal should appear above other modals */
+#single-image-modal {
+    z-index: 3000 !important;
 }
 /* Ensure JS-shown modals are actually flexed */
 .modal[style*="display: flex"] {
@@ -2222,6 +2370,157 @@ body {
 }
 
 /* Email Gallery Modal Styles */
+/* --- SMS Messages Modal --- */
+#sms-chat-sessions-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.sms-chat-session-item {
+    padding: 12px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid #e0e0e0;
+    transition: background-color 0.2s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.sms-chat-session-item:hover {
+    background-color: #e9ecef;
+}
+
+.sms-chat-session-item.active {
+    background-color: #4a90e2;
+    color: white;
+}
+
+.sms-chat-session-item.active:hover {
+    background-color: #233366;
+}
+
+.sms-chat-session-name {
+    font-weight: 500;
+    font-size: 14px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sms-chat-session-count {
+    font-size: 12px;
+    color: #666;
+    margin-left: 8px;
+    background-color: #e0e0e0;
+    padding: 2px 8px;
+    border-radius: 12px;
+}
+
+.sms-chat-session-item.active .sms-chat-session-count {
+    background-color: rgba(255, 255, 255, 0.3);
+    color: white;
+}
+
+.sms-chat-session-item.active .sms-chat-session-name i {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+#sms-delete-conversation-btn:hover {
+    background-color: rgba(220, 53, 69, 0.1);
+}
+
+#sms-delete-conversation-btn:active {
+    background-color: rgba(220, 53, 69, 0.2);
+}
+
+.sms-message {
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    max-width: 70%;
+    word-wrap: break-word;
+}
+
+.sms-message.incoming {
+    align-self: flex-start;
+    align-items: flex-start;
+}
+
+.sms-message.outgoing {
+    align-self: flex-end;
+    align-items: flex-end;
+}
+
+.sms-message-bubble {
+    padding: 10px 14px;
+    border-radius: 18px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    position: relative;
+}
+
+.sms-message.incoming .sms-message-bubble {
+    background-color: #ffffff;
+    border-bottom-left-radius: 4px;
+}
+
+.sms-message.outgoing .sms-message-bubble {
+    background-color: #4a90e2;
+    color: white;
+    border-bottom-right-radius: 4px;
+}
+
+.sms-message-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: #666;
+    padding: 0 4px;
+}
+
+.sms-message.outgoing .sms-message-header {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.sms-message-sender {
+    font-weight: 600;
+}
+
+.sms-message-date {
+    margin-left: 8px;
+    font-size: 11px;
+}
+
+.sms-message-text {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.sms-message-attachment {
+    margin-top: 8px;
+    cursor: pointer;
+    border-radius: 8px;
+    overflow: hidden;
+    max-width: 200px;
+}
+
+.sms-message-attachment img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 8px;
+}
+
+.sms-message-attachment:hover {
+    opacity: 0.9;
+    transform: scale(1.02);
+    transition: transform 0.2s, opacity 0.2s;
+}
+
 .email-gallery-modal-content {
     width: 90vw;
     max-width: 90vw;
@@ -2408,6 +2707,34 @@ body {
 
 .email-body p:last-child {
     margin-bottom: 0;
+}
+
+.email-metadata {
+    background: #e8f4f8;
+    border-radius: 6px;
+    padding: 12px;
+}
+
+.info-row {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid #e0e0e0;
+    font-size: 0.9em;
+}
+
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-label {
+    font-weight: 600;
+    color: #555;
+}
+
+.info-value {
+    color: #333;
 }
 
 #email-gallery-instructions {

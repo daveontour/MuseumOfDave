@@ -2,21 +2,24 @@
 
 import os
 import threading
+import json
+import asyncio
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Response, BackgroundTasks, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
-from sqlalchemy import or_, func
+from sqlalchemy import or_, func, and_, extract
 from sqlalchemy.orm import joinedload
 
-from ..database import Database, Attachment, Email
+from ..database import Database, Attachment, Email, IMessage
 from ..database.storage import EmailStorage
 from ..loader import EmailDatabaseLoader
 from ..config import get_config
+from ..messageimport.imessageimport import import_imessages_from_directory
 
 # Create FastAPI app instance
 app = FastAPI(
@@ -43,6 +46,138 @@ processing_lock = threading.Lock()
 processing_cancelled = threading.Event()
 processing_in_progress = False
 
+# Progress state for SSE streaming
+processing_progress: Dict[str, Any] = {
+    "current_label": None,
+    "current_label_index": 0,
+    "total_labels": 0,
+    "emails_processed": 0,
+    "status": "idle",  # idle, in_progress, completed, cancelled, error
+    "error_message": None,
+    "labels": []
+}
+
+# SSE event queue for broadcasting progress updates
+sse_clients: List[asyncio.Queue] = []
+sse_clients_lock = threading.Lock()
+
+# iMessage import state management
+imessage_import_lock = threading.Lock()
+imessage_import_cancelled = threading.Event()
+imessage_import_in_progress = False
+
+# Progress state for iMessage import SSE streaming
+imessage_import_progress: Dict[str, Any] = {
+    "current_conversation": None,
+    "conversations_processed": 0,
+    "total_conversations": 0,
+    "messages_imported": 0,
+    "messages_created": 0,
+    "messages_updated": 0,
+    "attachments_found": 0,
+    "attachments_missing": 0,
+    "missing_attachment_filenames": [],
+    "errors": 0,
+    "status": "idle",  # idle, in_progress, completed, cancelled, error
+    "error_message": None
+}
+
+# SSE event queue for iMessage import progress updates
+imessage_sse_clients: List[asyncio.Queue] = []
+imessage_sse_clients_lock = threading.Lock()
+
+
+def update_imessage_progress_state(**kwargs):
+    """Thread-safe function to update iMessage import progress state."""
+    global imessage_import_progress
+    with imessage_import_lock:
+        for key, value in kwargs.items():
+            if key in imessage_import_progress:
+                if key == "missing_attachment_filenames" and isinstance(value, list):
+                    # Replace the list with the new one (which already contains all missing files)
+                    imessage_import_progress[key] = value.copy()
+                else:
+                    imessage_import_progress[key] = value
+
+
+def get_imessage_progress_state() -> Dict[str, Any]:
+    """Thread-safe function to get current iMessage import progress state."""
+    global imessage_import_progress
+    with imessage_import_lock:
+        return imessage_import_progress.copy()
+
+
+def broadcast_imessage_progress_event_sync(event_type: str, data: Dict[str, Any]):
+    """Thread-safe function to queue iMessage import progress event for SSE clients."""
+    global imessage_sse_clients
+    event_data = {
+        "type": event_type,
+        "data": data
+    }
+    message = f"data: {json.dumps(event_data)}\n\n"
+    
+    # Queue message for all connected clients
+    with imessage_sse_clients_lock:
+        disconnected_clients = []
+        for client_queue in imessage_sse_clients:
+            try:
+                # Use put_nowait to avoid blocking
+                client_queue.put_nowait(message)
+            except asyncio.QueueFull:
+                # Queue is full, skip this client
+                pass
+            except Exception:
+                disconnected_clients.append(client_queue)
+        
+        # Remove disconnected clients
+        for client in disconnected_clients:
+            if client in imessage_sse_clients:
+                imessage_sse_clients.remove(client)
+
+
+def update_progress_state(**kwargs):
+    """Thread-safe function to update progress state."""
+    global processing_progress
+    with processing_lock:
+        for key, value in kwargs.items():
+            if key in processing_progress:
+                processing_progress[key] = value
+
+
+def get_progress_state() -> Dict[str, Any]:
+    """Thread-safe function to get current progress state."""
+    global processing_progress
+    with processing_lock:
+        return processing_progress.copy()
+
+
+def broadcast_progress_event_sync(event_type: str, data: Dict[str, Any]):
+    """Thread-safe function to queue progress event for SSE clients."""
+    global sse_clients
+    event_data = {
+        "type": event_type,
+        "data": data
+    }
+    message = f"data: {json.dumps(event_data)}\n\n"
+    
+    # Queue message for all connected clients
+    with sse_clients_lock:
+        disconnected_clients = []
+        for client_queue in sse_clients:
+            try:
+                # Use put_nowait to avoid blocking
+                client_queue.put_nowait(message)
+            except asyncio.QueueFull:
+                # Queue is full, skip this client
+                pass
+            except Exception:
+                disconnected_clients.append(client_queue)
+        
+        # Remove disconnected clients
+        for client in disconnected_clients:
+            if client in sse_clients:
+                sse_clients.remove(client)
+
 
 class ProcessLabelRequest(BaseModel):
     """Request model for processing emails by label."""
@@ -62,6 +197,26 @@ class ProcessLabelResponse(BaseModel):
 class MessageResponse(BaseModel):
     """Generic message response."""
     message: str
+    timestamp: datetime
+
+
+class ImportIMessagesRequest(BaseModel):
+    """Request model for importing iMessages from directory."""
+    directory_path: str
+
+
+class ImportIMessagesResponse(BaseModel):
+    """Response model for iMessage import."""
+    message: str
+    directory_path: str
+    conversations_processed: int
+    messages_imported: int
+    messages_created: int
+    messages_updated: int
+    attachments_found: int
+    attachments_missing: int
+    missing_attachment_filenames: List[str] = []
+    errors: int
     timestamp: datetime
 
 
@@ -155,10 +310,27 @@ def process_emails_background(labels: List[str], new_only: bool, result_dict: di
     """Background task coordinator that processes labels sequentially."""
     global processing_in_progress
     
+    # Filter out TRASH and SPAM folders
+    filtered_labels = [label for label in labels if label.upper() not in ["TRASH", "SPAM"]]
+    
     # Mark processing as started
     with processing_lock:
         processing_in_progress = True
         processing_cancelled.clear()
+    
+    # Initialize progress state
+    update_progress_state(
+        current_label=None,
+        current_label_index=0,
+        total_labels=len(filtered_labels),
+        emails_processed=0,
+        status="in_progress",
+        error_message=None,
+        labels=filtered_labels
+    )
+    
+    # Broadcast initial progress event
+    broadcast_progress_event_sync("progress", get_progress_state())
     
     try:
         # Initialize result dict
@@ -167,21 +339,26 @@ def process_emails_background(labels: List[str], new_only: bool, result_dict: di
         result_dict["error"] = ""
         
         # Process labels sequentially, one at a time
-        for label in labels:
+        for idx, label in enumerate(filtered_labels, start=1):
             # Check for cancellation before processing each label
             if processing_cancelled.is_set():
                 print(f"[Background Task] Processing cancelled by user")
                 result_dict["error"] = "Processing was cancelled by user"
                 result_dict["success"] = False
+                update_progress_state(status="cancelled", error_message="Processing was cancelled by user")
+                broadcast_progress_event_sync("cancelled", get_progress_state())
                 break
-            
-            # Skip TRASH and SPAM folders
-            if label.upper() in ["TRASH", "SPAM"]:
-                print(f"Skipping folder: {label}")
-                continue
             
             try:
                 print(f"[Background Task] Starting processing for label: {label}")
+                
+                # Update progress state - starting new label
+                update_progress_state(
+                    current_label=label,
+                    current_label_index=idx
+                )
+                broadcast_progress_event_sync("progress", get_progress_state())
+                
                 loader_instance = get_loader()
                 
                 # Check for cancellation before loading emails
@@ -189,19 +366,44 @@ def process_emails_background(labels: List[str], new_only: bool, result_dict: di
                     print(f"[Background Task] Processing cancelled before loading emails for {label}")
                     result_dict["error"] = "Processing was cancelled by user"
                     result_dict["success"] = False
+                    update_progress_state(status="cancelled", error_message="Processing was cancelled by user")
+                    broadcast_progress_event_sync("cancelled", get_progress_state())
                     break
                 
                 count = loader_instance.load_emails(label, new_only=new_only)
                 result_dict["count"] += count
                 result_dict["success"] = True  # Set to True if at least one succeeds
+                
+                # Update progress state - label completed
+                current_state = get_progress_state()
+                update_progress_state(emails_processed=current_state["emails_processed"] + count)
+                broadcast_progress_event_sync("progress", get_progress_state())
+                
                 print(f"[Background Task] Completed processing for label: {label}, processed {count} emails")
             except Exception as e:
                 error_msg = result_dict.get("error", "")
                 if error_msg:
                     error_msg += " "
-                result_dict["error"] = error_msg + f"Error processing {label}: {str(e)}; "
+                error_msg += f"Error processing {label}: {str(e)}; "
+                result_dict["error"] = error_msg
                 result_dict["success"] = False
+                
+                # Update progress state - error occurred
+                current_state = get_progress_state()
+                update_progress_state(
+                    status="error",
+                    error_message=error_msg
+                )
+                broadcast_progress_event_sync("error", get_progress_state())
+                
                 print(f"[Background Task] Error processing {label}: {str(e)}")
+        
+        # Mark as completed if not cancelled or errored
+        current_state = get_progress_state()
+        if current_state["status"] == "in_progress":
+            update_progress_state(status="completed")
+            broadcast_progress_event_sync("completed", get_progress_state())
+            
     finally:
         # Mark processing as completed
         with processing_lock:
@@ -219,12 +421,14 @@ async def root():
             "POST /emails/process": "Process emails from a list of labels",
             "POST /emails/process/cancel": "Cancel email processing if in progress",
             "GET /emails/process/status": "Get current email processing status",
+            "POST /imessages/import": "Import iMessages from a directory structure",
             "GET /emails/{email_id}/html": "Get email HTML content by ID",
             "GET /emails/{email_id}/text": "Get email plain text content by ID",
             "GET /emails/{email_id}/snippet": "Get email snippet by ID",
             "GET /emails/{email_id}/metadata": "Get email metadata by ID",
             "GET /emails/label": "Get metadata for all emails with given labels (query param: labels)",
             "GET /emails/folders": "Get list of available folders/labels from email server",
+            "GET /emails/search": "Search emails by metadata criteria (from, to, month, year, subject, to_from, has_attachments)",
             "GET /attachments/{attachment_id}": "Get attachment content",
             "GET /attachments/random": "Get random attachment with email metadata",
             "GET /attachments/by-id": "Get attachment by ID order (query param: offset)",
@@ -366,11 +570,580 @@ async def get_processing_status():
     """
     global processing_in_progress
     
+    progress_state = get_progress_state()
+    
     with processing_lock:
         return {
             "in_progress": processing_in_progress,
-            "cancelled": processing_cancelled.is_set()
+            "cancelled": processing_cancelled.is_set(),
+            **progress_state
         }
+
+
+def import_imessages_background(directory_path: str, result_dict: dict):
+    """Background function to import iMessages from directory."""
+    global imessage_import_in_progress
+    
+    # Mark processing as started
+    with imessage_import_lock:
+        imessage_import_in_progress = True
+        imessage_import_cancelled.clear()
+    
+    # Initialize progress state
+    update_imessage_progress_state(
+        current_conversation=None,
+        conversations_processed=0,
+        total_conversations=0,
+        messages_imported=0,
+        messages_created=0,
+        messages_updated=0,
+        attachments_found=0,
+        attachments_missing=0,
+        missing_attachment_filenames=[],
+        errors=0,
+        status="in_progress",
+        error_message=None
+    )
+    
+    # Broadcast initial progress event
+    broadcast_imessage_progress_event_sync("progress", get_imessage_progress_state())
+    
+    try:
+        def progress_callback(stats: Dict[str, Any]):
+            """Callback function to update progress state."""
+            # Check for cancellation
+            if imessage_import_cancelled.is_set():
+                return
+            
+            # Update progress state with current stats
+            update_imessage_progress_state(
+                current_conversation=stats.get("current_conversation"),
+                conversations_processed=stats.get("conversations_processed", 0),
+                total_conversations=stats.get("total_conversations", 0),
+                messages_imported=stats.get("messages_imported", 0),
+                messages_created=stats.get("messages_created", 0),
+                messages_updated=stats.get("messages_updated", 0),
+                attachments_found=stats.get("attachments_found", 0),
+                attachments_missing=stats.get("attachments_missing", 0),
+                missing_attachment_filenames=stats.get("missing_attachment_filenames", []),
+                errors=stats.get("errors", 0),
+                status="in_progress"
+            )
+            
+            # Broadcast progress event
+            broadcast_imessage_progress_event_sync("progress", get_imessage_progress_state())
+        
+        def cancelled_check() -> bool:
+            """Check if import should be cancelled."""
+            return imessage_import_cancelled.is_set()
+        
+        # Run import with progress callback
+        stats = import_imessages_from_directory(
+            directory_path,
+            progress_callback=progress_callback,
+            cancelled_check=cancelled_check
+        )
+        
+        result_dict.update(stats)
+        result_dict["success"] = True
+        
+        # Update final progress state
+        update_imessage_progress_state(
+            status="completed",
+            **{k: v for k, v in stats.items() if k in imessage_import_progress}
+        )
+        broadcast_imessage_progress_event_sync("completed", get_imessage_progress_state())
+        
+    except Exception as e:
+        error_msg = str(e)
+        result_dict["success"] = False
+        result_dict["error"] = error_msg
+        
+        update_imessage_progress_state(
+            status="error",
+            error_message=error_msg
+        )
+        broadcast_imessage_progress_event_sync("error", get_imessage_progress_state())
+        
+        print(f"[Background Task] Error importing iMessages: {error_msg}")
+    finally:
+        # Mark processing as completed
+        with imessage_import_lock:
+            imessage_import_in_progress = False
+
+
+@app.post("/imessages/import", response_model=ImportIMessagesResponse)
+async def import_imessages(
+    request: ImportIMessagesRequest,
+    background_tasks: BackgroundTasks
+):
+    """Import iMessages from a directory structure asynchronously.
+    
+    The directory should contain subdirectories, each representing a conversation.
+    Each subdirectory should contain a CSV file with the messages.
+    
+    Args:
+        request: ImportIMessagesRequest with directory_path
+        background_tasks: FastAPI background tasks
+        
+    Returns:
+        ImportIMessagesResponse with initial status
+        
+    Raises:
+        HTTPException: If directory doesn't exist or import already in progress
+    """
+    global imessage_import_in_progress
+    
+    # Check if import is already in progress
+    with imessage_import_lock:
+        if imessage_import_in_progress:
+            raise HTTPException(
+                status_code=409,
+                detail="iMessage import is already in progress. Please cancel it first or wait for it to complete."
+            )
+    
+    # Validate directory exists
+    directory = Path(request.directory_path)
+    if not directory.exists() or not directory.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Directory does not exist or is not a directory: {request.directory_path}"
+        )
+    
+    result_dict = {
+        "conversations_processed": 0,
+        "messages_imported": 0,
+        "messages_created": 0,
+        "messages_updated": 0,
+        "attachments_found": 0,
+        "attachments_missing": 0,
+        "missing_attachment_filenames": [],
+        "errors": 0,
+        "success": False
+    }
+    
+    # Start background processing
+    background_tasks.add_task(
+        import_imessages_background,
+        request.directory_path,
+        result_dict
+    )
+    
+    return ImportIMessagesResponse(
+        message="iMessage import started",
+        directory_path=request.directory_path,
+        conversations_processed=0,
+        messages_imported=0,
+        messages_created=0,
+        messages_updated=0,
+        attachments_found=0,
+        attachments_missing=0,
+        missing_attachment_filenames=[],
+        errors=0,
+        timestamp=datetime.now()
+    )
+
+
+@app.get("/imessages/import/stream")
+async def stream_imessage_import_progress():
+    """Stream iMessage import progress updates via Server-Sent Events (SSE).
+    
+    Returns:
+        StreamingResponse with text/event-stream content type
+    """
+    async def event_generator():
+        # Create a queue for this client
+        client_queue = asyncio.Queue(maxsize=100)
+        
+        # Add client to the list
+        with imessage_sse_clients_lock:
+            imessage_sse_clients.append(client_queue)
+        
+        try:
+            # Send initial progress state
+            initial_state = get_imessage_progress_state()
+            event_data = {
+                "type": "progress",
+                "data": initial_state
+            }
+            yield f"data: {json.dumps(event_data)}\n\n"
+            
+            # Send heartbeat every 30 seconds to keep connection alive
+            heartbeat_interval = 30
+            last_heartbeat = asyncio.get_event_loop().time()
+            
+            while True:
+                try:
+                    # Wait for message with timeout for heartbeat
+                    timeout = max(1, heartbeat_interval - (asyncio.get_event_loop().time() - last_heartbeat))
+                    try:
+                        message = await asyncio.wait_for(client_queue.get(), timeout=timeout)
+                        yield message
+                    except asyncio.TimeoutError:
+                        # Send heartbeat
+                        heartbeat_data = {
+                            "type": "heartbeat",
+                            "data": {"timestamp": datetime.now().isoformat()}
+                        }
+                        yield f"data: {json.dumps(heartbeat_data)}\n\n"
+                        last_heartbeat = asyncio.get_event_loop().time()
+                    
+                    # Check if processing is complete
+                    progress_state = get_imessage_progress_state()
+                    if progress_state["status"] in ["completed", "cancelled", "error"]:
+                        # Send final state and close
+                        final_event = {
+                            "type": progress_state["status"],
+                            "data": progress_state
+                        }
+                        yield f"data: {json.dumps(final_event)}\n\n"
+                        break
+                        
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    # Send error and break
+                    error_event = {
+                        "type": "error",
+                        "data": {"error": str(e)}
+                    }
+                    yield f"data: {json.dumps(error_event)}\n\n"
+                    break
+        finally:
+            # Remove client from the list
+            with imessage_sse_clients_lock:
+                if client_queue in imessage_sse_clients:
+                    imessage_sse_clients.remove(client_queue)
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+
+@app.post("/imessages/import/cancel")
+async def cancel_imessage_import():
+    """Cancel iMessage import if it is in progress.
+    
+    Returns:
+        Success message indicating cancellation status
+    """
+    global imessage_import_in_progress
+    
+    with imessage_import_lock:
+        if not imessage_import_in_progress:
+            return {
+                "message": "No iMessage import is currently in progress",
+                "cancelled": False
+            }
+        
+        # Set cancellation flag
+        imessage_import_cancelled.set()
+        
+        return {
+            "message": "iMessage import cancellation requested. Processing will stop after current conversation completes.",
+            "cancelled": True
+        }
+
+
+@app.get("/imessages/import/status")
+async def get_imessage_import_status():
+    """Get the current status of iMessage import.
+    
+    Returns:
+        Status information about iMessage import
+    """
+    global imessage_import_in_progress
+    
+    progress_state = get_imessage_progress_state()
+    
+    with imessage_import_lock:
+        return {
+            "in_progress": imessage_import_in_progress,
+            "cancelled": imessage_import_cancelled.is_set(),
+            **progress_state
+        }
+
+
+@app.get("/imessages/chat-sessions")
+async def get_chat_sessions():
+    """Get list of unique chat session names from imessages table.
+    
+    Returns:
+        List of chat sessions with optional message counts and attachment indicators
+    """
+    session = db.get_session()
+    try:
+        # Query distinct chat_session values with message counts and attachment counts
+        from sqlalchemy import func, case
+        results = session.query(
+            IMessage.chat_session,
+            func.count(IMessage.id).label('message_count'),
+            func.sum(
+                case((IMessage.attachment_data.isnot(None), 1), else_=0)
+            ).label('attachment_count')
+        ).filter(
+            IMessage.chat_session.isnot(None)
+        ).group_by(
+            IMessage.chat_session
+        ).order_by(
+            IMessage.chat_session
+        ).all()
+        
+        chat_sessions = [
+            {
+                "chat_session": result[0],
+                "message_count": result[1],
+                "has_attachments": (result[2] or 0) > 0,
+                "attachment_count": result[2] or 0
+            }
+            for result in results
+        ]
+        
+        return {"chat_sessions": chat_sessions}
+    finally:
+        session.close()
+
+
+@app.get("/imessages/conversation/{chat_session}")
+async def get_conversation_messages(chat_session: str):
+    """Get all messages for a specific chat session.
+    
+    Args:
+        chat_session: The chat session name (URL encoded)
+        
+    Returns:
+        List of messages ordered chronologically
+    """
+    from urllib.parse import unquote
+    decoded_session = unquote(chat_session)
+    
+    session = db.get_session()
+    try:
+        messages = session.query(IMessage).filter(
+            IMessage.chat_session == decoded_session
+        ).order_by(
+            IMessage.message_date.asc()
+        ).all()
+        
+        messages_data = []
+        for msg in messages:
+            messages_data.append({
+                "id": msg.id,
+                "chat_session": msg.chat_session,
+                "message_date": msg.message_date.isoformat() if msg.message_date else None,
+                "delivered_date": msg.delivered_date.isoformat() if msg.delivered_date else None,
+                "read_date": msg.read_date.isoformat() if msg.read_date else None,
+                "edited_date": msg.edited_date.isoformat() if msg.edited_date else None,
+                "service": msg.service,
+                "type": msg.type,
+                "sender_id": msg.sender_id,
+                "sender_name": msg.sender_name,
+                "status": msg.status,
+                "replying_to": msg.replying_to,
+                "subject": msg.subject,
+                "text": msg.text,
+                "attachment_filename": msg.attachment_filename,
+                "attachment_type": msg.attachment_type,
+                "has_attachment": msg.attachment_data is not None
+            })
+        
+        return {"messages": messages_data}
+    finally:
+        session.close()
+
+
+@app.delete("/imessages/conversation/{chat_session}")
+async def delete_conversation(chat_session: str):
+    """Delete all messages for a specific chat session.
+    
+    Args:
+        chat_session: The chat session name (URL encoded)
+        
+    Returns:
+        Success message with count of deleted messages
+        
+    Raises:
+        HTTPException: 404 if chat session not found
+    """
+    from urllib.parse import unquote
+    decoded_session = unquote(chat_session)
+    
+    session = db.get_session()
+    try:
+        # Count messages before deletion
+        message_count = session.query(IMessage).filter(
+            IMessage.chat_session == decoded_session
+        ).count()
+        
+        if message_count == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Chat session '{decoded_session}' not found"
+            )
+        
+        # Delete all messages for this chat session
+        deleted_count = session.query(IMessage).filter(
+            IMessage.chat_session == decoded_session
+        ).delete()
+        
+        session.commit()
+        
+        return {
+            "message": f"Successfully deleted {deleted_count} message(s) from chat session",
+            "deleted_count": deleted_count,
+            "chat_session": decoded_session
+        }
+    except HTTPException:
+        session.rollback()
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error deleting chat session: {str(e)}"
+        )
+    finally:
+        session.close()
+
+
+@app.get("/imessages/{message_id}/attachment")
+async def get_imessage_attachment(message_id: int, preview: bool = False):
+    """Get attachment content for an iMessage.
+    
+    Args:
+        message_id: The ID of the message
+        preview: If True, return thumbnail/preview (not implemented yet, returns full)
+        
+    Returns:
+        Attachment file content with appropriate MIME type
+        
+    Raises:
+        HTTPException: 404 if message not found or has no attachment
+    """
+    session = db.get_session()
+    try:
+        message = session.query(IMessage).filter(IMessage.id == message_id).first()
+    finally:
+        session.close()
+    
+    if not message:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Message with ID {message_id} not found"
+        )
+    
+    if not message.attachment_data:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Message with ID {message_id} has no attachment"
+        )
+    
+    # Determine content type from attachment_type or filename
+    content_type = message.attachment_type or "application/octet-stream"
+    if message.attachment_filename:
+        import mimetypes
+        guessed_type, _ = mimetypes.guess_type(message.attachment_filename)
+        if guessed_type:
+            content_type = guessed_type
+    
+    filename = message.attachment_filename or "attachment"
+    safe_filename = filename.replace('"', '\\"')
+    
+    return Response(
+        content=message.attachment_data,
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{safe_filename}"'
+        }
+    )
+
+
+@app.get("/emails/process/stream")
+async def stream_processing_progress():
+    """Stream processing progress updates via Server-Sent Events (SSE).
+    
+    Returns:
+        StreamingResponse with text/event-stream content type
+    """
+    async def event_generator():
+        # Create a queue for this client
+        client_queue = asyncio.Queue(maxsize=100)
+        
+        # Add client to the list
+        with sse_clients_lock:
+            sse_clients.append(client_queue)
+        
+        try:
+            # Send initial progress state
+            initial_state = get_progress_state()
+            event_data = {
+                "type": "progress",
+                "data": initial_state
+            }
+            yield f"data: {json.dumps(event_data)}\n\n"
+            
+            # Send heartbeat every 30 seconds to keep connection alive
+            heartbeat_interval = 30
+            last_heartbeat = asyncio.get_event_loop().time()
+            
+            while True:
+                try:
+                    # Wait for message with timeout for heartbeat
+                    timeout = max(1, heartbeat_interval - (asyncio.get_event_loop().time() - last_heartbeat))
+                    try:
+                        message = await asyncio.wait_for(client_queue.get(), timeout=timeout)
+                        yield message
+                    except asyncio.TimeoutError:
+                        # Send heartbeat
+                        heartbeat_data = {
+                            "type": "heartbeat",
+                            "data": {"timestamp": datetime.now().isoformat()}
+                        }
+                        yield f"data: {json.dumps(heartbeat_data)}\n\n"
+                        last_heartbeat = asyncio.get_event_loop().time()
+                    
+                    # Check if processing is complete
+                    progress_state = get_progress_state()
+                    if progress_state["status"] in ["completed", "cancelled", "error"]:
+                        # Send final state and close
+                        final_event = {
+                            "type": progress_state["status"],
+                            "data": progress_state
+                        }
+                        yield f"data: {json.dumps(final_event)}\n\n"
+                        break
+                        
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    # Send error and break
+                    error_event = {
+                        "type": "error",
+                        "data": {"error": str(e)}
+                    }
+                    yield f"data: {json.dumps(error_event)}\n\n"
+                    break
+        finally:
+            # Remove client from the list
+            with sse_clients_lock:
+                if client_queue in sse_clients:
+                    sse_clients.remove(client_queue)
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 @app.get("/emails/{email_id}/html")
@@ -656,6 +1429,107 @@ async def get_emails_by_label(labels: List[str] = Query(..., description="List o
         session.close()
     
     return result
+
+
+@app.get("/emails/search", response_model=List[EmailMetadataResponse])
+async def search_emails(
+    from_address: Optional[str] = Query(None, description="Filter by sender (partial match)"),
+    to_address: Optional[str] = Query(None, description="Filter by recipient (partial match)"),
+    month: Optional[int] = Query(None, ge=1, le=12, description="Filter by month (1-12)"),
+    year: Optional[int] = Query(None, description="Filter by year"),
+    subject: Optional[str] = Query(None, description="Filter by subject (partial match)"),
+    to_from: Optional[str] = Query(None, description="Filter by email being either to or from this address (partial match)"),
+    has_attachments: Optional[bool] = Query(None, description="Filter by whether email has attachments")
+):
+    """Search emails by metadata criteria.
+    
+    All parameters are optional. When multiple parameters are provided, they are combined with AND logic.
+    Text fields (from_address, to_address, subject, to_from) support partial matching (case-insensitive).
+    
+    Args:
+        from_address: Partial match on sender email address
+        to_address: Partial match on recipient email address
+        month: Month number (1-12) extracted from email date
+        year: Year extracted from email date
+        subject: Partial match on email subject
+        to_from: Partial match on email being either to or from this address
+        has_attachments: Filter by attachment presence (true/false)
+        
+    Returns:
+        List of EmailMetadataResponse objects matching all specified criteria
+    """
+    session = db.get_session()
+    try:
+        # Start building query with base filter
+        query = session.query(Email).options(joinedload(Email.attachments))
+        filters = []
+        
+        # Filter by from_address (partial match, case-insensitive)
+        if from_address:
+            filters.append(Email.from_address.ilike(f"%{from_address}%"))
+        
+        # Filter by to_address (partial match, case-insensitive)
+        if to_address:
+            filters.append(Email.to_addresses.ilike(f"%{to_address}%"))
+        
+        # Filter by month (extract month from date)
+        if month is not None:
+            filters.append(extract('month', Email.date) == month)
+        
+        # Filter by year (extract year from date)
+        if year is not None:
+            filters.append(extract('year', Email.date) == year)
+        
+        # Filter by subject (partial match, case-insensitive)
+        if subject:
+            filters.append(Email.subject.ilike(f"%{subject}%"))
+        
+        # Filter by to_from (check both to_addresses and from_address)
+        if to_from:
+            filters.append(
+                or_(
+                    Email.to_addresses.ilike(f"%{to_from}%"),
+                    Email.from_address.ilike(f"%{to_from}%")
+                )
+            )
+        
+        # Filter by has_attachments
+        if has_attachments is not None:
+            filters.append(Email.has_attachments == has_attachments)
+        
+        # Apply all filters with AND logic
+        if filters:
+            query = query.filter(and_(*filters))
+        
+        # Sort by descending date (newest first)
+        query = query.order_by(Email.date.desc())
+        
+        # Execute query
+        emails = query.all()
+        
+        # Convert to response models (access attachments while session is open)
+        result = [
+            EmailMetadataResponse(
+                id=email.id,
+                uid=email.uid,
+                folder=email.folder,
+                subject=email.subject,
+                from_address=email.from_address,
+                to_addresses=email.to_addresses,
+                cc_addresses=email.cc_addresses,
+                bcc_addresses=email.bcc_addresses,
+                date=email.date,
+                snippet=email.snippet,
+                attachment_ids=[att.id for att in email.attachments],
+                created_at=email.created_at,
+                updated_at=email.updated_at
+            )
+            for email in emails
+        ]
+        
+        return result
+    finally:
+        session.close()
 
 
 @app.get("/attachments/random", response_model=Optional[AttachmentInfoResponse])
