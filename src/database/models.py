@@ -135,3 +135,24 @@ class FacebookAlbumImage(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     album = relationship("FacebookAlbum", back_populates="images")
+
+
+class ReferenceDocument(Base):
+    """Reference Document model."""
+
+    __tablename__ = "reference_documents"
+
+    id = Column(Integer, primary_key=True)
+    filename = Column(String(500), nullable=False)
+    title = Column(String(1000), nullable=True)
+    description = Column(Text, nullable=True)
+    author = Column(String(500), nullable=True)
+    content_type = Column(String(255), nullable=False)
+    size = Column(Integer, nullable=False)
+    data = Column(LargeBinary, nullable=False)
+    tags = Column(Text, nullable=True)
+    categories = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+    available_for_task = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

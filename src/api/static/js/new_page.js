@@ -149,6 +149,24 @@ document.addEventListener('DOMContentLoaded', () => {
         dictationStatus: document.getElementById('dictation-status'),
         haveYourSayName: document.getElementById('have-your-say-name'),
         haveYourSayRelationship: document.getElementById('have-your-say-relationship'),
+        // Reference Documents elements
+        referenceDocumentsModal: document.getElementById('reference-documents-modal'),
+        closeReferenceDocumentsModalBtn: document.getElementById('close-reference-documents-modal'),
+        referenceDocumentsList: document.getElementById('reference-documents-list'),
+        referenceDocumentsSearch: document.getElementById('reference-documents-search'),
+        referenceDocumentsCategoryFilter: document.getElementById('reference-documents-category-filter'),
+        referenceDocumentsContentTypeFilter: document.getElementById('reference-documents-content-type-filter'),
+        referenceDocumentsTaskFilter: document.getElementById('reference-documents-task-filter'),
+        referenceDocumentsUploadBtn: document.getElementById('reference-documents-upload-btn'),
+        referenceDocumentsUploadModal: document.getElementById('reference-documents-upload-modal'),
+        closeReferenceDocumentsUploadModalBtn: document.getElementById('close-reference-documents-upload-modal'),
+        referenceDocumentsUploadForm: document.getElementById('reference-documents-upload-form'),
+        referenceDocumentsUploadCancelBtn: document.getElementById('reference-documents-upload-cancel'),
+        referenceDocumentsEditModal: document.getElementById('reference-documents-edit-modal'),
+        closeReferenceDocumentsEditModalBtn: document.getElementById('close-reference-documents-edit-modal'),
+        referenceDocumentsEditForm: document.getElementById('reference-documents-edit-form'),
+        referenceDocumentsEditCancelBtn: document.getElementById('reference-documents-edit-cancel'),
+        referenceDocumentsSidebarBtn: document.getElementById('reference-documents-sidebar-btn'),
         // Chat dictation elements
         chatStartDictationBtn: document.getElementById('chat-start-dictation-btn'),
         chatStopDictationBtn: document.getElementById('chat-stop-dictation-btn'),
@@ -211,9 +229,13 @@ document.addEventListener('DOMContentLoaded', () => {
         emailGalleryModal: document.getElementById('email-gallery-modal'),
         closeEmailGalleryModalBtn: document.getElementById('close-email-gallery-modal'),
         emailGalleryList: document.getElementById('email-gallery-list'),
-        emailGalleryContent: document.querySelector('.email-gallery-content'),
+        emailGalleryMasterPane: document.querySelector('.email-gallery-master-pane'),
+        emailGalleryDivider: document.getElementById('email-gallery-divider'),
+        emailGalleryDetailPane: document.querySelector('.email-gallery-detail-pane'),
         emailGalleryInstructions: document.getElementById('email-gallery-instructions'),
         emailGalleryEmailContent: document.getElementById('email-gallery-email-content'),
+        emailGalleryIframe: document.getElementById('email-gallery-iframe'),
+        emailGalleryAttachmentsGrid: document.getElementById('email-gallery-attachments-grid'),
         emailGallerySearch: document.getElementById('email-gallery-search'),
         emailGallerySender: document.getElementById('email-gallery-sender'),
         emailGalleryRecipient: document.getElementById('email-gallery-recipient'),
@@ -224,7 +246,19 @@ document.addEventListener('DOMContentLoaded', () => {
         emailGalleryFolderFilter: document.getElementById('email-gallery-folder-filter'),
         emailGallerySearchBtn: document.getElementById('email-gallery-search-btn'),
         emailGalleryClearBtn: document.getElementById('email-gallery-clear-btn'),
-        emailGalleryEmailDetails: document.getElementById('email-gallery-email-details'),
+        emailGalleryViewToggle: document.getElementById('email-gallery-view-toggle'),
+        emailGalleryMetadataSubject: document.getElementById('email-gallery-metadata-subject'),
+        emailGalleryMetadataFrom: document.getElementById('email-gallery-metadata-from'),
+        emailGalleryMetadataDate: document.getElementById('email-gallery-metadata-date'),
+        emailGalleryMetadataFolder: document.getElementById('email-gallery-metadata-folder'),
+        emailGalleryEmailDetails: null, // Removed from HTML, kept for compatibility
+        // Attachment Modals
+        emailAttachmentImageModal: document.getElementById('email-attachment-image-modal'),
+        emailAttachmentDocumentModal: document.getElementById('email-attachment-document-modal'),
+        closeEmailAttachmentImageModal: document.getElementById('close-email-attachment-image-modal'),
+        closeEmailAttachmentDocumentModal: document.getElementById('close-email-attachment-document-modal'),
+        emailAttachmentImageDisplay: document.getElementById('email-attachment-image-display'),
+        emailAttachmentDocumentIframe: document.getElementById('email-attachment-document-iframe'),
         // Email Gallery Button
         emailGalleryBtn: document.getElementById('email-gallery-btn'),
         // Dropup Elements
@@ -1330,6 +1364,25 @@ document.addEventListener('DOMContentLoaded', () => {
             let resizeStartX = null;
             let resizeStartWidth = null;
 
+            function formatDateAustralian(dateString) {
+                if (!dateString) return 'No Date';
+                try {
+                    const date = new Date(dateString);
+                    if (isNaN(date.getTime())) return 'Invalid Date';
+                    
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const year = date.getFullYear();
+                    const hours = String(date.getHours()).padStart(2, '0');
+                    const minutes = String(date.getMinutes()).padStart(2, '0');
+                    const seconds = String(date.getSeconds()).padStart(2, '0');
+                    
+                    return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+                } catch (error) {
+                    return 'Invalid Date';
+                }
+            }
+
             async function loadAlbums() {
                 if (!DOM.fbAlbumsList) return;
                 
@@ -1446,8 +1499,31 @@ document.addEventListener('DOMContentLoaded', () => {
                         img.loading = 'lazy';
                         
                         imageCard.onclick = () => {
-                            // Open full image view (could be enhanced later)
-                            window.open(img.src, '_blank');
+                            // Open full image in modal
+                            if (DOM.singleImageModal && DOM.singleImageModalImg) {
+                                // Hide other media elements
+                                if (DOM.singleImageModalAudio) DOM.singleImageModalAudio.style.display = 'none';
+                                if (DOM.singleImageModalVideo) DOM.singleImageModalVideo.style.display = 'none';
+                                if (DOM.singleImageModalPdf) DOM.singleImageModalPdf.style.display = 'none';
+                                
+                                // Show and set image
+                                DOM.singleImageModalImg.src = img.src;
+                                DOM.singleImageModalImg.alt = img.alt;
+                                DOM.singleImageModalImg.style.display = 'block';
+                                
+                                // Set image details if available
+                                if (DOM.singleImageDetails) {
+                                    const details = [];
+                                    if (image.title) details.push(`<strong>Title:</strong> ${image.title}`);
+                                    if (image.description) details.push(`<strong>Description:</strong> ${image.description}`);
+                                    if (image.filename) details.push(`<strong>Filename:</strong> ${image.filename}`);
+                                    if (image.creation_timestamp) details.push(`<strong>Date:</strong> ${formatDateAustralian(image.creation_timestamp)}`);
+                                    DOM.singleImageDetails.innerHTML = details.length > 0 ? details.join('<br>') : '';
+                                }
+                                
+                                // Open modal
+                                Modals._openModal(DOM.singleImageModal);
+                            }
                         };
                         
                         // Show overlay with image description if available, otherwise album title
@@ -2387,6 +2463,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let isLoading = false;
             let hasMoreData = true;
             let searchTimeout = null;
+            let viewMode = 'list'; // 'list' or 'grid'
 
             function formatDateAustralian(dateString) {
               
@@ -2411,6 +2488,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 DOM.closeEmailGalleryModalBtn.addEventListener('click', close);
                 DOM.emailGallerySearchBtn.addEventListener('click', _handleSearch);
                 DOM.emailGalleryClearBtn.addEventListener('click', _handleClear);
+                
+                // Attachment modal close handlers
+                if (DOM.closeEmailAttachmentImageModal && DOM.emailAttachmentImageModal) {
+                    DOM.closeEmailAttachmentImageModal.addEventListener('click', () => {
+                        DOM.emailAttachmentImageModal.style.display = 'none';
+                    });
+                    DOM.emailAttachmentImageModal.addEventListener('click', (e) => {
+                        if (e.target === DOM.emailAttachmentImageModal) {
+                            DOM.emailAttachmentImageModal.style.display = 'none';
+                        }
+                    });
+                }
+                if (DOM.closeEmailAttachmentDocumentModal && DOM.emailAttachmentDocumentModal) {
+                    DOM.closeEmailAttachmentDocumentModal.addEventListener('click', () => {
+                        DOM.emailAttachmentDocumentModal.style.display = 'none';
+                    });
+                    DOM.emailAttachmentDocumentModal.addEventListener('click', (e) => {
+                        if (e.target === DOM.emailAttachmentDocumentModal) {
+                            DOM.emailAttachmentDocumentModal.style.display = 'none';
+                        }
+                    });
+                }
                 
                 // Add event listeners for filter changes with debouncing
                 DOM.emailGallerySearch.addEventListener('input', (e) => {
@@ -2452,6 +2551,100 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Add keyboard navigation
                 document.addEventListener('keydown', _handleKeydown);
+                
+                // View toggle handler
+                if (DOM.emailGalleryViewToggle) {
+                    DOM.emailGalleryViewToggle.addEventListener('click', _toggleViewMode);
+                }
+                
+                // Initialize resizable panes
+                _initResizablePanes();
+                
+                // Initialize view mode
+                if (DOM.emailGalleryList) {
+                    DOM.emailGalleryList.classList.add('email-gallery-list-view');
+                }
+            }
+            
+            function _toggleViewMode() {
+                viewMode = viewMode === 'list' ? 'grid' : 'list';
+                const listContainer = DOM.emailGalleryList;
+                if (listContainer) {
+                    listContainer.classList.toggle('email-gallery-grid-view', viewMode === 'grid');
+                    listContainer.classList.toggle('email-gallery-list-view', viewMode === 'list');
+                }
+                if (DOM.emailGalleryViewToggle) {
+                    const icon = DOM.emailGalleryViewToggle.querySelector('i');
+                    if (icon) {
+                        icon.className = viewMode === 'grid' ? 'fas fa-list' : 'fas fa-th';
+                    }
+                }
+                // Re-render the list
+                _renderEmailList();
+            }
+            
+            function _initResizablePanes() {
+                if (!DOM.emailGalleryDivider || !DOM.emailGalleryMasterPane || !DOM.emailGalleryDetailPane) {
+                    return;
+                }
+                
+                // Load saved divider position from localStorage
+                const savedPosition = localStorage.getItem('emailGalleryDividerPosition');
+                const defaultPosition = 35; // 35% for master pane
+                const masterPaneWidth = savedPosition ? parseFloat(savedPosition) : defaultPosition;
+                
+                _setPaneWidths(masterPaneWidth);
+                
+                let isResizing = false;
+                let startX = 0;
+                let startMasterWidth = 0;
+                
+                DOM.emailGalleryDivider.addEventListener('mousedown', (e) => {
+                    isResizing = true;
+                    startX = e.clientX;
+                    startMasterWidth = parseFloat(getComputedStyle(DOM.emailGalleryMasterPane).width);
+                    document.body.style.cursor = 'col-resize';
+                    document.body.style.userSelect = 'none';
+                    e.preventDefault();
+                });
+                
+                document.addEventListener('mousemove', (e) => {
+                    if (!isResizing) return;
+                    
+                    const deltaX = e.clientX - startX;
+                    const modalWidth = DOM.emailGalleryModal.offsetWidth;
+                    const newMasterWidth = ((startMasterWidth + deltaX) / modalWidth) * 100;
+                    
+                    // Constrain between min and max
+                    const minWidth = 20; // 20% minimum
+                    const maxWidth = 70; // 70% maximum
+                    const constrainedWidth = Math.max(minWidth, Math.min(maxWidth, newMasterWidth));
+                    
+                    _setPaneWidths(constrainedWidth);
+                });
+                
+                document.addEventListener('mouseup', () => {
+                    if (isResizing) {
+                        isResizing = false;
+                        document.body.style.cursor = '';
+                        document.body.style.userSelect = '';
+                        
+                        // Save position to localStorage
+                        const currentWidth = parseFloat(getComputedStyle(DOM.emailGalleryMasterPane).width);
+                        const modalWidth = DOM.emailGalleryModal.offsetWidth;
+                        const percentage = (currentWidth / modalWidth) * 100;
+                        localStorage.setItem('emailGalleryDividerPosition', percentage.toString());
+                    }
+                });
+            }
+            
+            function _setPaneWidths(masterPanePercentage) {
+                if (!DOM.emailGalleryMasterPane || !DOM.emailGalleryDetailPane) {
+                    return;
+                }
+                
+                DOM.emailGalleryMasterPane.style.width = `${masterPanePercentage}%`;
+                DOM.emailGalleryDetailPane.style.width = `${100 - masterPanePercentage}%`;
             }
 
             async function open() {
@@ -2687,7 +2880,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 DOM.emailGalleryAttachmentsFilter.checked = false;
                 DOM.emailGalleryList.innerHTML = '';
                 DOM.emailGalleryEmailContent.style.display = 'none';
-                DOM.emailGalleryEmailDetails.style.display = 'none';
                 //DOM.emailGalleryFolderFilter.value = 'all';
                 
                 // Reset pagination for clear
@@ -2717,6 +2909,26 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
+                // Create table structure for grid/compact view
+                if (viewMode === 'grid') {
+                    const table = document.createElement('table');
+                    table.className = 'email-gallery-table';
+                    const thead = document.createElement('thead');
+                    thead.innerHTML = `
+                        <tr>
+                            <th class="email-table-col-subject">Subject</th>
+                            <th class="email-table-col-sender">From</th>
+                            <th class="email-table-col-date">Date</th>
+                            <th class="email-table-col-attachments"></th>
+                        </tr>
+                    `;
+                    table.appendChild(thead);
+                    const tbody = document.createElement('tbody');
+                    tbody.id = 'email-gallery-table-body';
+                    table.appendChild(tbody);
+                    DOM.emailGalleryList.appendChild(table);
+                }
+
                 _loadMoreEmails();
             }
 
@@ -2735,28 +2947,92 @@ document.addEventListener('DOMContentLoaded', () => {
                     isLoading = false;
                     return;
                 }
+                
+                // Get the correct container for appending items
+                let container;
+                if (viewMode === 'grid') {
+                    container = document.getElementById('email-gallery-table-body');
+                    if (!container) {
+                        // Table not created yet, create it
+                        const table = document.createElement('table');
+                        table.className = 'email-gallery-table';
+                        const thead = document.createElement('thead');
+                        thead.innerHTML = `
+                            <tr>
+                                <th class="email-table-col-subject">Subject</th>
+                                <th class="email-table-col-sender">From</th>
+                                <th class="email-table-col-date">Date</th>
+                                <th class="email-table-col-attachments"></th>
+                            </tr>
+                        `;
+                        table.appendChild(thead);
+                        const tbody = document.createElement('tbody');
+                        tbody.id = 'email-gallery-table-body';
+                        table.appendChild(tbody);
+                        DOM.emailGalleryList.appendChild(table);
+                        container = tbody;
+                    }
+                } else {
+                    container = DOM.emailGalleryList;
+                }
 
                 emailsToRender.forEach((email, localIndex) => {
                  
                     const actualIndex = startIndex + localIndex;
-                    const emailItem = document.createElement('div');
-                    emailItem.className = 'email-list-item';
-                    emailItem.dataset.index = actualIndex;
 
-                    // Add has-attachments class if email has attachments
-                    if (email.attachments && email.attachments.length > 0) {
-                        emailItem.classList.add('has-attachments');
+                    if (viewMode === 'grid') {
+                        // Compact table view - single line
+                        if (!container) return;
+                        
+                        const row = document.createElement('tr');
+                        row.className = 'email-table-row';
+                        row.dataset.index = actualIndex;
+                        
+                        // Add has-attachments class if email has attachments
+                        if (email.attachments && email.attachments.length > 0) {
+                            row.classList.add('has-attachments');
+                        }
+
+                        row.innerHTML = `
+                            <td class="email-table-col-subject">
+                                <div class="email-table-subject">${email.subject || 'No Subject'}</div>
+                            </td>
+                            <td class="email-table-col-sender">
+                                <div class="email-table-sender">${email.sender || 'Unknown Sender'}</div>
+                            </td>
+                            <td class="email-table-col-date">
+                                <div class="email-table-date">${email.date || 'No Date'}</div>
+                            </td>
+                            <td class="email-table-col-attachments">
+                                ${email.attachments && email.attachments.length > 0 ? '<span class="email-attachment-indicator">📎</span>' : ''}
+                            </td>
+                        `;
+
+                        row.addEventListener('click', () => _selectEmail(actualIndex));
+                        container.appendChild(row);
+                    } else {
+                        // List view - cards
+                        if (!container) return;
+                        
+                        const emailItem = document.createElement('div');
+                        emailItem.className = 'email-list-item';
+                        emailItem.dataset.index = actualIndex;
+
+                        // Add has-attachments class if email has attachments
+                        if (email.attachments && email.attachments.length > 0) {
+                            emailItem.classList.add('has-attachments');
+                        }
+
+                        emailItem.innerHTML = `
+                            <div class="email-subject">${email.subject || 'No Subject'}</div>
+                            <div class="email-sender">From: ${email.sender || 'Unknown Sender'}</div>
+                            <div class="email-date">${email.date || 'No Date'}</div>
+                            <div class="email-preview">${email.preview || 'No Preview'}</div>
+                        `;
+
+                        emailItem.addEventListener('click', () => _selectEmail(actualIndex));
+                        container.appendChild(emailItem);
                     }
-
-                    emailItem.innerHTML = `
-                        <div class="email-subject">${email.subject || 'No Subject'}</div>
-                        <div class="email-sender">From: ${email.sender || 'Unknown Sender'}</div>
-                        <div class="email-date">${email.date || 'No Date'}</div>
-                        <div class="email-preview">${email.preview || 'No Preview'}</div>
-                    `;
-
-                    emailItem.addEventListener('click', () => _selectEmail(actualIndex));
-                    DOM.emailGalleryList.appendChild(emailItem);
                 });
 
                 currentPage++;
@@ -2800,7 +3076,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectedEmailIndex = index;
                 
                 // Update visual selection using dataset.index to match actual emailData index
-                document.querySelectorAll('.email-list-item').forEach((item) => {
+                document.querySelectorAll('.email-list-item, .email-table-row').forEach((item) => {
                     const itemIndex = parseInt(item.dataset.index, 10);
                     item.classList.toggle('selected', itemIndex === index);
                 });
@@ -2814,48 +3090,47 @@ document.addEventListener('DOMContentLoaded', () => {
                 _updateEmailDetails();
             }
 
-            function _displayEmail(email) {
-               
-               // const emailDate = new Date(email.date);
-               // const formattedDate = emailDate.toLocaleDateString() + ' ' + emailDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-
-                // Update email content with metadata
-                DOM.emailGalleryEmailContent.querySelector('.email-metadata .email-subject').textContent = email.subject || 'No Subject';
-                DOM.emailGalleryEmailContent.querySelector('.email-metadata .email-from').textContent = email.sender || 'Unknown Sender';
-                DOM.emailGalleryEmailContent.querySelector('.email-metadata .email-date').textContent = email.date || 'No Date';
-                DOM.emailGalleryEmailContent.querySelector('.email-metadata .email-folder').textContent = email.folder || 'Unknown Folder';
+            async function _displayEmail(email) {
+                // Show email content, hide instructions
+                DOM.emailGalleryInstructions.style.display = 'none';
+                DOM.emailGalleryEmailContent.style.display = 'flex';
                 
-                // Show loading for email body
-                const emailBodyElement = DOM.emailGalleryEmailContent.querySelector('.email-body');
-                emailBodyElement.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">Loading email content...</div>';
+                // Update metadata
+                if (DOM.emailGalleryMetadataSubject) {
+                    DOM.emailGalleryMetadataSubject.textContent = email.subject || 'No Subject';
+                }
+                if (DOM.emailGalleryMetadataFrom) {
+                    DOM.emailGalleryMetadataFrom.textContent = email.sender || 'Unknown Sender';
+                }
+                if (DOM.emailGalleryMetadataDate) {
+                    DOM.emailGalleryMetadataDate.textContent = email.date || 'No Date';
+                }
+                if (DOM.emailGalleryMetadataFolder) {
+                    DOM.emailGalleryMetadataFolder.textContent = email.folder || 'Unknown Folder';
+                }
                 
-                // Fetch full email content if emailId is available
-                if (email.emailId) {
-                    fetch(`/emails/${email.emailId}/html`)
-                        .then(response => {
-                            if (response.ok) {
-                                return response.text();
-                            } else {
-                                // Fallback to plain text
-                                return fetch(`/emails/${email.emailId}/text`)
-                                    .then(r => {
-                                        if (r.ok) {
-                                            return r.text();
-                                        } else {
-                                            throw new Error('Failed to fetch email content');
-                                        }
-                                    });
-                            }
-                        })
-                        .then(content => {
-                            // Clear the loading message
-                            emailBodyElement.innerHTML = '';
-                            
-                            let htmlContent = content;
-                            
-                            // If content is plain text, wrap it in HTML document structure
-                            if (!content.trim().startsWith('<!DOCTYPE') && !content.trim().startsWith('<html')) {
-                                htmlContent = `<!DOCTYPE html>
+                // Show loading state
+                if (DOM.emailGalleryIframe) {
+                    DOM.emailGalleryIframe.style.display = 'none';
+                }
+                if (DOM.emailGalleryAttachmentsGrid) {
+                    DOM.emailGalleryAttachmentsGrid.innerHTML = '<div class="email-attachment-loading">Loading attachments...</div>';
+                }
+                
+                // Load email HTML into iframe
+                if (email.emailId && DOM.emailGalleryIframe) {
+                    try {
+                        const response = await fetch(`/emails/${email.emailId}/html`);
+                        if (response.ok) {
+                            const htmlContent = await response.text();
+                            DOM.emailGalleryIframe.srcdoc = htmlContent;
+                            DOM.emailGalleryIframe.style.display = 'block';
+                        } else {
+                            // Fallback to plain text
+                            const textResponse = await fetch(`/emails/${email.emailId}/text`);
+                            if (textResponse.ok) {
+                                const textContent = await textResponse.text();
+                                const wrappedHtml = `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -2872,72 +3147,153 @@ document.addEventListener('DOMContentLoaded', () => {
     </style>
 </head>
 <body>
-${content}
+${textContent}
 </body>
 </html>`;
+                                DOM.emailGalleryIframe.srcdoc = wrappedHtml;
+                                DOM.emailGalleryIframe.style.display = 'block';
+                            } else {
+                                throw new Error('Failed to fetch email content');
                             }
-                            
-                            // Create an iframe to display the HTML email content
-                            const iframe = document.createElement('iframe');
-                            iframe.srcdoc = htmlContent;
-                            iframe.style.width = '100%';
-                            iframe.style.minHeight = '600px';
-                            iframe.style.border = 'none';
-                            iframe.style.borderRadius = '6px';
-                            emailBodyElement.appendChild(iframe);
-                        })
-                        .catch(error => {
-                            console.error('Error fetching email content:', error);
-                            emailBodyElement.innerHTML = `<div style="color: #c33; padding: 20px; text-align: center;">Error loading email: ${error.message}</div>`;
-                        });
+                        }
+                    } catch (error) {
+                        console.error('Error fetching email content:', error);
+                        if (DOM.emailGalleryIframe) {
+                            DOM.emailGalleryIframe.srcdoc = `<html><body style="padding: 20px; color: #c33; text-align: center;">Error loading email: ${error.message}</body></html>`;
+                            DOM.emailGalleryIframe.style.display = 'block';
+                        }
+                    }
+                }
+                
+                // Fetch and display attachments
+                if (email.emailId && email.attachments && email.attachments.length > 0) {
+                    await _loadAttachments(email.emailId, email.attachments);
                 } else {
-                    emailBodyElement.innerHTML = '<div style="padding: 20px; color: #666;">No content available</div>';
+                    if (DOM.emailGalleryAttachmentsGrid) {
+                        DOM.emailGalleryAttachmentsGrid.innerHTML = '<div class="email-attachment-empty">No attachments</div>';
+                    }
                 }
-
-                DOM.emailGalleryEmailContent.querySelector('.email-attachments').innerHTML = '';
-                if (email.attachments && email.attachments.length > 0) {
-                    debugger;
-                        email.attachments.forEach(attachment => {
-                        const attachmentItem = document.createElement('img');
-                        attachmentItem.className = 'email-attachment';
-                        // Add query parameters for preview
-                        attachmentItem.src = attachment + "?preview=true&resize_to=100";
-                        attachmentItem.style.maxWidth = '100px';
-                        attachmentItem.style.objectFit = 'cover';
-                        attachmentItem.style.cursor = 'pointer';
-                        attachmentItem.addEventListener('click', () => _attachmentsViewer(email.attachments,  attachment));
-                        DOM.emailGalleryEmailContent.querySelector('.email-attachments').appendChild(attachmentItem);
-                    });
-                }
-
-                // Show email content, hide instructions
-                DOM.emailGalleryInstructions.style.display = 'none';
-                DOM.emailGalleryEmailContent.style.display = 'block';
             }
 
-            function _attachmentsViewer(emailAttachments, selectedAttachment){
-                // Extract attachment ID from URL (e.g., "/attachments/123" -> "123")
-                const getAttachmentId = (url) => {
+            async function _loadAttachments(emailId, attachmentUrls) {
+                if (!DOM.emailGalleryAttachmentsGrid) {
+                    return;
+                }
+                
+                DOM.emailGalleryAttachmentsGrid.innerHTML = '';
+                
+                // Extract attachment IDs from URLs
+                const attachmentIds = attachmentUrls.map(url => {
                     const match = url.match(/\/attachments\/(\d+)/);
-                    return match ? match[1] : null;
-                };
-
-                // Extract filename from URL or use default
-                const getFilename = (url) => {
-                    const id = getAttachmentId(url);
-                    return id ? `Attachment ${id}` : 'Attachment';
-                };
-
-                if (emailAttachments.length > 1) {
-                    // Show the attachments in a carousel with the selected attachment in the center
-                    // Remove query parameters from selectedAttachment for matching
-                    const cleanSelectedAttachment = selectedAttachment.split('?')[0];
-                    Modals.MultiImageDisplay.showMultiImageModal(emailAttachments, cleanSelectedAttachment);
+                    return match ? parseInt(match[1]) : null;
+                }).filter(id => id !== null);
+                
+                // Fetch attachment info for each
+                const attachmentPromises = attachmentIds.map(id => 
+                    fetch(`/attachments/${id}/info`)
+                        .then(r => r.json())
+                        .catch(err => {
+                            console.error(`Error fetching attachment ${id} info:`, err);
+                            return null;
+                        })
+                );
+                
+                const attachmentInfos = await Promise.all(attachmentPromises);
+                
+                // Render each attachment
+                attachmentInfos.forEach((info, index) => {
+                    if (!info) return;
+                    
+                    const attachmentElement = _createAttachmentElement(info, attachmentIds[index]);
+                    DOM.emailGalleryAttachmentsGrid.appendChild(attachmentElement);
+                });
+            }
+            
+            function _createAttachmentElement(attachmentInfo, attachmentId) {
+                const container = document.createElement('div');
+                container.className = 'email-attachment-item';
+                container.dataset.attachmentId = attachmentId;
+                
+                const isImage = attachmentInfo.content_type && attachmentInfo.content_type.startsWith('image/');
+                
+                if (isImage) {
+                    // Image attachment - show thumbnail preview
+                    const img = document.createElement('img');
+                    img.className = 'email-attachment-thumbnail';
+                    img.src = `/attachments/${attachmentId}?preview=true`;
+                    img.alt = attachmentInfo.filename || 'Attachment';
+                    img.loading = 'lazy';
+                    container.appendChild(img);
                 } else {
-                    // Show the attachment in a modal
-                    const attachmentUrl = emailAttachments[0].split('?')[0]; // Remove query params
-                    const filename = getFilename(attachmentUrl);
-                    Modals.SingleImageDisplay.showSingleImageModal(filename, attachmentUrl, 0, 0, 0);
+                    // Non-image attachment - show icon
+                    const iconContainer = document.createElement('div');
+                    iconContainer.className = 'email-attachment-icon-container';
+                    const icon = _getAttachmentIcon(attachmentInfo.content_type);
+                    iconContainer.innerHTML = `<i class="${icon.class}" style="font-size: 3em; color: ${icon.color};"></i>`;
+                    container.appendChild(iconContainer);
+                }
+                
+                // Add filename label
+                const filenameLabel = document.createElement('div');
+                filenameLabel.className = 'email-attachment-filename';
+                filenameLabel.textContent = attachmentInfo.filename || `Attachment ${attachmentId}`;
+                filenameLabel.title = attachmentInfo.filename || `Attachment ${attachmentId}`;
+                container.appendChild(filenameLabel);
+                
+                // Add click handler
+                container.addEventListener('click', () => {
+                    _viewAttachment(attachmentId, attachmentInfo, isImage);
+                });
+                
+                return container;
+            }
+            
+            function _getAttachmentIcon(contentType) {
+                if (!contentType) {
+                    return { class: 'fas fa-file', color: '#666' };
+                }
+                
+                if (contentType === 'application/pdf') {
+                    return { class: 'fas fa-file-pdf', color: '#dc3545' };
+                }
+                
+                if (contentType.includes('word') || contentType.includes('msword') || contentType.includes('document')) {
+                    return { class: 'fas fa-file-word', color: '#2b579a' };
+                }
+                
+                if (contentType.includes('excel') || contentType.includes('spreadsheet')) {
+                    return { class: 'fas fa-file-excel', color: '#1d6f42' };
+                }
+                
+                if (contentType.includes('powerpoint') || contentType.includes('presentation')) {
+                    return { class: 'fas fa-file-powerpoint', color: '#d04423' };
+                }
+                
+                if (contentType.includes('zip') || contentType.includes('archive')) {
+                    return { class: 'fas fa-file-archive', color: '#ffc107' };
+                }
+                
+                if (contentType.includes('text')) {
+                    return { class: 'fas fa-file-alt', color: '#17a2b8' };
+                }
+                
+                return { class: 'fas fa-file', color: '#666' };
+            }
+            
+            function _viewAttachment(attachmentId, attachmentInfo, isImage) {
+                if (isImage) {
+                    // Show image in image modal
+                    if (DOM.emailAttachmentImageDisplay && DOM.emailAttachmentImageModal) {
+                        DOM.emailAttachmentImageDisplay.src = `/attachments/${attachmentId}`;
+                        DOM.emailAttachmentImageDisplay.alt = attachmentInfo.filename || 'Attachment';
+                        DOM.emailAttachmentImageModal.style.display = 'flex';
+                    }
+                } else {
+                    // Show document in iframe modal
+                    if (DOM.emailAttachmentDocumentIframe && DOM.emailAttachmentDocumentModal) {
+                        DOM.emailAttachmentDocumentIframe.src = `/attachments/${attachmentId}`;
+                        DOM.emailAttachmentDocumentModal.style.display = 'flex';
+                    }
                 }
             }
 
@@ -2947,25 +3303,29 @@ ${content}
             }
 
             function _clearEmailContent() {
-                DOM.emailGalleryEmailContent.querySelector('.email-subject').textContent = '';
-                DOM.emailGalleryEmailContent.querySelector('.email-from').textContent = '';
-                DOM.emailGalleryEmailContent.querySelector('.email-to').textContent = '';
-                DOM.emailGalleryEmailContent.querySelector('.email-date').textContent = '';
-                DOM.emailGalleryEmailContent.querySelector('.email-folder').textContent = '';
-                DOM.emailGalleryEmailContent.querySelector('.email-body').textContent = '';
+                if (DOM.emailGalleryIframe) {
+                    DOM.emailGalleryIframe.srcdoc = '';
+                }
+                if (DOM.emailGalleryAttachmentsGrid) {
+                    DOM.emailGalleryAttachmentsGrid.innerHTML = '';
+                }
+                if (DOM.emailGalleryMetadataSubject) {
+                    DOM.emailGalleryMetadataSubject.textContent = '';
+                }
+                if (DOM.emailGalleryMetadataFrom) {
+                    DOM.emailGalleryMetadataFrom.textContent = '';
+                }
+                if (DOM.emailGalleryMetadataDate) {
+                    DOM.emailGalleryMetadataDate.textContent = '';
+                }
+                if (DOM.emailGalleryMetadataFolder) {
+                    DOM.emailGalleryMetadataFolder.textContent = '';
+                }
             }
 
             function _updateEmailDetails() {
-                let filteredEmails = emailData;
-                if (DOM.emailGalleryAttachmentsFilter.checked) {
-                    filteredEmails = emailData.filter(email => 
-                        email.attachments && email.attachments.length > 0
-                    );
-                }
-                
-                //const count = filteredEmails.length;
-                //const total = emailData.length;
-                //DOM.emailGalleryEmailDetails.textContent = `Showing ${count} of ${total} emails`;
+                // Email details are now displayed in the iframe and attachment grid
+                // This function is kept for potential future use
             }
 
             function _handleKeydown(event) {
@@ -3001,7 +3361,7 @@ ${content}
             }
 
             function _scrollToSelectedEmail() {
-                const selectedItem = document.querySelector('.email-list-item.selected');
+                const selectedItem = document.querySelector('.email-list-item.selected, .email-table-row.selected');
                 if (selectedItem) {
                     selectedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 }
@@ -4472,6 +4832,440 @@ ${content}
             return { init, showSingleImageModal};
         })(),
 
+        ReferenceDocuments: (() => {
+            let documents = [];
+            let filteredDocuments = [];
+            let currentFilters = {
+                search: '',
+                category: '',
+                contentType: '',
+                availableForTask: null
+            };
+
+            function formatFileSize(bytes) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+            }
+
+            function formatDateAustralian(dateString) {
+                if (!dateString) return 'No Date';
+                try {
+                    const date = new Date(dateString);
+                    if (isNaN(date.getTime())) return 'Invalid Date';
+                    
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const year = date.getFullYear();
+                    const hours = String(date.getHours()).padStart(2, '0');
+                    const minutes = String(date.getMinutes()).padStart(2, '0');
+                    
+                    return `${day}/${month}/${year} ${hours}:${minutes}`;
+                } catch (error) {
+                    return 'Invalid Date';
+                }
+            }
+
+            function getFileIcon(contentType) {
+                if (!contentType) return { class: 'fas fa-file', color: '#666' };
+                
+                if (contentType === 'application/pdf') {
+                    return { class: 'fas fa-file-pdf', color: '#dc3545' };
+                }
+                
+                if (contentType.includes('word') || contentType.includes('msword') || contentType.includes('document')) {
+                    return { class: 'fas fa-file-word', color: '#2b579a' };
+                }
+                
+                if (contentType.includes('excel') || contentType.includes('spreadsheet')) {
+                    return { class: 'fas fa-file-excel', color: '#1d6f42' };
+                }
+                
+                if (contentType.includes('powerpoint') || contentType.includes('presentation')) {
+                    return { class: 'fas fa-file-powerpoint', color: '#d04423' };
+                }
+                
+                if (contentType.startsWith('image/')) {
+                    return { class: 'fas fa-file-image', color: '#17a2b8' };
+                }
+                
+                if (contentType === 'application/json') {
+                    return { class: 'fas fa-file-code', color: '#f39c12' };
+                }
+                
+                if (contentType.includes('text') || contentType === 'text/csv') {
+                    return { class: 'fas fa-file-alt', color: '#17a2b8' };
+                }
+                
+                return { class: 'fas fa-file', color: '#666' };
+            }
+
+            async function loadDocuments() {
+                if (!DOM.referenceDocumentsList) return;
+                
+                DOM.referenceDocumentsList.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;">Loading documents...</div>';
+                
+                try {
+                    const params = new URLSearchParams();
+                    if (currentFilters.search) params.append('search', currentFilters.search);
+                    if (currentFilters.category) params.append('category', currentFilters.category);
+                    if (currentFilters.contentType) {
+                        if (currentFilters.contentType === 'image') {
+                            params.append('content_type', 'image/');
+                        } else if (currentFilters.contentType === 'text') {
+                            params.append('content_type', 'text/');
+                        } else {
+                            params.append('content_type', currentFilters.contentType);
+                        }
+                    }
+                    if (currentFilters.availableForTask !== null) {
+                        params.append('available_for_task', currentFilters.availableForTask.toString());
+                    }
+                    
+                    const response = await fetch(`/reference-documents?${params.toString()}`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    documents = await response.json();
+                    filteredDocuments = documents;
+                    renderDocuments();
+                } catch (error) {
+                    console.error("Failed to load reference documents:", error);
+                    DOM.referenceDocumentsList.innerHTML = '<div style="text-align: center; padding: 2rem; color: #dc3545;">Failed to load documents: ' + error.message + '</div>';
+                }
+            }
+
+            function renderDocuments() {
+                if (!DOM.referenceDocumentsList) return;
+                
+                if (filteredDocuments.length === 0) {
+                    DOM.referenceDocumentsList.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;">No documents found</div>';
+                    return;
+                }
+                
+                DOM.referenceDocumentsList.innerHTML = '';
+                
+                filteredDocuments.forEach(doc => {
+                    const docCard = document.createElement('div');
+                    docCard.className = 'reference-document-item';
+                    docCard.style.cssText = 'padding: 1em; margin-bottom: 0.75em; border: 1px solid #e9ecef; border-radius: 6px; background: #ffffff; cursor: pointer; transition: all 0.2s ease;';
+                    
+                    const icon = getFileIcon(doc.content_type);
+                    
+                    docCard.innerHTML = `
+                        <div style="display: flex; align-items: flex-start; gap: 1em;">
+                            <div style="font-size: 2em; color: ${icon.color}; flex-shrink: 0;">
+                                <i class="${icon.class}"></i>
+                            </div>
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-weight: 600; color: #233366; margin-bottom: 0.25em; font-size: 1em;">
+                                    ${doc.title || doc.filename}
+                                </div>
+                                <div style="font-size: 0.85em; color: #666; margin-bottom: 0.25em;">
+                                    ${doc.filename} • ${formatFileSize(doc.size)} • ${formatDateAustralian(doc.created_at)}
+                                </div>
+                                ${doc.description ? `<div style="font-size: 0.85em; color: #888; margin-bottom: 0.25em;">${doc.description.substring(0, 100)}${doc.description.length > 100 ? '...' : ''}</div>` : ''}
+                                ${doc.author ? `<div style="font-size: 0.8em; color: #999;">Author: ${doc.author}</div>` : ''}
+                                ${doc.available_for_task ? '<div style="font-size: 0.8em; color: #28a745; margin-top: 0.25em;"><i class="fas fa-check-circle"></i> Available for Task</div>' : ''}
+                            </div>
+                            <div style="display: flex; flex-direction: row; gap: 0.5em; flex-shrink: 0; align-items: center;">
+                                ${doc.content_type.startsWith('image/') ? 
+                                    `<button class="reference-document-view-btn" data-doc-id="${doc.id}" style="padding: 0.4em 0.8em; font-size: 0.85em; background: #4a90e2; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                        <i class="fas fa-eye"></i> View
+                                    </button>` :
+                                    `<button class="reference-document-download-btn" data-doc-id="${doc.id}" style="padding: 0.4em 0.8em; font-size: 0.85em; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                        <i class="fas fa-download"></i> Download
+                                    </button>`
+                                }
+                                <button class="reference-document-edit-btn" data-doc-id="${doc.id}" style="padding: 0.4em 0.8em; font-size: 0.85em; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                    <i class="fas fa-edit"></i> Edit
+                                </button>
+                                <button class="reference-document-delete-btn" data-doc-id="${doc.id}" style="padding: 0.4em 0.8em; font-size: 0.85em; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                    <i class="fas fa-trash"></i> Delete
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Add event listeners
+                    const viewBtn = docCard.querySelector('.reference-document-view-btn');
+                    if (viewBtn) {
+                        viewBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            viewDocument(parseInt(viewBtn.dataset.docId));
+                        });
+                    }
+                    
+                    const downloadBtn = docCard.querySelector('.reference-document-download-btn');
+                    if (downloadBtn) {
+                        downloadBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            downloadDocument(parseInt(downloadBtn.dataset.docId));
+                        });
+                    }
+                    
+                    const editBtn = docCard.querySelector('.reference-document-edit-btn');
+                    if (editBtn) {
+                        editBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            editDocument(parseInt(editBtn.dataset.docId));
+                        });
+                    }
+                    
+                    const deleteBtn = docCard.querySelector('.reference-document-delete-btn');
+                    if (deleteBtn) {
+                        deleteBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            deleteDocument(parseInt(deleteBtn.dataset.docId));
+                        });
+                    }
+                    
+                    DOM.referenceDocumentsList.appendChild(docCard);
+                });
+            }
+
+            function viewDocument(documentId) {
+                const doc = documents.find(d => d.id === documentId);
+                if (!doc) return;
+                
+                if (doc.content_type.startsWith('image/')) {
+                    // Show image in modal
+                    if (DOM.singleImageModal && DOM.singleImageModalImg) {
+                        if (DOM.singleImageModalAudio) DOM.singleImageModalAudio.style.display = 'none';
+                        if (DOM.singleImageModalVideo) DOM.singleImageModalVideo.style.display = 'none';
+                        if (DOM.singleImageModalPdf) DOM.singleImageModalPdf.style.display = 'none';
+                        
+                        DOM.singleImageModalImg.src = `/reference-documents/${documentId}/download`;
+                        DOM.singleImageModalImg.alt = doc.title || doc.filename;
+                        DOM.singleImageModalImg.style.display = 'block';
+                        
+                        if (DOM.singleImageDetails) {
+                            const details = [];
+                            if (doc.title) details.push(`<strong>Title:</strong> ${doc.title}`);
+                            if (doc.description) details.push(`<strong>Description:</strong> ${doc.description}`);
+                            if (doc.author) details.push(`<strong>Author:</strong> ${doc.author}`);
+                            if (doc.filename) details.push(`<strong>Filename:</strong> ${doc.filename}`);
+                            if (doc.created_at) details.push(`<strong>Date:</strong> ${formatDateAustralian(doc.created_at)}`);
+                            DOM.singleImageDetails.innerHTML = details.length > 0 ? details.join('<br>') : '';
+                        }
+                        
+                        Modals._openModal(DOM.singleImageModal);
+                    }
+                } else {
+                    // Download document
+                    downloadDocument(documentId);
+                }
+            }
+
+            function downloadDocument(documentId) {
+                window.open(`/reference-documents/${documentId}/download`, '_blank');
+            }
+
+            async function editDocument(documentId) {
+                const doc = documents.find(d => d.id === documentId);
+                if (!doc) return;
+                
+                // Populate edit form
+                document.getElementById('reference-documents-edit-id').value = doc.id;
+                document.getElementById('reference-documents-edit-title').value = doc.title || '';
+                document.getElementById('reference-documents-edit-description').value = doc.description || '';
+                document.getElementById('reference-documents-edit-author').value = doc.author || '';
+                document.getElementById('reference-documents-edit-tags').value = doc.tags || '';
+                document.getElementById('reference-documents-edit-categories').value = doc.categories || '';
+                document.getElementById('reference-documents-edit-notes').value = doc.notes || '';
+                document.getElementById('reference-documents-edit-task').checked = doc.available_for_task || false;
+                
+                Modals._openModal(DOM.referenceDocumentsEditModal);
+            }
+
+            async function deleteDocument(documentId) {
+                if (!confirm('Are you sure you want to delete this document?')) {
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`/reference-documents/${documentId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    await loadDocuments();
+                } catch (error) {
+                    console.error("Failed to delete document:", error);
+                    alert('Failed to delete document: ' + error.message);
+                }
+            }
+
+            function applyFilters() {
+                currentFilters.search = DOM.referenceDocumentsSearch.value.trim();
+                currentFilters.category = DOM.referenceDocumentsCategoryFilter.value;
+                currentFilters.contentType = DOM.referenceDocumentsContentTypeFilter.value;
+                currentFilters.availableForTask = DOM.referenceDocumentsTaskFilter.checked ? true : null;
+                
+                loadDocuments();
+            }
+
+            function init() {
+                if (DOM.closeReferenceDocumentsModalBtn) {
+                    DOM.closeReferenceDocumentsModalBtn.addEventListener('click', close);
+                }
+                
+                if (DOM.referenceDocumentsModal) {
+                    DOM.referenceDocumentsModal.addEventListener('click', (e) => {
+                        if (e.target === DOM.referenceDocumentsModal) close();
+                    });
+                }
+                
+                if (DOM.referenceDocumentsSearch) {
+                    let searchTimeout;
+                    DOM.referenceDocumentsSearch.addEventListener('input', () => {
+                        clearTimeout(searchTimeout);
+                        searchTimeout = setTimeout(() => {
+                            applyFilters();
+                        }, 300);
+                    });
+                }
+                
+                if (DOM.referenceDocumentsCategoryFilter) {
+                    DOM.referenceDocumentsCategoryFilter.addEventListener('change', applyFilters);
+                }
+                
+                if (DOM.referenceDocumentsContentTypeFilter) {
+                    DOM.referenceDocumentsContentTypeFilter.addEventListener('change', applyFilters);
+                }
+                
+                if (DOM.referenceDocumentsTaskFilter) {
+                    DOM.referenceDocumentsTaskFilter.addEventListener('change', applyFilters);
+                }
+                
+                if (DOM.referenceDocumentsUploadBtn) {
+                    DOM.referenceDocumentsUploadBtn.addEventListener('click', () => {
+                        Modals._openModal(DOM.referenceDocumentsUploadModal);
+                    });
+                }
+                
+                if (DOM.closeReferenceDocumentsUploadModalBtn) {
+                    DOM.closeReferenceDocumentsUploadModalBtn.addEventListener('click', () => {
+                        Modals._closeModal(DOM.referenceDocumentsUploadModal);
+                    });
+                }
+                
+                if (DOM.referenceDocumentsUploadCancelBtn) {
+                    DOM.referenceDocumentsUploadCancelBtn.addEventListener('click', () => {
+                        Modals._closeModal(DOM.referenceDocumentsUploadModal);
+                        DOM.referenceDocumentsUploadForm.reset();
+                    });
+                }
+                
+                if (DOM.referenceDocumentsUploadForm) {
+                    DOM.referenceDocumentsUploadForm.addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        
+                        const formData = new FormData();
+                        const fileInput = document.getElementById('reference-documents-upload-file');
+                        if (!fileInput.files[0]) {
+                            alert('Please select a file');
+                            return;
+                        }
+                        
+                        formData.append('file', fileInput.files[0]);
+                        formData.append('title', document.getElementById('reference-documents-upload-title').value);
+                        formData.append('description', document.getElementById('reference-documents-upload-description').value);
+                        formData.append('author', document.getElementById('reference-documents-upload-author').value);
+                        formData.append('tags', document.getElementById('reference-documents-upload-tags').value);
+                        formData.append('categories', document.getElementById('reference-documents-upload-categories').value);
+                        formData.append('notes', document.getElementById('reference-documents-upload-notes').value);
+                        formData.append('available_for_task', document.getElementById('reference-documents-upload-task').checked);
+                        
+                        try {
+                            const response = await fetch('/reference-documents', {
+                                method: 'POST',
+                                body: formData
+                            });
+                            
+                            if (!response.ok) {
+                                const error = await response.json();
+                                throw new Error(error.detail || `HTTP error! status: ${response.status}`);
+                            }
+                            
+                            Modals._closeModal(DOM.referenceDocumentsUploadModal);
+                            DOM.referenceDocumentsUploadForm.reset();
+                            await loadDocuments();
+                        } catch (error) {
+                            console.error("Failed to upload document:", error);
+                            alert('Failed to upload document: ' + error.message);
+                        }
+                    });
+                }
+                
+                if (DOM.closeReferenceDocumentsEditModalBtn) {
+                    DOM.closeReferenceDocumentsEditModalBtn.addEventListener('click', () => {
+                        Modals._closeModal(DOM.referenceDocumentsEditModal);
+                    });
+                }
+                
+                if (DOM.referenceDocumentsEditCancelBtn) {
+                    DOM.referenceDocumentsEditCancelBtn.addEventListener('click', () => {
+                        Modals._closeModal(DOM.referenceDocumentsEditModal);
+                    });
+                }
+                
+                if (DOM.referenceDocumentsEditForm) {
+                    DOM.referenceDocumentsEditForm.addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        
+                        const documentId = parseInt(document.getElementById('reference-documents-edit-id').value);
+                        const updateData = {
+                            title: document.getElementById('reference-documents-edit-title').value || null,
+                            description: document.getElementById('reference-documents-edit-description').value || null,
+                            author: document.getElementById('reference-documents-edit-author').value || null,
+                            tags: document.getElementById('reference-documents-edit-tags').value || null,
+                            categories: document.getElementById('reference-documents-edit-categories').value || null,
+                            notes: document.getElementById('reference-documents-edit-notes').value || null,
+                            available_for_task: document.getElementById('reference-documents-edit-task').checked
+                        };
+                        
+                        try {
+                            const response = await fetch(`/reference-documents/${documentId}`, {
+                                method: 'PUT',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify(updateData)
+                            });
+                            
+                            if (!response.ok) {
+                                const error = await response.json();
+                                throw new Error(error.detail || `HTTP error! status: ${response.status}`);
+                            }
+                            
+                            Modals._closeModal(DOM.referenceDocumentsEditModal);
+                            await loadDocuments();
+                        } catch (error) {
+                            console.error("Failed to update document:", error);
+                            alert('Failed to update document: ' + error.message);
+                        }
+                    });
+                }
+            }
+
+            function open() {
+                Modals._openModal(DOM.referenceDocumentsModal);
+                loadDocuments();
+            }
+
+            function close() {
+                Modals._closeModal(DOM.referenceDocumentsModal);
+            }
+
+            return { init, open, close };
+        })(),
+
         initAll: () => {
             Modals.Suggestions.init();
             Modals.FBAlbums.init();
@@ -4482,6 +5276,7 @@ ${content}
             Modals.EmailGallery.init();
             Modals.SMSMessages.init();
             Modals.SingleImageDisplay.init();
+            Modals.ReferenceDocuments.init();
             Modals.ConfirmationModal.init();
             Modals.ChangeUserId.init();
             Modals.AddInterviewee.init();
@@ -7678,6 +8473,12 @@ ${content}
             if (DOM.haveYourSaySidebarBtn) {
                 DOM.haveYourSaySidebarBtn.addEventListener('click', () => {
                     Modals.HaveYourSay.open();
+                });
+            }
+
+            if (DOM.referenceDocumentsSidebarBtn) {
+                DOM.referenceDocumentsSidebarBtn.addEventListener('click', () => {
+                    Modals.ReferenceDocuments.open();
                 });
             }
 

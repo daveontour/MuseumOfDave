@@ -122,6 +122,9 @@
                     <button type="button" class="more-options-btn" id="have-your-say-sidebar-btn">
                         <i class="fas fa-microphone"></i> Have Your Say
                     </button>
+                    <button type="button" class="more-options-btn" id="reference-documents-sidebar-btn">
+                        <i class="fas fa-folder-open"></i> Reference Documents
+                    </button>
 
                 </div>
             </div>
@@ -1179,80 +1182,235 @@
         <div id="email-gallery-modal" class="modal">
            <div class="modal-content email-gallery-modal-content">
                 <button id="close-email-gallery-modal" class="modal-close-btn">&times;</button>
-                <div class="email-gallery-modal-content">
-                    <div class="email-gallery-modal-body">
-                        <div style="display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; gap: 2px;padding: 1em;background-color: aliceblue;">
-                                    <div class="email-metadata-filters" style="display: flex; flex-direction:column;gap: 0.4em; margin-bottom: 0.5em; margin-top: 0.5em; margin-left: 10px; align-items: start;">
-                                        <div style="display: flex; align-items: center; gap: 0.3em;">
-                                            <h2 style="margin: 0; font-size: 16pt;">Email Gallery</h2> 
-                                        </div>
-                                        <div style="display: flex; align-items: center; gap: 0.3em; width:100%">
-                                            <input type="text" id="email-gallery-search" placeholder="Search emails..." style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em; width: 100%;">
-                                        </div>
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.3em; align-items: center;">
-                                            <input type="text" id="email-gallery-sender" placeholder="From..." style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em;">
-                                            <input type="text" id="email-gallery-recipient" placeholder="To..." style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em;">
-                                        </div>
-                                        <div style="display: flex; align-items: center; gap: 0.3em;width:100%">
-                                            <input type="text" id="email-gallery-to-from" placeholder="To or From..." style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em; width: 100%;">
-                                        </div> 
-                                        <div style="display: flex; align-items: center; gap: 0.3em; flex-wrap: wrap;">
-                                            <select id="email-gallery-year-filter" style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em;">
-                                                <!-- <option value="all" selected>All Years</option> -->
-                                            </select>                                         
-                                            <select id="email-gallery-month-filter" style="border-radius: 4px; border: 1px solid #bfc9da; padding: 0.3em; font-size: 0.9em;">
-                                                <!-- <option value="all" selected>All Months</option> -->
-                                            </select>
-                                            <label style="display: flex; align-items: center; gap: 0.3em; color: #333; font-size: 0.9em;">
-                                                <input type="checkbox" id="email-gallery-attachments-filter" style="margin: 0;">
-                                                Attachments
-                                            </label>
-                                        </div>
-                                        <div style="display: flex; align-items: center; gap: 0.3em;">
-                                            <button id="email-gallery-search-btn" class="modal-btn modal-btn-primary" style="background: #233366; color: white; border: none; padding: 0.3em 0.8em; border-radius: 4px; cursor: pointer; font-size: 0.9em;">
-                                                <i class="fas fa-search" style="margin-right: 0.3em;"></i>Search
-                                            </button>
-                                            <button id="email-gallery-clear-btn" class="modal-btn modal-btn-secondary" style="background: #6c757d; color: white; border: none; padding: 0.3em 0.8em; border-radius: 4px; cursor: pointer; font-size: 0.9em;">
-                                                <i class="fas fa-times" style="margin-right: 0.3em;"></i>Clear
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div class="email-gallery-list" id="email-gallery-list"></div>
+                <div class="email-gallery-modal-body">
+                    <!-- Master Pane -->
+                    <div class="email-gallery-master-pane">
+                        <div class="email-gallery-search-section">
+                            <div class="email-metadata-filters">
+                                <div class="email-gallery-title">
+                                    <h2>Email Gallery</h2> 
+                                </div>
+                                <div class="email-gallery-search-row">
+                                    <input type="text" id="email-gallery-search" placeholder="Search emails..." class="email-gallery-input">
+                                </div>
+                                <div class="email-gallery-filter-row">
+                                    <input type="text" id="email-gallery-sender" placeholder="From..." class="email-gallery-input">
+                                    <input type="text" id="email-gallery-recipient" placeholder="To..." class="email-gallery-input">
+                                </div>
+                                <div class="email-gallery-filter-row-full">
+                                    <input type="text" id="email-gallery-to-from" placeholder="To or From..." class="email-gallery-input">
+                                </div> 
+                                <div class="email-gallery-filter-row">
+                                    <select id="email-gallery-year-filter" class="email-gallery-select"></select>                                         
+                                    <select id="email-gallery-month-filter" class="email-gallery-select"></select>
+                                    <label class="email-gallery-checkbox-label">
+                                        <input type="checkbox" id="email-gallery-attachments-filter">
+                                        Attachments
+                                    </label>
+                                </div>
+                                <div class="email-gallery-button-row">
+                                    <button id="email-gallery-search-btn" class="modal-btn modal-btn-primary">
+                                        <i class="fas fa-search"></i>Search
+                                    </button>
+                                    <button id="email-gallery-clear-btn" class="modal-btn modal-btn-secondary">
+                                        <i class="fas fa-times"></i>Clear
+                                    </button>
+                                    <button id="email-gallery-view-toggle" class="modal-btn modal-btn-secondary" title="Toggle view">
+                                        <i class="fas fa-th"></i>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <div class="email-gallery-content">
-                                <div id="email-gallery-email-details" style="padding: 5px; background-color: rgba(200, 200, 200, 0.3); position: absolute; top: 10px; left: 10px; border-radius: 4px; font-size: 0.9em;"></div>
-                                <div id="email-gallery-instructions" style="margin-top: 1em; margin-bottom: 1em; text-align: center; color: #666; font-style: italic;">
-                                    Select an email from the list on the left to view its content
+                        <div class="email-gallery-list" id="email-gallery-list"></div>
+                    </div>
+                    <!-- Resizable Divider -->
+                    <div class="email-gallery-divider" id="email-gallery-divider"></div>
+                    <!-- Detail Pane -->
+                    <div class="email-gallery-detail-pane">
+                        <div id="email-gallery-instructions" class="email-gallery-instructions">
+                            Select an email from the list on the left to view its content
+                        </div>
+                        <div id="email-gallery-email-content" class="email-gallery-email-content" style="display: none;">
+                            <div class="email-gallery-metadata-section">
+                                <div class="email-gallery-metadata-row">
+                                    <span class="email-gallery-metadata-label">Subject:</span>
+                                    <span class="email-gallery-metadata-value" id="email-gallery-metadata-subject"></span>
                                 </div>
-                                <div id="email-gallery-email-content" class="email-content-display" style="display: none;">
-                                    <div class="email-header" style="border-bottom: 2px solid #e9ecef; padding-bottom: 1em; margin-bottom: 1.5em;">
-                                        <div class="email-metadata">
-                                            <div class="info-row">
-                                                <span class="info-label">Subject:</span>
-                                                <span class="info-value email-subject"></span>
-                                            </div>
-                                            <div class="info-row">
-                                                <span class="info-label">From:</span>
-                                                <span class="info-value email-from"></span>
-                                            </div>
-                                            <div class="info-row">
-                                                <span class="info-label">Date:</span>
-                                                <span class="info-value email-date"></span>
-                                            </div>
-                                            <div class="info-row">
-                                                <span class="info-label">Folder:</span>
-                                                <span class="info-value email-folder"></span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="email-body" style="line-height: 1.6; color: #333; font-size: 1em;"></div>
-                                    <div class="email-attachments" style="display: flex; flex-direction: row; flex-wrap: wrap; gap: 0.5em; margin-top: 1em; align-items: flex-start;">
-                                    </div>
+                                <div class="email-gallery-metadata-row">
+                                    <span class="email-gallery-metadata-label">From:</span>
+                                    <span class="email-gallery-metadata-value" id="email-gallery-metadata-from"></span>
                                 </div>
+                                <div class="email-gallery-metadata-row">
+                                    <span class="email-gallery-metadata-label">Date:</span>
+                                    <span class="email-gallery-metadata-value" id="email-gallery-metadata-date"></span>
+                                </div>
+                                <div class="email-gallery-metadata-row">
+                                    <span class="email-gallery-metadata-label">Folder:</span>
+                                    <span class="email-gallery-metadata-value" id="email-gallery-metadata-folder"></span>
+                                </div>
+                            </div>
+                            <div class="email-gallery-iframe-container">
+                                <iframe id="email-gallery-iframe" class="email-gallery-iframe"></iframe>
+                            </div>
+                            <div class="email-gallery-attachments-section">
+                                <h3 class="email-gallery-attachments-title">Attachments</h3>
+                                <div class="email-gallery-attachments-grid" id="email-gallery-attachments-grid"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
            </div>
+        </div>
+        
+        <!-- Attachment Image Modal -->
+        <div id="email-attachment-image-modal" class="modal email-attachment-modal">
+            <div class="email-attachment-modal-content">
+                <button id="close-email-attachment-image-modal" class="modal-close-btn">&times;</button>
+                <img id="email-attachment-image-display" class="email-attachment-image-display" src="" alt="Attachment">
+            </div>
+        </div>
+        
+        <!-- Attachment Document Modal -->
+        <div id="email-attachment-document-modal" class="modal email-attachment-modal">
+            <div class="email-attachment-modal-content email-attachment-document-content">
+                <button id="close-email-attachment-document-modal" class="modal-close-btn">&times;</button>
+                <iframe id="email-attachment-document-iframe" class="email-attachment-document-iframe"></iframe>
+            </div>
+        </div>
+        
+        <!-- Reference Documents Modal -->
+        <div id="reference-documents-modal" class="modal">
+            <div class="modal-content reference-documents-modal-content">
+                <button id="close-reference-documents-modal" class="modal-close-btn">&times;</button>
+                <div class="reference-documents-header">
+                    <h2>Reference Documents</h2>
+                </div>
+                <div class="reference-documents-body">
+                    <!-- Search and Filters -->
+                    <div class="reference-documents-filters">
+                        <div class="reference-documents-search-row">
+                            <input type="text" id="reference-documents-search" placeholder="Search documents..." class="reference-documents-input">
+                            <button id="reference-documents-upload-btn" class="modal-btn modal-btn-primary">
+                                <i class="fas fa-upload"></i> Upload Document
+                            </button>
+                        </div>
+                        <div class="reference-documents-filter-row">
+                            <select id="reference-documents-category-filter" class="reference-documents-select">
+                                <option value="">All Categories</option>
+                            </select>
+                            <select id="reference-documents-content-type-filter" class="reference-documents-select">
+                                <option value="">All Types</option>
+                                <option value="application/pdf">PDF</option>
+                                <option value="application/msword">Word (DOC)</option>
+                                <option value="application/vnd.openxmlformats-officedocument.wordprocessingml.document">Word (DOCX)</option>
+                                <option value="image">Images</option>
+                                <option value="text">Text Files</option>
+                                <option value="text/csv">CSV</option>
+                                <option value="application/json">JSON</option>
+                            </select>
+                            <label class="reference-documents-checkbox-label">
+                                <input type="checkbox" id="reference-documents-task-filter">
+                                Available for Task
+                            </label>
+                        </div>
+                    </div>
+                    <!-- Document List -->
+                    <div class="reference-documents-list" id="reference-documents-list"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Upload Document Modal -->
+        <div id="reference-documents-upload-modal" class="modal">
+            <div class="modal-content reference-documents-upload-content">
+                <button id="close-reference-documents-upload-modal" class="modal-close-btn">&times;</button>
+                <h2>Upload Reference Document</h2>
+                <form id="reference-documents-upload-form" class="reference-documents-upload-form">
+                    <div class="reference-documents-form-group">
+                        <label for="reference-documents-upload-file">File *</label>
+                        <input type="file" id="reference-documents-upload-file" name="file" required>
+                    </div>
+                    <div class="reference-documents-form-group">
+                        <label for="reference-documents-upload-title">Title</label>
+                        <input type="text" id="reference-documents-upload-title" name="title" placeholder="Document title">
+                    </div>
+                    <div class="reference-documents-form-group">
+                        <label for="reference-documents-upload-description">Description</label>
+                        <textarea id="reference-documents-upload-description" name="description" rows="3" placeholder="Document description"></textarea>
+                    </div>
+                    <div class="reference-documents-form-group">
+                        <label for="reference-documents-upload-author">Author</label>
+                        <input type="text" id="reference-documents-upload-author" name="author" placeholder="Author name">
+                    </div>
+                    <div class="reference-documents-form-group">
+                        <label for="reference-documents-upload-tags">Tags (comma-separated)</label>
+                        <input type="text" id="reference-documents-upload-tags" name="tags" placeholder="tag1, tag2, tag3">
+                    </div>
+                    <div class="reference-documents-form-group">
+                        <label for="reference-documents-upload-categories">Categories (comma-separated)</label>
+                        <input type="text" id="reference-documents-upload-categories" name="categories" placeholder="category1, category2">
+                    </div>
+                    <div class="reference-documents-form-group">
+                        <label for="reference-documents-upload-notes">Notes</label>
+                        <textarea id="reference-documents-upload-notes" name="notes" rows="3" placeholder="Additional notes"></textarea>
+                    </div>
+                    <div class="reference-documents-form-group">
+                        <label class="reference-documents-checkbox-label">
+                            <input type="checkbox" id="reference-documents-upload-task" name="available_for_task">
+                            Available for Task
+                        </label>
+                    </div>
+                    <div class="reference-documents-form-actions">
+                        <button type="submit" class="modal-btn modal-btn-primary">Upload</button>
+                        <button type="button" id="reference-documents-upload-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Edit Document Modal -->
+        <div id="reference-documents-edit-modal" class="modal">
+            <div class="modal-content reference-documents-upload-content">
+                <button id="close-reference-documents-edit-modal" class="modal-close-btn">&times;</button>
+                <h2>Edit Document Metadata</h2>
+                <form id="reference-documents-edit-form" class="reference-documents-upload-form">
+                    <input type="hidden" id="reference-documents-edit-id">
+                    <div class="reference-documents-form-group">
+                        <label for="reference-documents-edit-title">Title</label>
+                        <input type="text" id="reference-documents-edit-title" name="title" placeholder="Document title">
+                    </div>
+                    <div class="reference-documents-form-group">
+                        <label for="reference-documents-edit-description">Description</label>
+                        <textarea id="reference-documents-edit-description" name="description" rows="3" placeholder="Document description"></textarea>
+                    </div>
+                    <div class="reference-documents-form-group">
+                        <label for="reference-documents-edit-author">Author</label>
+                        <input type="text" id="reference-documents-edit-author" name="author" placeholder="Author name">
+                    </div>
+                    <div class="reference-documents-form-group">
+                        <label for="reference-documents-edit-tags">Tags (comma-separated)</label>
+                        <input type="text" id="reference-documents-edit-tags" name="tags" placeholder="tag1, tag2, tag3">
+                    </div>
+                    <div class="reference-documents-form-group">
+                        <label for="reference-documents-edit-categories">Categories (comma-separated)</label>
+                        <input type="text" id="reference-documents-edit-categories" name="categories" placeholder="category1, category2">
+                    </div>
+                    <div class="reference-documents-form-group">
+                        <label for="reference-documents-edit-notes">Notes</label>
+                        <textarea id="reference-documents-edit-notes" name="notes" rows="3" placeholder="Additional notes"></textarea>
+                    </div>
+                    <div class="reference-documents-form-group">
+                        <label class="reference-documents-checkbox-label">
+                            <input type="checkbox" id="reference-documents-edit-task" name="available_for_task">
+                            Available for Task
+                        </label>
+                    </div>
+                    <div class="reference-documents-form-actions">
+                        <button type="submit" class="modal-btn modal-btn-primary">Save Changes</button>
+                        <button type="button" id="reference-documents-edit-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+                    </div>
+                </form>
+            </div>
         </div>
         
         
