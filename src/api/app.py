@@ -1291,6 +1291,7 @@ async def get_chat_sessions():
                     case((IMessage.attachment_data.isnot(None), 1), else_=0)
                 ).label('attachment_count'),
                 func.max(IMessage.service).label('primary_service'),
+                func.max(IMessage.message_date).label('last_message_date'),
                 func.count(case((IMessage.service.ilike('%iMessage%'), 1), else_=None)).label('imessage_count'),
                 func.count(case((IMessage.service.ilike('%SMS%'), 1), else_=None)).label('sms_count'),
                 func.count(case((IMessage.service == 'WhatsApp', 1), else_=None)).label('whatsapp_count'),
@@ -1301,7 +1302,7 @@ async def get_chat_sessions():
             ).group_by(
                 IMessage.chat_session
             ).order_by(
-                IMessage.chat_session
+                func.max(IMessage.message_date).desc()
             ).all()
         except Exception as table_error:
             # If table doesn't exist or has wrong name, try querying the old table name directly
@@ -1315,6 +1316,7 @@ async def get_chat_sessions():
                             COUNT(id) as message_count,
                             SUM(CASE WHEN attachment_data IS NOT NULL THEN 1 ELSE 0 END) as attachment_count,
                             MAX(service) as primary_service,
+                            MAX(message_date) as last_message_date,
                             COUNT(CASE WHEN service ILIKE '%iMessage%' THEN 1 END) as imessage_count,
                             COUNT(CASE WHEN service ILIKE '%SMS%' THEN 1 END) as sms_count,
                             COUNT(CASE WHEN service = 'WhatsApp' THEN 1 END) as whatsapp_count,
@@ -1323,7 +1325,7 @@ async def get_chat_sessions():
                         FROM imessages
                         WHERE chat_session IS NOT NULL
                         GROUP BY chat_session
-                        ORDER BY chat_session
+                        ORDER BY MAX(message_date) DESC
                     """)).fetchall()
                 except Exception:
                     # If that also fails, return empty results
@@ -1351,12 +1353,13 @@ async def get_chat_sessions():
         other_sessions = []
         
         for result in results:
-            imessage_count = result[4] or 0
-            sms_count = result[5] or 0
-            whatsapp_count = result[6] or 0
-            facebook_count = result[7] if len(result) > 7 else 0
-            instagram_count = result[8] if len(result) > 8 else 0
+            imessage_count = result[5] or 0
+            sms_count = result[6] or 0
+            whatsapp_count = result[7] or 0
+            facebook_count = result[8] if len(result) > 8 else 0
+            instagram_count = result[9] if len(result) > 9 else 0
             total_count = result[1] or 0
+            last_message_date = result[4]
             
             # Determine message type: 'imessage', 'sms', 'whatsapp', 'facebook', 'instagram', or 'mixed'
             non_zero_counts = sum([
@@ -1400,12 +1403,23 @@ async def get_chat_sessions():
                 else:
                     message_type = 'sms'  # Default to SMS
             
+            # Format last_message_date
+            last_message_date_str = None
+            if last_message_date:
+                if hasattr(last_message_date, 'isoformat'):
+                    # datetime object
+                    last_message_date_str = last_message_date.isoformat()
+                else:
+                    # Already a string or other format
+                    last_message_date_str = str(last_message_date)
+            
             session_data = {
                 "chat_session": result[0],
                 "message_count": result[1],
                 "has_attachments": (result[2] or 0) > 0,
                 "attachment_count": result[2] or 0,
-                "message_type": message_type
+                "message_type": message_type,
+                "last_message_date": last_message_date_str
             }
             
             # Categorize based on whether it's a phone number

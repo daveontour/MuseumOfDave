@@ -220,7 +220,6 @@ document.addEventListener('DOMContentLoaded', () => {
         emailGalleryToFrom: document.getElementById('email-gallery-to-from'),
         emailGalleryYearFilter: document.getElementById('email-gallery-year-filter'),
         emailGalleryMonthFilter: document.getElementById('email-gallery-month-filter'),
-        emailGalleryBusinessFilter: document.getElementById('email-gallery-business-filter'),
         emailGalleryAttachmentsFilter: document.getElementById('email-gallery-attachments-filter'),
         emailGalleryFolderFilter: document.getElementById('email-gallery-folder-filter'),
         emailGallerySearchBtn: document.getElementById('email-gallery-search-btn'),
@@ -281,7 +280,6 @@ document.addEventListener('DOMContentLoaded', () => {
         singleImageModalPdf: document.getElementById('single-image-modal-pdf'),
         singleImageDetails: document.getElementById('single-image-details'),
         closeSingleImageModalBtn: document.getElementById('close-single-image-modal'),
-        downloadSingleImageBtn: document.getElementById('download-single-image-btn'),
     };
 
     // Debug DOM elements
@@ -1315,7 +1313,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 DOM.closeSuggestionsModalBtn.addEventListener('click', close);
                 DOM.suggestionsModal.addEventListener('click', (e) => { if (e.target === DOM.suggestionsModal) close(); });
             }
-            return { init, open };
+            function close() {
+                const modal = document.getElementById('sms-messages-modal');
+                if (modal) {
+                    modal.style.display = 'none';
+                }
+            }
+
+            return { init, open, close };
         })(),
 
         FBAlbums: (() => {
@@ -2439,7 +2444,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 DOM.emailGalleryYearFilter.addEventListener('change', _handleSearch);
                 DOM.emailGalleryMonthFilter.addEventListener('change', _handleSearch);
-                DOM.emailGalleryBusinessFilter.addEventListener('change', _handleSearch);
                 DOM.emailGalleryAttachmentsFilter.addEventListener('change', _handleAttachmentsFilter);
                // DOM.emailGalleryFolderFilter.addEventListener('change', _handleSearch);
 
@@ -2604,7 +2608,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const toFromFilter = DOM.emailGalleryToFrom.value.trim();
                 const yearFilter = DOM.emailGalleryYearFilter.value;
                 const monthFilter = DOM.emailGalleryMonthFilter.value;
-                const businessFilter = DOM.emailGalleryBusinessFilter.checked;
                 const attachmentsFilter = DOM.emailGalleryAttachmentsFilter.checked;
                 //const folderFilter = DOM.emailGalleryFolderFilter.value;
 
@@ -2632,7 +2635,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (attachmentsFilter) {
                     params.append('has_attachments', 'true');
                 }
-                // Note: business filter is not supported by the new endpoint
 
                 // Reset pagination for new search
                 currentPage = 0;
@@ -2682,7 +2684,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 DOM.emailGalleryToFrom.value = '';
                 DOM.emailGalleryYearFilter.value = 0;
                 DOM.emailGalleryMonthFilter.value = 0;
-                DOM.emailGalleryBusinessFilter.checked = false;
                 DOM.emailGalleryAttachmentsFilter.checked = false;
                 DOM.emailGalleryList.innerHTML = '';
                 DOM.emailGalleryEmailContent.style.display = 'none';
@@ -3109,8 +3110,15 @@ ${content}
 
                 // First filter by message type
                 const typeFilteredSessions = filteredSessions.filter(session => {
+                    const messageType = session.message_type;
+                    
+                    // If message type is not defined, don't show it
+                    if (!messageType) {
+                        return false;
+                    }
+                    
                     // If it's a mixed conversation, show it if ANY individual type is selected OR if mixed is selected
-                    if (session.message_type === 'mixed') {
+                    if (messageType === 'mixed') {
                         return messageTypeFilters.mixed === true || 
                                messageTypeFilters.imessage === true || 
                                messageTypeFilters.sms === true || 
@@ -3118,8 +3126,10 @@ ${content}
                                messageTypeFilters.facebook === true ||
                                messageTypeFilters.instagram === true;
                     }
-                    // For other types, use normal filter
-                    return messageTypeFilters[session.message_type] === true;
+                    
+                    // For other types, check if the filter is enabled
+                    // Strict boolean check since we're setting boolean values
+                    return messageTypeFilters[messageType] === true;
                 });
 
                 // Get data from API response structure
@@ -3183,64 +3193,110 @@ ${content}
                     item.className = 'sms-chat-session-item';
                     item.dataset.session = session.chat_session;
                     
+                    // Profile picture/avatar
+                    const avatar = document.createElement('div');
+                    avatar.className = 'sms-chat-session-avatar';
+                    const initials = (session.chat_session || 'U').substring(0, 2).toUpperCase();
+                    avatar.textContent = initials;
+                    item.appendChild(avatar);
+                    
+                    // Content container
+                    const content = document.createElement('div');
+                    content.className = 'sms-chat-session-content';
+                    
+                    // Header with name and time
+                    const header = document.createElement('div');
+                    header.className = 'sms-chat-session-header';
+                    
                     const nameSpan = document.createElement('span');
                     nameSpan.className = 'sms-chat-session-name';
                     
-                    // Message type icon (SMS or iMessage)
+                    // Message type icon
                     const messageTypeIcon = document.createElement('i');
                     if (session.message_type === 'imessage') {
                         messageTypeIcon.className = 'fab fa-apple';
                         messageTypeIcon.title = 'iMessage';
                         messageTypeIcon.style.marginRight = '6px';
                         messageTypeIcon.style.color = '#007AFF';
+                        messageTypeIcon.style.fontSize = '14px';
                     } else if (session.message_type === 'sms') {
                         messageTypeIcon.className = 'fas fa-comment';
                         messageTypeIcon.title = 'SMS';
                         messageTypeIcon.style.marginRight = '6px';
                         messageTypeIcon.style.color = '#34C759';
+                        messageTypeIcon.style.fontSize = '14px';
                     } else if (session.message_type === 'whatsapp') {
                         messageTypeIcon.className = 'fab fa-whatsapp';
                         messageTypeIcon.title = 'WhatsApp';
                         messageTypeIcon.style.marginRight = '6px';
                         messageTypeIcon.style.color = '#25D366';
+                        messageTypeIcon.style.fontSize = '14px';
                     } else if (session.message_type === 'facebook') {
                         messageTypeIcon.className = 'fab fa-facebook-messenger';
                         messageTypeIcon.title = 'Facebook Messenger';
                         messageTypeIcon.style.marginRight = '6px';
                         messageTypeIcon.style.color = '#0084FF';
+                        messageTypeIcon.style.fontSize = '14px';
                     } else if (session.message_type === 'instagram') {
                         messageTypeIcon.className = 'fab fa-instagram';
                         messageTypeIcon.title = 'Instagram';
                         messageTypeIcon.style.marginRight = '6px';
                         messageTypeIcon.style.color = '#E4405F';
+                        messageTypeIcon.style.fontSize = '14px';
                     } else if (session.message_type === 'mixed') {
                         messageTypeIcon.className = 'fas fa-comments';
-                        messageTypeIcon.title = 'Mixed (SMS, iMessage, WhatsApp, Facebook Messenger & Instagram)';
+                        messageTypeIcon.title = 'Mixed';
                         messageTypeIcon.style.marginRight = '6px';
                         messageTypeIcon.style.color = '#FF9500';
+                        messageTypeIcon.style.fontSize = '14px';
                     }
                     nameSpan.appendChild(messageTypeIcon);
                     
                     const nameText = document.createTextNode(session.chat_session || 'Unknown');
                     nameSpan.appendChild(nameText);
                     
+                    header.appendChild(nameSpan);
+                    
+                    // Remove time display from master pane - not showing anything
+                    const timeSpan = document.createElement('span');
+                    timeSpan.className = 'sms-chat-session-time';
+                    timeSpan.textContent = '';
+                    header.appendChild(timeSpan);
+                    
+                    content.appendChild(header);
+                    
+                    // Preview with attachment indicator
+                    const preview = document.createElement('div');
+                    preview.className = 'sms-chat-session-preview';
+                    
+                    const previewText = document.createElement('span');
+                    previewText.className = 'sms-chat-session-preview-text';
+                    
                     // Attachment indicator
                     if (session.has_attachments) {
                         const attachmentIcon = document.createElement('i');
                         attachmentIcon.className = 'fas fa-paperclip';
-                        attachmentIcon.style.marginLeft = '8px';
-                        attachmentIcon.style.color = '#666';
+                        attachmentIcon.style.color = '#667781';
                         attachmentIcon.style.fontSize = '12px';
-                        attachmentIcon.title = `${session.attachment_count || 0} attachment(s)`;
-                        nameSpan.appendChild(attachmentIcon);
+                        attachmentIcon.style.marginRight = '4px';
+                        previewText.appendChild(attachmentIcon);
                     }
                     
-                    const countSpan = document.createElement('span');
-                    countSpan.className = 'sms-chat-session-count';
-                    countSpan.textContent = session.message_count || 0;
+                    const previewTextNode = document.createTextNode(`${session.message_count || 0} message${session.message_count !== 1 ? 's' : ''}`);
+                    previewText.appendChild(previewTextNode);
                     
-                    item.appendChild(nameSpan);
-                    item.appendChild(countSpan);
+                    preview.appendChild(previewText);
+                    
+                    // Unread count badge
+                    if (session.message_count > 0) {
+                        const countSpan = document.createElement('span');
+                        countSpan.className = 'sms-chat-session-count';
+                        countSpan.textContent = session.message_count > 99 ? '99+' : session.message_count;
+                        preview.appendChild(countSpan);
+                    }
+                    
+                    content.appendChild(preview);
+                    item.appendChild(content);
                     
                     item.addEventListener('click', () => selectChatSession(session.chat_session));
                     
@@ -3348,38 +3404,46 @@ ${content}
 
                 messagesContainer.innerHTML = '';
 
-                messages.forEach(message => {
+                messages.forEach((message, index) => {
                     const messageDiv = document.createElement('div');
                     const isIncoming = message.type === 'Incoming';
                     messageDiv.className = `sms-message ${isIncoming ? 'incoming' : 'outgoing'}`;
+                    
+                    // Add spacing between message groups
+                    if (index > 0) {
+                        const prevMessage = messages[index - 1];
+                        const timeDiff = new Date(message.message_date) - new Date(prevMessage.message_date);
+                        const minutesDiff = timeDiff / (1000 * 60);
+                        if (minutesDiff > 5 || prevMessage.type !== message.type) {
+                            messageDiv.style.marginTop = '10px';
+                        }
+                    }
 
                     const bubble = document.createElement('div');
                     bubble.className = 'sms-message-bubble';
 
-                    // Header with sender, service icon, and date
-                    const header = document.createElement('div');
-                    header.className = 'sms-message-header';
-                    header.style.display = 'flex';
-                    header.style.justifyContent = 'space-between';
-                    header.style.alignItems = 'center';
-                    
-                    // Container for icon and sender name (left side)
-                    const leftContainer = document.createElement('div');
-                    leftContainer.style.display = 'flex';
-                    leftContainer.style.alignItems = 'center';
-                    leftContainer.style.gap = '6px';
-                    
-                    // Service type icon
-                    const serviceIcon = document.createElement('i');
-                    serviceIcon.className = 'sms-message-service-icon';
-                    serviceIcon.style.fontSize = '12px';
-                    
-                    const service = message.service || '';
-                    if (service.toLowerCase().includes('imessage')) {
-                        serviceIcon.className = 'fab fa-apple sms-message-service-icon';
-                        serviceIcon.style.color = '#007AFF';
-                        serviceIcon.title = 'iMessage';
-                    } else if (service.toLowerCase().includes('sms')) {
+                    // Header with sender (for incoming) and date
+                    if (isIncoming) {
+                        const header = document.createElement('div');
+                        header.className = 'sms-message-header';
+                        
+                        // Service type icon and sender name
+                        const leftContainer = document.createElement('div');
+                        leftContainer.style.display = 'flex';
+                        leftContainer.style.alignItems = 'center';
+                        leftContainer.style.gap = '6px';
+                        
+                        // Service type icon
+                        const serviceIcon = document.createElement('i');
+                        serviceIcon.className = 'sms-message-service-icon';
+                        serviceIcon.style.fontSize = '11px';
+                        
+                        const service = message.service || '';
+                        if (service.toLowerCase().includes('imessage')) {
+                            serviceIcon.className = 'fab fa-apple sms-message-service-icon';
+                            serviceIcon.style.color = '#007AFF';
+                            serviceIcon.title = 'iMessage';
+                        } else if (service.toLowerCase().includes('sms')) {
                         serviceIcon.className = 'fas fa-comment sms-message-service-icon';
                         serviceIcon.style.color = '#34C759';
                         serviceIcon.title = 'SMS';
@@ -3413,9 +3477,9 @@ ${content}
                     dateSpan.className = 'sms-message-date';
                     dateSpan.textContent = formatAustralianDate(message.message_date);
                     
-                    header.appendChild(leftContainer);
-                    header.appendChild(dateSpan);
-                    bubble.appendChild(header);
+                        header.appendChild(leftContainer);
+                        messageDiv.appendChild(header);
+                    }
 
                     // Message text
                     if (message.text) {
@@ -3429,28 +3493,125 @@ ${content}
                     if (message.has_attachment && message.attachment_filename) {
                         const attachmentDiv = document.createElement('div');
                         attachmentDiv.className = 'sms-message-attachment';
+                        attachmentDiv.style.marginTop = '4px';
+                        attachmentDiv.style.borderRadius = '7.5px';
+                        attachmentDiv.style.overflow = 'hidden';
+                        attachmentDiv.style.cursor = 'pointer';
                         
-                        const img = document.createElement('img');
-                        img.src = `/imessages/${message.id}/attachment`;
-                        img.alt = message.attachment_filename;
-                        img.style.maxWidth = '200px';
-                        img.style.maxHeight = '200px';
-                        img.style.objectFit = 'contain';
+                        // Check attachment type to display appropriately
+                        const contentType = message.attachment_type || '';
+                        const isAudio = contentType.startsWith('audio/');
+                        const isVideo = contentType.startsWith('video/');
+                        const isImage = contentType.startsWith('image/');
                         
-                        img.onerror = function() {
-                            // If image fails to load, show filename
-                            attachmentDiv.innerHTML = `<div style="padding: 8px; background-color: rgba(0,0,0,0.1); border-radius: 4px; font-size: 12px;">${message.attachment_filename}</div>`;
+                        // Helper function to create fallback display
+                        const createFallbackDisplay = (iconClass, iconText) => {
+                            attachmentDiv.innerHTML = `<div style="padding: 12px; background-color: rgba(0,0,0,0.05); border-radius: 7.5px; font-size: 13px; color: #667781; display: flex; align-items: center; gap: 8px;"><i class="${iconClass}" style="font-size: 16px;"></i><span>${message.attachment_filename}</span></div>`;
                         };
                         
-                        img.addEventListener('click', () => {
-                            showFullAttachment(message.id, message.attachment_filename, message.attachment_type);
-                        });
+                        if (isAudio) {
+                            // Display audio player inline in the message bubble
+                            // Remove overflow hidden for audio to show controls properly
+                            attachmentDiv.style.overflow = 'visible';
+                            attachmentDiv.style.maxWidth = '300px';
+                            
+                            const audio = document.createElement('audio');
+                            audio.src = `/imessages/${message.id}/attachment`;
+                            audio.controls = true;
+                            audio.preload = 'metadata'; // Load metadata but not the full audio until play
+                            audio.style.width = '100%';
+                            audio.style.minWidth = '250px';
+                            audio.style.minHeight = '40px';
+                            audio.style.height = 'auto';
+                            audio.style.display = 'block';
+                            audio.style.outline = 'none';
+                            audio.style.verticalAlign = 'middle';
+                            attachmentDiv.appendChild(audio);
+                            // Remove cursor pointer since audio controls handle interaction
+                            attachmentDiv.style.cursor = 'default';
+                        } else if (isVideo) {
+                            // Display video attachment with icon
+                            createFallbackDisplay('fas fa-video', 'Video');
+                        } else {
+                            // For images or unknown types, try to display as image first
+                            // This handles cases where attachment_type might not be set
+                            const img = document.createElement('img');
+                            img.loading = 'lazy'; // Native lazy loading - MUST be set before src
+                            img.src = `/imessages/${message.id}/attachment`;
+                            img.alt = message.attachment_filename;
+                            img.style.maxWidth = '300px';
+                            img.style.maxHeight = '300px';
+                            img.style.objectFit = 'cover';
+                            img.style.display = 'block';
+                            img.style.cursor = 'pointer';
+                            
+                            img.onerror = function() {
+                                // If image fails to load, show filename with appropriate icon
+                                if (isImage) {
+                                    // Known image that failed to load
+                                    createFallbackDisplay('fas fa-image', 'Image');
+                                } else {
+                                    // Unknown file type
+                                    createFallbackDisplay('fas fa-file', 'File');
+                                }
+                            };
+                            
+                            attachmentDiv.appendChild(img);
+                        }
                         
-                        attachmentDiv.appendChild(img);
+                        // Attach click handler to the attachment div (skip audio since it has inline controls)
+                        if (!isAudio) {
+                            attachmentDiv.addEventListener('click', () => {
+                                showFullAttachment(message.id, message.attachment_filename, message.attachment_type);
+                            });
+                        }
+                        
                         bubble.appendChild(attachmentDiv);
                     }
 
-                    messageDiv.appendChild(bubble);
+                    // Timestamp stacked vertically next to bubble - show full date and time
+                    const dateTimeContainer = document.createElement('div');
+                    dateTimeContainer.style.display = 'flex';
+                    dateTimeContainer.style.flexDirection = 'column';
+                    dateTimeContainer.style.alignItems = 'flex-start';
+                    dateTimeContainer.style.marginLeft = '6px';
+                    dateTimeContainer.style.paddingBottom = '2px';
+                    dateTimeContainer.style.justifyContent = 'flex-end';
+                    
+                    // Show full Australian date format: DD/MM/YYYY HH:MM:SS
+                    const fullDateStr = formatAustralianDate(message.message_date);
+                    const dateTimeParts = fullDateStr.split(' ');
+                    
+                    // Date part
+                    const dateSpan = document.createElement('span');
+                    dateSpan.className = 'sms-message-date';
+                    dateSpan.style.fontSize = '11px';
+                    dateSpan.style.color = '#667781';
+                    dateSpan.style.whiteSpace = 'nowrap';
+                    dateSpan.style.lineHeight = '1.2';
+                    dateSpan.textContent = dateTimeParts[0] || ''; // Date part
+                    
+                    // Time part
+                    const timeSpan = document.createElement('span');
+                    timeSpan.className = 'sms-message-time';
+                    timeSpan.style.fontSize = '11px';
+                    timeSpan.style.color = '#667781';
+                    timeSpan.style.whiteSpace = 'nowrap';
+                    timeSpan.style.lineHeight = '1.2';
+                    timeSpan.textContent = dateTimeParts.length > 1 ? dateTimeParts.slice(1).join(' ') : ''; // Time part(s)
+                    
+                    dateTimeContainer.appendChild(dateSpan);
+                    dateTimeContainer.appendChild(timeSpan);
+                    
+                    // Wrap bubble and timestamp together
+                    const contentWrapper = document.createElement('div');
+                    contentWrapper.style.display = 'flex';
+                    contentWrapper.style.alignItems = 'flex-end';
+                    contentWrapper.style.gap = '6px';
+                    contentWrapper.appendChild(bubble);
+                    contentWrapper.appendChild(dateTimeContainer);
+                    
+                    messageDiv.appendChild(contentWrapper);
                     messagesContainer.appendChild(messageDiv);
                 });
 
@@ -3494,6 +3655,11 @@ ${content}
                 } else if (isAudio) {
                     modalAudio.src = attachmentUrl;
                     modalAudio.style.display = 'block';
+                    // Auto-play the audio
+                    modalAudio.play().catch(error => {
+                        console.warn('Auto-play prevented by browser:', error);
+                        // Audio will still be available for manual play via controls
+                    });
                 } else if (isPdf) {
                     modalPdf.src = attachmentUrl;
                     modalPdf.style.display = 'block';
@@ -3602,15 +3768,102 @@ ${content}
                     'filter-mixed': 'mixed'
                 };
 
+                // Initialize checkboxes and sync with messageTypeFilters
                 Object.keys(filterCheckboxes).forEach(checkboxId => {
                     const checkbox = document.getElementById(checkboxId);
                     if (checkbox) {
+                        const filterKey = filterCheckboxes[checkboxId];
+                        const label = checkbox.closest('label');
+                        
+                        // Sync filter state from checkbox's actual checked state
+                        // Read the current checkbox state (which may be set by HTML checked attribute)
+                        const isChecked = checkbox.checked;
+                        messageTypeFilters[filterKey] = isChecked;
+                        
+                        // Update label styling based on checked state
+                        if (label) {
+                            const icon = label.querySelector('i');
+                            const textSpan = label.querySelector('span');
+                            
+                            if (isChecked) {
+                                label.style.backgroundColor = '#d1e7dd';
+                                label.style.borderColor = '#0f5132';
+                                if (icon) icon.style.color = '#0f5132';
+                                if (textSpan) {
+                                    textSpan.style.color = '#0f5132';
+                                    textSpan.style.fontWeight = '600';
+                                }
+                            } else {
+                                label.style.backgroundColor = '#f0f2f5';
+                                label.style.borderColor = '#f0f2f5';
+                                // Reset icon colors to their original
+                                if (icon) {
+                                    const iconClass = icon.className;
+                                    if (iconClass.includes('fa-apple')) icon.style.color = '#007AFF';
+                                    else if (iconClass.includes('fa-comment') && !iconClass.includes('fa-comments')) icon.style.color = '#34C759';
+                                    else if (iconClass.includes('fa-whatsapp')) icon.style.color = '#25D366';
+                                    else if (iconClass.includes('fa-facebook-messenger')) icon.style.color = '#0084FF';
+                                    else if (iconClass.includes('fa-instagram')) icon.style.color = '#E4405F';
+                                    else if (iconClass.includes('fa-comments')) icon.style.color = '#FF9500';
+                                    else icon.style.color = '#54656f';
+                                }
+                                if (textSpan) {
+                                    textSpan.style.color = '#54656f';
+                                    textSpan.style.fontWeight = 'normal';
+                                }
+                            }
+                        }
+                        
                         checkbox.addEventListener('change', (e) => {
-                            messageTypeFilters[filterCheckboxes[checkboxId]] = e.target.checked;
+                            const newValue = Boolean(e.target.checked);
+                            messageTypeFilters[filterKey] = newValue;
+                            
+                            // Update label styling
+                            if (label) {
+                                const icon = label.querySelector('i');
+                                const textSpan = label.querySelector('span');
+                                
+                                if (newValue) {
+                                    label.style.backgroundColor = '#d1e7dd';
+                                    label.style.borderColor = '#0f5132';
+                                    if (icon) icon.style.color = '#0f5132';
+                                    if (textSpan) {
+                                        textSpan.style.color = '#0f5132';
+                                        textSpan.style.fontWeight = '600';
+                                    }
+                                } else {
+                                    label.style.backgroundColor = '#f0f2f5';
+                                    label.style.borderColor = '#f0f2f5';
+                                    // Reset icon colors to their original
+                                    if (icon) {
+                                        const iconClass = icon.className;
+                                        if (iconClass.includes('fa-apple')) icon.style.color = '#007AFF';
+                                        else if (iconClass.includes('fa-comment') && !iconClass.includes('fa-comments')) icon.style.color = '#34C759';
+                                        else if (iconClass.includes('fa-whatsapp')) icon.style.color = '#25D366';
+                                        else if (iconClass.includes('fa-facebook-messenger')) icon.style.color = '#0084FF';
+                                        else if (iconClass.includes('fa-instagram')) icon.style.color = '#E4405F';
+                                        else if (iconClass.includes('fa-comments')) icon.style.color = '#FF9500';
+                                        else icon.style.color = '#54656f';
+                                    }
+                                    if (textSpan) {
+                                        textSpan.style.color = '#54656f';
+                                        textSpan.style.fontWeight = 'normal';
+                                    }
+                                }
+                            }
+                            
                             renderChatSessions();
                         });
+                    } else {
+                        console.warn(`Checkbox not found: ${checkboxId}`);
                     }
                 });
+                
+                // After initializing all checkboxes, ensure filter state is synced
+                // and trigger a render if sessions are already loaded
+                if (chatSessions.length > 0) {
+                    renderChatSessions();
+                }
 
                 const deleteBtn = document.getElementById('sms-delete-conversation-btn');
                 if (deleteBtn) {
@@ -3711,11 +3964,73 @@ ${content}
                 const modal = document.getElementById('sms-messages-modal');
                 if (modal) {
                     modal.style.display = 'flex';
+                    // Re-initialize filters from checkboxes when modal opens
+                    // This ensures filter state matches checkbox state
+                    const filterCheckboxes = {
+                        'filter-imessage': 'imessage',
+                        'filter-sms': 'sms',
+                        'filter-whatsapp': 'whatsapp',
+                        'filter-facebook': 'facebook',
+                        'filter-instagram': 'instagram',
+                        'filter-mixed': 'mixed'
+                    };
+                    
+                    Object.keys(filterCheckboxes).forEach(checkboxId => {
+                        const checkbox = document.getElementById(checkboxId);
+                        if (checkbox) {
+                            const filterKey = filterCheckboxes[checkboxId];
+                            const label = checkbox.closest('label');
+                            const isChecked = Boolean(checkbox.checked);
+                            messageTypeFilters[filterKey] = isChecked;
+                            
+                            // Update label styling
+                            if (label) {
+                                const icon = label.querySelector('i');
+                                const textSpan = label.querySelector('span');
+                                
+                                if (isChecked) {
+                                    label.style.backgroundColor = '#d1e7dd';
+                                    label.style.borderColor = '#0f5132';
+                                    if (icon) icon.style.color = '#0f5132';
+                                    if (textSpan) {
+                                        textSpan.style.color = '#0f5132';
+                                        textSpan.style.fontWeight = '600';
+                                    }
+                                } else {
+                                    label.style.backgroundColor = '#f0f2f5';
+                                    label.style.borderColor = '#f0f2f5';
+                                    // Reset icon colors to their original
+                                    if (icon) {
+                                        const iconClass = icon.className;
+                                        if (iconClass.includes('fa-apple')) icon.style.color = '#007AFF';
+                                        else if (iconClass.includes('fa-comment') && !iconClass.includes('fa-comments')) icon.style.color = '#34C759';
+                                        else if (iconClass.includes('fa-whatsapp')) icon.style.color = '#25D366';
+                                        else if (iconClass.includes('fa-facebook-messenger')) icon.style.color = '#0084FF';
+                                        else if (iconClass.includes('fa-instagram')) icon.style.color = '#E4405F';
+                                        else if (iconClass.includes('fa-comments')) icon.style.color = '#FF9500';
+                                        else icon.style.color = '#54656f';
+                                    }
+                                    if (textSpan) {
+                                        textSpan.style.color = '#54656f';
+                                        textSpan.style.fontWeight = 'normal';
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    
                     loadChatSessions();
                 }
             }
 
-            return { init, open };
+            function close() {
+                const modal = document.getElementById('sms-messages-modal');
+                if (modal) {
+                    modal.style.display = 'none';
+                }
+            }
+
+            return { init, open, close };
         })(),
 
         ChangeUserId: (() => {
@@ -4060,8 +4375,6 @@ ${content}
         })(),
 
         SingleImageDisplay: (() => {
-            let currentFileInfo = null; // Store current file information for download
-            
             function init() {
                 // The modal is already in the HTML, just need to ensure proper event handling
                 if (DOM.singleImageModal) {
@@ -4073,10 +4386,6 @@ ${content}
                 }
                 if (DOM.closeSingleImageModalBtn) {
                     DOM.closeSingleImageModalBtn.addEventListener('click', _close);
-                }
-                
-                if (DOM.downloadSingleImageBtn) {
-                    DOM.downloadSingleImageBtn.addEventListener('click', _downloadCurrentItem);
                 }
                 
                 // Add keyboard support for Escape key
@@ -4092,9 +4401,6 @@ ${content}
                     console.error('SingleImage modal elements not found');
                     return;
                 }
-                
-                // Store current file information for download
-                currentFileInfo = { filename, file_id, taken, lat, long };
                 
                 DOM.singleImageModalAudio.style.display = 'none';
                 DOM.singleImageModalVideo.style.display = 'none';
@@ -4142,30 +4448,6 @@ ${content}
                 Modals._openModal(DOM.singleImageModal);
             }
 
-            function _downloadCurrentItem() {
-                if (!currentFileInfo) {
-                    console.error('No file information available for download');
-                    return;
-                }
-
-                const { filename, file_id } = currentFileInfo;
-                
-                // Use the download endpoint for all file types
-                //let downloadUrl = '/downloadFile?id=' + file_id;
-                let downloadUrl = file_id.replace('getImage', 'downloadFile');
-
-                // Create a temporary link element to trigger download
-                const link = document.createElement('a');
-                link.href = downloadUrl;
-                link.download = filename || 'download';
-                link.target = '_blank';
-                
-                // Append to body, click, and remove
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            }
-
             function _close() {
                 // Stop any playing audio
                 if (DOM.singleImageModalAudio) {
@@ -4183,9 +4465,6 @@ ${content}
                 if (DOM.singleImageModalPdf) {
                     DOM.singleImageModalPdf.src = '';
                 }
-                
-                // Clear current file info
-                currentFileInfo = null;
                 
                 Modals._closeModal(DOM.singleImageModal);
             }
