@@ -19,6 +19,10 @@ class Database:
             config.db.connection_string,
             pool_pre_ping=True,
             echo=False,
+            pool_size=10,  # Number of connections to maintain in the pool
+            max_overflow=20,  # Maximum number of connections beyond pool_size
+            pool_recycle=3600,  # Recycle connections after 1 hour
+            pool_timeout=30,  # Timeout for getting a connection from the pool
         )
         self.SessionLocal = sessionmaker(bind=self.engine)
 

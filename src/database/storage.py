@@ -1,10 +1,11 @@
 """Email storage operations."""
 
 from typing import List, Set, Optional, Dict, Any, Tuple
+from datetime import datetime
 from sqlalchemy.orm import Session
 
 from .connection import Database
-from .models import Email, Attachment, IMessage, FacebookAlbum, FacebookAlbumImage
+from .models import Email, Attachment, IMessage, FacebookAlbum, FacebookAlbumImage, ImageMetadata, ImageBlob
 
 
 class EmailStorage:
@@ -310,6 +311,206 @@ class FacebookAlbumStorage:
             session.commit()
             
             return (image, False)
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+
+class ImageStorage:
+    """Handle image storage operations."""
+
+    def __init__(self, db: Optional[Database] = None):
+        """Initialize storage with database connection."""
+        if db is None:
+            db = Database()
+        self.db = db
+
+    def save_image(
+        self,
+        source_reference: str,
+        image_data: bytes,
+        thumbnail_data: Optional[bytes] = None,
+        image_type: Optional[str] = None,
+        title: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[str] = None,
+        year: Optional[int] = None,
+        month: Optional[int] = None,
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
+        altitude: Optional[float] = None,
+        has_gps: bool = False,
+        source: str = "Filesystem",
+        **kwargs
+    ) -> Tuple[ImageMetadata, bool]:
+        """Save or update image with metadata.
+        
+        Args:
+            source_reference: Full file path (used for duplicate detection)
+            image_data: Binary image data
+            thumbnail_data: Optional thumbnail binary data
+            image_type: MIME type of image
+            title: Image title
+            description: Image description
+            tags: Comma-separated tags
+            year: Year from EXIF
+            month: Month from EXIF
+            latitude: GPS latitude
+            longitude: GPS longitude
+            altitude: GPS altitude
+            has_gps: Whether GPS data exists
+            source: Source of image (default "Filesystem")
+            **kwargs: Additional metadata fields
+            
+        Returns:
+            Tuple of (ImageMetadata instance, is_update: bool)
+        """
+        session = self.db.get_session()
+        try:
+            # Check for existing image by source_reference
+            existing_metadata = session.query(ImageMetadata).filter(
+                ImageMetadata.source_reference == source_reference
+            ).first()
+            
+            if existing_metadata:
+                # Update existing image
+                is_update = True
+                # Update ImageBlob
+                existing_blob = session.query(ImageBlob).filter(
+                    ImageBlob.id == existing_metadata.image_blob_id
+                ).first()
+                
+                if existing_blob:
+                    existing_blob.image_data = image_data
+                    if thumbnail_data is not None:
+                        existing_blob.thumbnail_data = thumbnail_data
+                    existing_blob.updated_at = datetime.utcnow()
+                
+                # Update ImageMetadata
+                existing_metadata.title = title
+                existing_metadata.description = description
+                existing_metadata.tags = tags
+                existing_metadata.image_type = image_type
+                existing_metadata.year = year
+                existing_metadata.month = month
+                existing_metadata.latitude = latitude
+                existing_metadata.longitude = longitude
+                existing_metadata.altitude = altitude
+                existing_metadata.has_gps = has_gps
+                existing_metadata.source = source
+                existing_metadata.source_reference = source_reference
+                existing_metadata.updated_at = datetime.utcnow()
+                
+                # Update any additional fields from kwargs
+                for key, value in kwargs.items():
+                    if hasattr(existing_metadata, key):
+                        setattr(existing_metadata, key, value)
+                
+                session.commit()
+                return (existing_metadata, is_update)
+            else:
+                # Create new image
+                is_update = False
+                # Create ImageBlob first
+                image_blob = ImageBlob(
+                    image_data=image_data,
+                    thumbnail_data=thumbnail_data
+                )
+                session.add(image_blob)
+                session.flush()  # Get the blob ID
+                
+                # Create ImageMetadata
+                image_metadata = ImageMetadata(
+                    image_blob_id=image_blob.id,
+                    title=title,
+                    description=description,
+                    tags=tags,
+                    image_type=image_type,
+                    year=year,
+                    month=month,
+                    latitude=latitude,
+                    longitude=longitude,
+                    altitude=altitude,
+                    has_gps=has_gps,
+                    source=source,
+                    source_reference=source_reference,
+                    **kwargs
+                )
+                session.add(image_metadata)
+                session.commit()
+                
+                return (image_metadata, is_update)
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def get_image_by_blob_id(self, blob_id: int) -> Optional[ImageBlob]:
+        """Retrieve image by blob ID.
+        
+        Args:
+            blob_id: The ID of the ImageBlob
+            
+        Returns:
+            ImageBlob instance or None if not found
+        """
+        session = self.db.get_session()
+        try:
+            image_blob = session.query(ImageBlob).filter(ImageBlob.id == blob_id).first()
+            if image_blob:
+                # Detach the object from the session to avoid session management issues
+                session.expunge(image_blob)
+            return image_blob
+        finally:
+            session.close()
+
+    def get_image_by_metadata_id(self, metadata_id: int) -> Optional[ImageBlob]:
+        """Retrieve image by metadata ID.
+        
+        Args:
+            metadata_id: The ID of the ImageMetadata
+            
+        Returns:
+            ImageBlob instance or None if not found
+        """
+        session = self.db.get_session()
+        try:
+            metadata = session.query(ImageMetadata).filter(ImageMetadata.id == metadata_id).first()
+            if metadata:
+                image_blob = session.query(ImageBlob).filter(ImageBlob.id == metadata.image_blob_id).first()
+                if image_blob:
+                    # Detach the object from the session to avoid session management issues
+                    session.expunge(image_blob)
+                return image_blob
+            return None
+        finally:
+            session.close()
+    
+    def delete_image_by_metadata_id(self, metadata_id: int) -> bool:
+        """Delete an image by metadata ID, ensuring cascade deletion of ImageBlob.
+        
+        Args:
+            metadata_id: The ID of the ImageMetadata to delete
+            
+        Returns:
+            True if deleted, False if not found
+        """
+        session = self.db.get_session()
+        try:
+            # Load the metadata with the relationship to ensure cascade works
+            metadata = session.query(ImageMetadata).filter(ImageMetadata.id == metadata_id).first()
+            if not metadata:
+                return False
+            
+            # Delete the metadata - this should cascade delete the ImageBlob
+            # We need to explicitly load the relationship for cascade to work
+            _ = metadata.image_blob  # Load the relationship
+            session.delete(metadata)
+            session.commit()
+            return True
         except Exception:
             session.rollback()
             raise

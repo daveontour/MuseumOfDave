@@ -116,6 +116,9 @@
                     <button type="button" class="more-options-btn" id="email-gallery-sidebar-btn">
                         <i class="fas fa-envelope"></i> Email Gallery
                     </button>
+                    <button type="button" class="more-options-btn" id="new-image-gallery-sidebar-btn">
+                        <i class="fas fa-images"></i> New Image Gallery
+                    </button>
                     <button type="button" class="more-options-btn" id="suggestions-sidebar-btn">
                         <i class="fas fa-lightbulb"></i> Suggestions
                     </button>
@@ -458,6 +461,9 @@
                 </button>
                 <button class="config-tab-button" data-tab="facebook-albums">
                     <i class="fas fa-images"></i> Facebook Albums
+                </button>
+                <button class="config-tab-button" data-tab="image-controls">
+                    <i class="fas fa-image"></i> Image Controls
                 </button>
             </div>
             <div class="config-content" style="height:calc(100vh - 170px)">
@@ -899,6 +905,59 @@
                         </div>
                     </section>
                 </div>
+                <div class="config-tab-content" id="image-controls-tab">
+                    <section class="config-section">
+                        <h3>Filesystem Image Import Controls</h3>
+                        <div class="setting-group">
+                            <label for="filesystem-import-directory">Root Directory:</label>
+                            <input type="text" id="filesystem-import-directory" placeholder="e.g., C:\Users\Dave\Pictures" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                            <small style="color: #666; display: block; margin-top: 5px;">Root directory to search for images (searches recursively through all subfolders)</small>
+                        </div>
+                        <div class="setting-group" style="margin-top: 10px;">
+                            <label for="filesystem-import-max-images">Max Images (Optional):</label>
+                            <input type="number" id="filesystem-import-max-images" placeholder="Leave empty for all images" min="1" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                            <small style="color: #666; display: block; margin-top: 5px;">Maximum number of images to import (leave empty to import all)</small>
+                        </div>
+                        <div class="setting-group" style="margin-top: 10px;">
+                            <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="checkbox" id="filesystem-import-create-thumbnail" style="cursor: pointer;">
+                                <span>Create Thumbnails</span>
+                            </label>
+                            <small style="color: #666; display: block; margin-top: 5px;">Generate thumbnails for imported images (may slow down import)</small>
+                        </div>
+                        <div class="setting-group" style="margin-top: 20px;">
+                            <button type="button" id="start-filesystem-import-btn" class="modal-btn modal-btn-primary" style="margin-right: 10px;">
+                                <i class="fas fa-play"></i> Start Image Import
+                            </button>
+                            <button type="button" id="cancel-filesystem-import-btn" class="modal-btn modal-btn-secondary" style="display: none;">
+                                <i class="fas fa-stop"></i> Cancel Import
+                            </button>
+                        </div>
+                        <div id="filesystem-import-status" style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6; display: none;">
+                            <div id="filesystem-import-status-message" style="color: #333; font-weight: bold; margin-bottom: 10px;"></div>
+                            <div id="filesystem-import-progress-container" style="margin-top: 15px; display: none;">
+                                <div id="filesystem-import-current-file" style="color: #333; font-size: 0.95em; margin-bottom: 8px;">
+                                    <strong>Current File:</strong> <span id="filesystem-current-file-name">-</span>
+                                </div>
+                                <div id="filesystem-import-file-progress" style="color: #666; font-size: 0.9em; margin-bottom: 10px;">
+                                    <strong>Progress:</strong> <span id="filesystem-file-progress-text">0 / 0</span>
+                                </div>
+                                <div id="filesystem-import-progress-bar-container" style="width: 100%; background-color: #e9ecef; border-radius: 4px; height: 24px; margin-bottom: 10px; overflow: hidden;">
+                                    <div id="filesystem-import-progress-bar" style="height: 100%; background-color: #28a745; width: 0%; transition: width 0.3s ease; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.85em; font-weight: bold;">
+                                        <span id="filesystem-progress-bar-text">0%</span>
+                                    </div>
+                                </div>
+                                <div id="filesystem-import-images-count" style="color: #666; font-size: 0.9em;">
+                                    <strong>Images:</strong> <span id="filesystem-images-imported-count">0</span> imported, <span id="filesystem-images-updated-count">0</span> updated
+                                </div>
+                                <div id="filesystem-import-errors-count" style="color: #dc3545; font-size: 0.9em;">
+                                    <strong>Errors:</strong> <span id="filesystem-errors-count">0</span>
+                                </div>
+                            </div>
+                            <div id="filesystem-import-status-details" style="color: #666; font-size: 0.9em; margin-top: 10px;"></div>
+                        </div>
+                    </section>
+                </div>
             </div>
         </div>
 
@@ -986,6 +1045,41 @@
                 <div style="display: flex; justify-content: flex-end; gap: 10px;">
                     <button id="sms-ask-ai-cancel" style="padding: 10px 20px; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.95em; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#5a6268'" onmouseout="this.style.backgroundColor='#6c757d'">Cancel</button>
                     <button id="sms-ask-ai-submit" style="padding: 10px 20px; background-color: #007AFF; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.95em; font-weight: 500; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#0056CC'" onmouseout="this.style.backgroundColor='#007AFF'">Submit</button>
+                </div>
+            </div>
+        </div>
+        <!-- Email Ask AI Modal -->
+        <div id="email-ask-ai-modal" style="display: none; position: fixed; z-index: 4000 !important; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center;">
+            <div style="background-color: white; padding: 2rem; border-radius: 8px; max-width: 500px; width: 90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <div>
+                        <h2 style="margin: 0; color: #233366; font-size: 1.3em;">Ask the AI</h2>
+                        <p id="email-ask-ai-email-subject" style="margin: 4px 0 0 0; color: #666; font-size: 0.9em; font-weight: normal;"></p>
+                    </div>
+                    <button id="email-ask-ai-close" style="background: none; border: none; font-size: 1.5em; color: #666; cursor: pointer; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;" title="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display: flex; align-items: center; padding: 12px; margin-bottom: 10px; cursor: pointer; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">
+                        <input type="radio" name="email-ask-ai-option" value="summarise" checked style="margin-right: 10px; cursor: pointer;">
+                        <span style="color: #233366; font-size: 1em;">Summarise the Email</span>
+                    </label>
+                    <label style="display: flex; align-items: center; padding: 12px; margin-bottom: 10px; cursor: pointer; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">
+                        <input type="radio" name="email-ask-ai-option" value="imaginary" style="margin-right: 10px; cursor: pointer;">
+                        <span style="color: #233366; font-size: 1em;">Create an Imaginary Response</span>
+                    </label>
+                    <label style="display: flex; align-items: center; padding: 12px; margin-bottom: 10px; cursor: pointer; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">
+                        <input type="radio" name="email-ask-ai-option" value="other" style="margin-right: 10px; cursor: pointer;">
+                        <span style="color: #233366; font-size: 1em;">Other</span>
+                    </label>
+                </div>
+                <div id="email-ask-ai-other-text" style="display: none; margin-bottom: 1.5rem;">
+                    <textarea id="email-ask-ai-other-input" placeholder="Enter your question or request..." style="width: 100%; min-height: 100px; padding: 10px; border: 1px solid #bfc9da; border-radius: 4px; font-size: 14px; font-family: inherit; resize: vertical; box-sizing: border-box;"></textarea>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button id="email-ask-ai-cancel" style="padding: 10px 20px; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.95em; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#5a6268'" onmouseout="this.style.backgroundColor='#6c757d'">Cancel</button>
+                    <button id="email-ask-ai-submit" style="padding: 10px 20px; background-color: #007AFF; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.95em; font-weight: 500; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#0056CC'" onmouseout="this.style.backgroundColor='#007AFF'">Submit</button>
                 </div>
             </div>
         </div>
@@ -1231,22 +1325,34 @@
                             Select an email from the list on the left to view its content
                         </div>
                         <div id="email-gallery-email-content" class="email-gallery-email-content" style="display: none;">
-                            <div class="email-gallery-metadata-section">
-                                <div class="email-gallery-metadata-row">
-                                    <span class="email-gallery-metadata-label">Subject:</span>
-                                    <span class="email-gallery-metadata-value" id="email-gallery-metadata-subject"></span>
-                                </div>
-                                <div class="email-gallery-metadata-row">
-                                    <span class="email-gallery-metadata-label">From:</span>
-                                    <span class="email-gallery-metadata-value" id="email-gallery-metadata-from"></span>
-                                </div>
-                                <div class="email-gallery-metadata-row">
-                                    <span class="email-gallery-metadata-label">Date:</span>
-                                    <span class="email-gallery-metadata-value" id="email-gallery-metadata-date"></span>
-                                </div>
-                                <div class="email-gallery-metadata-row">
-                                    <span class="email-gallery-metadata-label">Folder:</span>
-                                    <span class="email-gallery-metadata-value" id="email-gallery-metadata-folder"></span>
+                            <div class="email-gallery-metadata-section" style="padding-top: 50px;">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+                                    <div style="flex: 1;">
+                                        <div class="email-gallery-metadata-row">
+                                            <span class="email-gallery-metadata-label">Subject:</span>
+                                            <span class="email-gallery-metadata-value" id="email-gallery-metadata-subject"></span>
+                                        </div>
+                                        <div class="email-gallery-metadata-row">
+                                            <span class="email-gallery-metadata-label">From:</span>
+                                            <span class="email-gallery-metadata-value" id="email-gallery-metadata-from"></span>
+                                        </div>
+                                        <div class="email-gallery-metadata-row">
+                                            <span class="email-gallery-metadata-label">Date:</span>
+                                            <span class="email-gallery-metadata-value" id="email-gallery-metadata-date"></span>
+                                        </div>
+                                        <div class="email-gallery-metadata-row">
+                                            <span class="email-gallery-metadata-label">Folder:</span>
+                                            <span class="email-gallery-metadata-value" id="email-gallery-metadata-folder"></span>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <button id="email-ask-ai-btn" style="display: none; background-color: #9B59B6; color: white; border: none; cursor: pointer; font-size: 0.9em; padding: 8px 16px; border-radius: 8px; transition: background-color 0.2s; font-weight: 500;" title="Ask the AI" onmouseover="this.style.backgroundColor='#7D3C98'" onmouseout="this.style.backgroundColor='#9B59B6'">
+                                            <i class="fas fa-robot" style="margin-right: 6px;"></i>Ask the AI
+                                        </button>
+                                        <button id="email-delete-btn" style="display: none; background: none; border: none; color: #54656f; cursor: pointer; font-size: 1.2em; padding: 8px; border-radius: 50%; transition: background-color 0.2s;" title="Delete email" onmouseover="this.style.backgroundColor='#e4e6eb'" onmouseout="this.style.backgroundColor='transparent'">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             <div class="email-gallery-iframe-container">
@@ -1275,6 +1381,170 @@
             <div class="email-attachment-modal-content email-attachment-document-content">
                 <button id="close-email-attachment-document-modal" class="modal-close-btn">&times;</button>
                 <iframe id="email-attachment-document-iframe" class="email-attachment-document-iframe"></iframe>
+            </div>
+        </div>
+        
+        <!-- New Image Gallery Modal -->
+        <div id="new-image-gallery-modal" class="modal">
+           <div class="modal-content new-image-gallery-modal-content">
+                <button id="close-new-image-gallery-modal" class="modal-close-btn">&times;</button>
+                <div class="new-image-gallery-modal-body">
+                    <!-- Master Pane -->
+                    <div class="new-image-gallery-master-pane">
+                        <div class="new-image-gallery-search-section">
+                            <div class="new-image-metadata-filters">
+                                <div class="new-image-gallery-title">
+                                    <h2>New Image Gallery</h2> 
+                                </div>
+                                <div class="new-image-gallery-search-row">
+                                    <input type="text" id="new-image-gallery-title" placeholder="Title..." class="new-image-gallery-input">
+                                </div>
+                                <div class="new-image-gallery-search-row">
+                                    <input type="text" id="new-image-gallery-description" placeholder="Description..." class="new-image-gallery-input">
+                                </div>
+                                <div class="new-image-gallery-search-row">
+                                    <input type="text" id="new-image-gallery-tags" placeholder="Tags..." class="new-image-gallery-input">
+                                </div>
+                                <div class="new-image-gallery-filter-row">
+                                    <input type="text" id="new-image-gallery-author" placeholder="Author..." class="new-image-gallery-input">
+                                    <input type="text" id="new-image-gallery-source" placeholder="Source..." class="new-image-gallery-input">
+                                </div>
+                                <div class="new-image-gallery-filter-row">
+                                    <select id="new-image-gallery-year-filter" class="new-image-gallery-select"></select>                                         
+                                    <select id="new-image-gallery-month-filter" class="new-image-gallery-select"></select>
+                                </div>
+                                <div class="new-image-gallery-filter-row">
+                                    <input type="number" id="new-image-gallery-rating" placeholder="Rating (1-5)" min="1" max="5" class="new-image-gallery-input">
+                                    <input type="number" id="new-image-gallery-rating-min" placeholder="Min Rating" min="1" max="5" class="new-image-gallery-input">
+                                    <input type="number" id="new-image-gallery-rating-max" placeholder="Max Rating" min="1" max="5" class="new-image-gallery-input">
+                                </div>
+                                <div class="new-image-gallery-filter-row">
+                                    <label class="new-image-gallery-checkbox-label">
+                                        <input type="checkbox" id="new-image-gallery-has-gps">
+                                        Has GPS
+                                    </label>
+                                    <label class="new-image-gallery-checkbox-label">
+                                        <input type="checkbox" id="new-image-gallery-processed">
+                                        Processed
+                                    </label>
+                                </div>
+                                <div class="new-image-gallery-button-row">
+                                    <button id="new-image-gallery-search-btn" class="modal-btn modal-btn-primary">
+                                        <i class="fas fa-search"></i>Search
+                                    </button>
+                                    <button id="new-image-gallery-clear-btn" class="modal-btn modal-btn-secondary">
+                                        <i class="fas fa-times"></i>Clear
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="new-image-gallery-thumbnail-grid" id="new-image-gallery-thumbnail-grid"></div>
+                    </div>
+                </div>
+           </div>
+        </div>
+        
+        <!-- New Image Gallery Detail Modal -->
+        <div id="new-image-gallery-detail-modal" class="modal">
+            <div class="modal-content new-image-gallery-detail-modal-content">
+                <button id="close-new-image-gallery-detail-modal" class="modal-close-btn">&times;</button>
+                <div class="new-image-gallery-detail-modal-body">
+                    <!-- Image Section -->
+                    <div class="new-image-gallery-detail-image-section">
+                        <img id="new-image-gallery-detail-image" class="new-image-gallery-detail-full-image" src="" alt="Image">
+                    </div>
+                    <!-- Metadata Section -->
+                    <div class="new-image-gallery-detail-metadata-section">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
+                            <h2 style="margin: 0;">Image Metadata</h2>
+                            <button id="new-image-gallery-delete-btn" class="modal-btn modal-btn-danger" style="display: none;">
+                                <i class="fas fa-trash-alt"></i> Delete Image
+                            </button>
+                        </div>
+                        <div class="new-image-gallery-detail-metadata-content">
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Title:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-title"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Description:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-description"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Author:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-author"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Tags:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-tags"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Categories:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-categories"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Notes:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-notes"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Date:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-date"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Rating:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-rating"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Image Type:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-image-type"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Source:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-source"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Source Reference:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-source-reference"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Region:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-region"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row" id="new-image-detail-gps-row" style="display: none;">
+                                <span class="new-image-gallery-detail-metadata-label">GPS Location:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-gps"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row" id="new-image-detail-altitude-row" style="display: none;">
+                                <span class="new-image-gallery-detail-metadata-label">Altitude:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-altitude"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Available for Task:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-available-for-task"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Processed:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-processed"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Location Processed:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-location-processed"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Image Processed:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-image-processed"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Created At:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-created-at"></span>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row">
+                                <span class="new-image-gallery-detail-metadata-label">Updated At:</span>
+                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-updated-at"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         

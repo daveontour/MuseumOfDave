@@ -252,6 +252,9 @@ document.addEventListener('DOMContentLoaded', () => {
         emailGalleryMetadataDate: document.getElementById('email-gallery-metadata-date'),
         emailGalleryMetadataFolder: document.getElementById('email-gallery-metadata-folder'),
         emailGalleryEmailDetails: null, // Removed from HTML, kept for compatibility
+        emailAskAIBtn: document.getElementById('email-ask-ai-btn'),
+        emailDeleteBtn: document.getElementById('email-delete-btn'),
+        emailAskAIModal: document.getElementById('email-ask-ai-modal'),
         // Attachment Modals
         emailAttachmentImageModal: document.getElementById('email-attachment-image-modal'),
         emailAttachmentDocumentModal: document.getElementById('email-attachment-document-modal'),
@@ -261,6 +264,52 @@ document.addEventListener('DOMContentLoaded', () => {
         emailAttachmentDocumentIframe: document.getElementById('email-attachment-document-iframe'),
         // Email Gallery Button
         emailGalleryBtn: document.getElementById('email-gallery-btn'),
+        // New Image Gallery Elements
+        newImageGalleryModal: document.getElementById('new-image-gallery-modal'),
+        closeNewImageGalleryModalBtn: document.getElementById('close-new-image-gallery-modal'),
+        newImageGalleryTitle: document.getElementById('new-image-gallery-title'),
+        newImageGalleryDescription: document.getElementById('new-image-gallery-description'),
+        newImageGalleryTags: document.getElementById('new-image-gallery-tags'),
+        newImageGalleryAuthor: document.getElementById('new-image-gallery-author'),
+        newImageGallerySource: document.getElementById('new-image-gallery-source'),
+        newImageGalleryYearFilter: document.getElementById('new-image-gallery-year-filter'),
+        newImageGalleryMonthFilter: document.getElementById('new-image-gallery-month-filter'),
+        newImageGalleryRating: document.getElementById('new-image-gallery-rating'),
+        newImageGalleryRatingMin: document.getElementById('new-image-gallery-rating-min'),
+        newImageGalleryRatingMax: document.getElementById('new-image-gallery-rating-max'),
+        newImageGalleryHasGps: document.getElementById('new-image-gallery-has-gps'),
+        newImageGalleryProcessed: document.getElementById('new-image-gallery-processed'),
+        newImageGallerySearchBtn: document.getElementById('new-image-gallery-search-btn'),
+        newImageGalleryClearBtn: document.getElementById('new-image-gallery-clear-btn'),
+        newImageGalleryThumbnailGrid: document.getElementById('new-image-gallery-thumbnail-grid'),
+        newImageGalleryMasterPane: document.querySelector('.new-image-gallery-master-pane'),
+        // New Image Gallery Detail Modal Elements
+        newImageGalleryDetailModal: document.getElementById('new-image-gallery-detail-modal'),
+        closeNewImageGalleryDetailModalBtn: document.getElementById('close-new-image-gallery-detail-modal'),
+        newImageGalleryDetailImage: document.getElementById('new-image-gallery-detail-image'),
+        newImageDetailTitle: document.getElementById('new-image-detail-title'),
+        newImageDetailDescription: document.getElementById('new-image-detail-description'),
+        newImageDetailAuthor: document.getElementById('new-image-detail-author'),
+        newImageDetailTags: document.getElementById('new-image-detail-tags'),
+        newImageDetailCategories: document.getElementById('new-image-detail-categories'),
+        newImageDetailNotes: document.getElementById('new-image-detail-notes'),
+        newImageDetailDate: document.getElementById('new-image-detail-date'),
+        newImageDetailRating: document.getElementById('new-image-detail-rating'),
+        newImageDetailImageType: document.getElementById('new-image-detail-image-type'),
+        newImageDetailSource: document.getElementById('new-image-detail-source'),
+        newImageDetailSourceReference: document.getElementById('new-image-detail-source-reference'),
+        newImageDetailRegion: document.getElementById('new-image-detail-region'),
+        newImageDetailGpsRow: document.getElementById('new-image-detail-gps-row'),
+        newImageDetailGps: document.getElementById('new-image-detail-gps'),
+        newImageDetailAltitudeRow: document.getElementById('new-image-detail-altitude-row'),
+        newImageDetailAltitude: document.getElementById('new-image-detail-altitude'),
+        newImageDetailAvailableForTask: document.getElementById('new-image-detail-available-for-task'),
+        newImageDetailProcessed: document.getElementById('new-image-detail-processed'),
+        newImageDetailLocationProcessed: document.getElementById('new-image-detail-location-processed'),
+        newImageDetailImageProcessed: document.getElementById('new-image-detail-image-processed'),
+        newImageDetailCreatedAt: document.getElementById('new-image-detail-created-at'),
+        newImageDetailUpdatedAt: document.getElementById('new-image-detail-updated-at'),
+        newImageGalleryDeleteBtn: document.getElementById('new-image-gallery-delete-btn'),
         // Dropup Elements
         dropupBtn: document.getElementById('dropup-btn'),
         dropupContainer: document.querySelector('.dropup'),
@@ -275,6 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
         imageGallerySidebarBtn: document.getElementById('image-gallery-sidebar-btn'),
         locationsSidebarBtn: document.getElementById('locations-sidebar-btn'),
         emailGallerySidebarBtn: document.getElementById('email-gallery-sidebar-btn'),
+        newImageGallerySidebarBtn: document.getElementById('new-image-gallery-sidebar-btn'),
         suggestionsSidebarBtn: document.getElementById('suggestions-sidebar-btn'),
         haveYourSaySidebarBtn: document.getElementById('have-your-say-sidebar-btn'),
         // Interviewer mode elements
@@ -2458,6 +2508,7 @@ document.addEventListener('DOMContentLoaded', () => {
         EmailGallery: (() => {
             let emailData = [];
             let selectedEmailIndex = -1;
+            let currentEmailId = null;
             let currentPage = 0;
             let itemsPerPage = 20;
             let isLoading = false;
@@ -2488,6 +2539,81 @@ document.addEventListener('DOMContentLoaded', () => {
                 DOM.closeEmailGalleryModalBtn.addEventListener('click', close);
                 DOM.emailGallerySearchBtn.addEventListener('click', _handleSearch);
                 DOM.emailGalleryClearBtn.addEventListener('click', _handleClear);
+                
+                // Delete button handler
+                if (DOM.emailDeleteBtn) {
+                    DOM.emailDeleteBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        deleteEmail();
+                    });
+                }
+
+                // Ask AI button and modal handlers
+                const emailAskAIBtn = DOM.emailAskAIBtn;
+                const emailAskAIModal = DOM.emailAskAIModal;
+                const emailAskAICloseBtn = document.getElementById('email-ask-ai-close');
+                const emailAskAICancelBtn = document.getElementById('email-ask-ai-cancel');
+                const emailAskAISubmitBtn = document.getElementById('email-ask-ai-submit');
+                const emailAskAIRadioButtons = document.querySelectorAll('input[name="email-ask-ai-option"]');
+                const emailAskAIOtherTextarea = document.getElementById('email-ask-ai-other-text');
+                const emailAskAIOtherInput = document.getElementById('email-ask-ai-other-input');
+
+                if (emailAskAIBtn && emailAskAIModal) {
+                    emailAskAIBtn.addEventListener('click', () => {
+                        // Update email subject in modal
+                        const emailSubjectEl = document.getElementById('email-ask-ai-email-subject');
+                        const emailSubject = DOM.emailGalleryMetadataSubject?.textContent || 'Unknown Email';
+                        if (emailSubjectEl) {
+                            emailSubjectEl.textContent = emailSubject;
+                        }
+                        emailAskAIModal.style.display = 'flex';
+                    });
+                }
+
+                if (emailAskAICloseBtn && emailAskAIModal) {
+                    emailAskAICloseBtn.addEventListener('click', () => {
+                        emailAskAIModal.style.display = 'none';
+                    });
+                }
+
+                if (emailAskAICancelBtn && emailAskAIModal) {
+                    emailAskAICancelBtn.addEventListener('click', () => {
+                        emailAskAIModal.style.display = 'none';
+                    });
+                }
+
+                if (emailAskAISubmitBtn) {
+                    emailAskAISubmitBtn.addEventListener('click', () => {
+                        // Functionality will be added later
+                        const selectedOption = document.querySelector('input[name="email-ask-ai-option"]:checked')?.value;
+                        const otherText = emailAskAIOtherInput?.value || '';
+                        console.log('Ask AI - Selected option:', selectedOption, 'Other text:', otherText);
+                        // TODO: Implement AI functionality
+                        emailAskAIModal.style.display = 'none';
+                    });
+                }
+
+                // Toggle textarea visibility based on radio selection
+                if (emailAskAIRadioButtons.length > 0 && emailAskAIOtherTextarea) {
+                    emailAskAIRadioButtons.forEach(radio => {
+                        radio.addEventListener('change', () => {
+                            if (radio.value === 'other') {
+                                emailAskAIOtherTextarea.style.display = 'block';
+                            } else {
+                                emailAskAIOtherTextarea.style.display = 'none';
+                            }
+                        });
+                    });
+                }
+
+                // Close modal when clicking outside
+                if (emailAskAIModal) {
+                    emailAskAIModal.addEventListener('click', (e) => {
+                        if (e.target === emailAskAIModal) {
+                            emailAskAIModal.style.display = 'none';
+                        }
+                    });
+                }
                 
                 // Attachment modal close handlers
                 if (DOM.closeEmailAttachmentImageModal && DOM.emailAttachmentImageModal) {
@@ -3095,6 +3221,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 DOM.emailGalleryInstructions.style.display = 'none';
                 DOM.emailGalleryEmailContent.style.display = 'flex';
                 
+                // Store current email ID for delete/ask AI operations
+                currentEmailId = email.emailId || email.id || null;
+                
+                // Show buttons
+                if (DOM.emailAskAIBtn) {
+                    DOM.emailAskAIBtn.style.display = 'flex';
+                }
+                if (DOM.emailDeleteBtn) {
+                    DOM.emailDeleteBtn.style.display = 'flex';
+                }
+                
                 // Update metadata
                 if (DOM.emailGalleryMetadataSubject) {
                     DOM.emailGalleryMetadataSubject.textContent = email.subject || 'No Subject';
@@ -3300,6 +3437,17 @@ ${textContent}
             function _showInstructions() {
                 DOM.emailGalleryInstructions.style.display = 'flex';
                 DOM.emailGalleryEmailContent.style.display = 'none';
+                
+                // Hide buttons
+                if (DOM.emailAskAIBtn) {
+                    DOM.emailAskAIBtn.style.display = 'none';
+                }
+                if (DOM.emailDeleteBtn) {
+                    DOM.emailDeleteBtn.style.display = 'none';
+                }
+                
+                // Clear current email ID
+                currentEmailId = null;
             }
 
             function _clearEmailContent() {
@@ -3320,6 +3468,68 @@ ${textContent}
                 }
                 if (DOM.emailGalleryMetadataFolder) {
                     DOM.emailGalleryMetadataFolder.textContent = '';
+                }
+                
+                // Hide buttons
+                if (DOM.emailAskAIBtn) {
+                    DOM.emailAskAIBtn.style.display = 'none';
+                }
+                if (DOM.emailDeleteBtn) {
+                    DOM.emailDeleteBtn.style.display = 'none';
+                }
+                
+                // Clear current email ID
+                currentEmailId = null;
+            }
+
+            async function deleteEmail() {
+                if (!currentEmailId) return;
+
+                // Get email subject for confirmation message
+                const emailSubject = DOM.emailGalleryMetadataSubject?.textContent || 'this email';
+                const emailIdToDelete = currentEmailId;
+                
+                // Show confirmation dialog
+                const confirmed = confirm(`Are you sure you want to delete "${emailSubject}"?\n\nThis action cannot be undone.`);
+                if (!confirmed) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`/emails/${emailIdToDelete}`, {
+                        method: 'DELETE'
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.detail || 'Failed to delete email');
+                    }
+
+                    const result = await response.json();
+                    
+                    // Remove from emailData array before clearing view
+                    const emailIndex = emailData.findIndex(e => (e.emailId || e.id) === emailIdToDelete);
+                    if (emailIndex !== -1) {
+                        emailData.splice(emailIndex, 1);
+                    }
+
+                    // Clear the email view
+                    currentEmailId = null;
+                    selectedEmailIndex = -1;
+                    _showInstructions();
+                    _clearEmailContent();
+
+                    // Remove active state from all items
+                    const items = document.querySelectorAll('.email-list-item, .email-table-row');
+                    items.forEach(item => item.classList.remove('selected'));
+
+                    // Reload email list
+                    await _handleSearch();
+                    
+                    alert(`Successfully deleted email: ${emailSubject}`);
+                } catch (error) {
+                    console.error('Error deleting email:', error);
+                    alert(`Error deleting email: ${error.message}`);
                 }
             }
 
@@ -3368,6 +3578,631 @@ ${textContent}
             }
 
             return { init, open, close, openContact };
+        })(),
+
+        NewImageGallery: (() => {
+            let imageData = [];
+            let selectedImageIndex = -1;
+            let currentPage = 0;
+            let itemsPerPage = 20;
+            let isLoading = false;
+            let hasMoreData = true;
+            let searchTimeout = null;
+
+            function formatDate(year, month) {
+                if (!year && !month) return 'No Date';
+                const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                    'July', 'August', 'September', 'October', 'November', 'December'];
+                if (year && month) {
+                    return `${monthNames[month - 1]} ${year}`;
+                } else if (year) {
+                    return year.toString();
+                } else if (month) {
+                    return monthNames[month - 1];
+                }
+                return 'No Date';
+            }
+
+            function init() {
+                DOM.closeNewImageGalleryModalBtn.addEventListener('click', close);
+                DOM.newImageGallerySearchBtn.addEventListener('click', _handleSearch);
+                DOM.newImageGalleryClearBtn.addEventListener('click', _handleClear);
+                
+                // Add event listeners for filter changes with debouncing
+                const filterInputs = [
+                    DOM.newImageGalleryTitle,
+                    DOM.newImageGalleryDescription,
+                    DOM.newImageGalleryTags,
+                    DOM.newImageGalleryAuthor,
+                    DOM.newImageGallerySource,
+                    DOM.newImageGalleryYearFilter,
+                    DOM.newImageGalleryMonthFilter,
+                    DOM.newImageGalleryRating,
+                    DOM.newImageGalleryRatingMin,
+                    DOM.newImageGalleryRatingMax,
+                    DOM.newImageGalleryHasGps,
+                    DOM.newImageGalleryProcessed
+                ];
+
+                filterInputs.forEach(input => {
+                    if (input) {
+                        if (input.type === 'checkbox') {
+                            input.addEventListener('change', () => {
+                                if (searchTimeout) clearTimeout(searchTimeout);
+                                searchTimeout = setTimeout(() => {
+                                    _handleSearch();
+                                }, 300);
+                            });
+                        } else {
+                            input.addEventListener('input', () => {
+                                if (searchTimeout) clearTimeout(searchTimeout);
+                                searchTimeout = setTimeout(() => {
+                                    _handleSearch();
+                                }, 300);
+                            });
+                        }
+                    }
+                });
+                
+                // Add scroll event listener for lazy loading
+                DOM.newImageGalleryThumbnailGrid.addEventListener('scroll', _handleThumbnailScroll);
+                
+                // Initialize resizable panes
+                _initResizablePanes();
+                
+                // Close detail modal handler
+                if (DOM.closeNewImageGalleryDetailModalBtn) {
+                    DOM.closeNewImageGalleryDetailModalBtn.addEventListener('click', () => {
+                        DOM.newImageGalleryDetailModal.style.display = 'none';
+                        currentImageInModal = null;
+                    });
+                }
+                
+                // Close modal when clicking outside
+                if (DOM.newImageGalleryDetailModal) {
+                    DOM.newImageGalleryDetailModal.addEventListener('click', (e) => {
+                        if (e.target === DOM.newImageGalleryDetailModal) {
+                            DOM.newImageGalleryDetailModal.style.display = 'none';
+                            currentImageInModal = null;
+                        }
+                    });
+                }
+                
+                // Delete button handler
+                if (DOM.newImageGalleryDeleteBtn) {
+                    DOM.newImageGalleryDeleteBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        await _deleteCurrentImage();
+                    });
+                }
+            }
+            
+            function _initResizablePanes() {
+                if (!DOM.newImageGalleryDivider || !DOM.newImageGalleryMasterPane || !DOM.newImageGalleryDetailPane) {
+                    return;
+                }
+                
+                // Load saved divider position from localStorage
+                const savedPosition = localStorage.getItem('newImageGalleryDividerPosition');
+                const defaultPosition = 35; // 35% for master pane
+                const masterPaneWidth = savedPosition ? parseFloat(savedPosition) : defaultPosition;
+                
+                _setPaneWidths(masterPaneWidth);
+                
+                let isResizing = false;
+                let startX = 0;
+                let startMasterWidth = 0;
+                
+                DOM.newImageGalleryDivider.addEventListener('mousedown', (e) => {
+                    isResizing = true;
+                    startX = e.clientX;
+                    startMasterWidth = parseFloat(getComputedStyle(DOM.newImageGalleryMasterPane).width);
+                    document.body.style.cursor = 'col-resize';
+                    document.body.style.userSelect = 'none';
+                    e.preventDefault();
+                });
+                
+                document.addEventListener('mousemove', (e) => {
+                    if (!isResizing) return;
+                    
+                    const deltaX = e.clientX - startX;
+                    const modalWidth = DOM.newImageGalleryModal.offsetWidth;
+                    const newMasterWidth = ((startMasterWidth + deltaX) / modalWidth) * 100;
+                    
+                    // Constrain between min and max
+                    const minWidth = 20; // 20% minimum
+                    const maxWidth = 70; // 70% maximum
+                    const constrainedWidth = Math.max(minWidth, Math.min(maxWidth, newMasterWidth));
+                    
+                    _setPaneWidths(constrainedWidth);
+                });
+                
+                document.addEventListener('mouseup', () => {
+                    if (isResizing) {
+                        isResizing = false;
+                        document.body.style.cursor = '';
+                        document.body.style.userSelect = '';
+                        
+                        // Save position to localStorage
+                        const currentWidth = parseFloat(getComputedStyle(DOM.newImageGalleryMasterPane).width);
+                        const modalWidth = DOM.newImageGalleryModal.offsetWidth;
+                        const percentage = (currentWidth / modalWidth) * 100;
+                        localStorage.setItem('newImageGalleryDividerPosition', percentage.toString());
+                    }
+                });
+            }
+            
+            function _setPaneWidths(masterPanePercentage) {
+                if (!DOM.newImageGalleryMasterPane || !DOM.newImageGalleryDetailPane) {
+                    return;
+                }
+                
+                DOM.newImageGalleryMasterPane.style.width = `${masterPanePercentage}%`;
+                DOM.newImageGalleryDetailPane.style.width = `${100 - masterPanePercentage}%`;
+            }
+
+            async function open() {
+                DOM.newImageGalleryModal.style.display = 'flex';
+                _setupFilters();
+                // Don't load images automatically - wait for user to enter search criteria
+                imageData = [];
+                _renderThumbnailGrid();
+            }
+
+            function close() {
+                DOM.newImageGalleryModal.style.display = 'none';
+                selectedImageIndex = -1;
+            }
+
+            function _setupFilters() {
+                // Setup year filter
+                const years = [
+                    { value: 0, text: 'All Years' },
+                    { value: 2032, text: '2032' },
+                    { value: 2031, text: '2031' },
+                    { value: 2030, text: '2030' },
+                    { value: 2029, text: '2029' },
+                    { value: 2028, text: '2028' },
+                    { value: 2027, text: '2027' },
+                    { value: 2026, text: '2026' },
+                    { value: 2025, text: '2025' },
+                    { value: 2024, text: '2024' },
+                    { value: 2023, text: '2023' },
+                    { value: 2022, text: '2022' },
+                    { value: 2021, text: '2021' },
+                    { value: 2020, text: '2020' },  
+                    { value: 2019, text: '2019' },
+                    { value: 2018, text: '2018' },
+                    { value: 2017, text: '2017' },
+                    { value: 2016, text: '2016' },
+                    { value: 2015, text: '2015' },
+                    { value: 2014, text: '2014' },
+                    { value: 2013, text: '2013' },  
+                    { value: 2012, text: '2012' },
+                    { value: 2011, text: '2011' },
+                    { value: 2010, text: '2010' },
+                    { value: 2009, text: '2009' },
+                    { value: 2008, text: '2008' },
+                    { value: 2007, text: '2007' },
+                    { value: 2006, text: '2006' },
+                    { value: 2005, text: '2005' },
+                    { value: 2004, text: '2004' },
+                    { value: 2003, text: '2003' },
+                    { value: 2002, text: '2002' },
+                    { value: 2001, text: '2001' },
+                    { value: 2000, text: '2000' },
+                    { value: 1999, text: '1999' },
+                    { value: 1998, text: '1998' },
+                    { value: 1997, text: '1997' },
+                    { value: 1996, text: '1996' },
+                    { value: 1995, text: '1995' },
+                    { value: 1994, text: '1994' },
+                    { value: 1993, text: '1993' },
+                    { value: 1992, text: '1992' }
+                ];
+                
+                if (DOM.newImageGalleryYearFilter) {
+                    DOM.newImageGalleryYearFilter.innerHTML = '';
+                    years.forEach(year => {
+                        const option = document.createElement('option');
+                        option.value = year.value;
+                        option.textContent = year.text;
+                        DOM.newImageGalleryYearFilter.appendChild(option);
+                    });
+                }
+
+                // Setup month filter
+                const months = [
+                    { value: 0, text: 'All Months' },
+                    { value: 1, text: 'January' },
+                    { value: 2, text: 'February' },
+                    { value: 3, text: 'March' },
+                    { value: 4, text: 'April' },
+                    { value: 5, text: 'May' },
+                    { value: 6, text: 'June' },
+                    { value: 7, text: 'July' },
+                    { value: 8, text: 'August' },
+                    { value: 9, text: 'September' },
+                    { value: 10, text: 'October' },
+                    { value: 11, text: 'November' },
+                    { value: 12, text: 'December' }
+                ];
+                
+                if (DOM.newImageGalleryMonthFilter) {
+                    DOM.newImageGalleryMonthFilter.innerHTML = '';
+                    months.forEach(month => {
+                        const option = document.createElement('option');
+                        option.value = month.value;
+                        option.textContent = month.text;
+                        DOM.newImageGalleryMonthFilter.appendChild(option);
+                    });
+                }
+            }
+
+            async function _loadImageData() {
+                const params = new URLSearchParams();
+                
+                // Build query parameters from filter inputs
+                if (DOM.newImageGalleryTitle && DOM.newImageGalleryTitle.value.trim()) {
+                    params.append('title', DOM.newImageGalleryTitle.value.trim());
+                }
+                if (DOM.newImageGalleryDescription && DOM.newImageGalleryDescription.value.trim()) {
+                    params.append('description', DOM.newImageGalleryDescription.value.trim());
+                }
+                if (DOM.newImageGalleryTags && DOM.newImageGalleryTags.value.trim()) {
+                    params.append('tags', DOM.newImageGalleryTags.value.trim());
+                }
+                if (DOM.newImageGalleryAuthor && DOM.newImageGalleryAuthor.value.trim()) {
+                    params.append('author', DOM.newImageGalleryAuthor.value.trim());
+                }
+                if (DOM.newImageGallerySource && DOM.newImageGallerySource.value.trim()) {
+                    params.append('source', DOM.newImageGallerySource.value.trim());
+                }
+                if (DOM.newImageGalleryYearFilter && DOM.newImageGalleryYearFilter.value && DOM.newImageGalleryYearFilter.value !== '0') {
+                    params.append('year', DOM.newImageGalleryYearFilter.value);
+                }
+                if (DOM.newImageGalleryMonthFilter && DOM.newImageGalleryMonthFilter.value && DOM.newImageGalleryMonthFilter.value !== '0') {
+                    params.append('month', DOM.newImageGalleryMonthFilter.value);
+                }
+                if (DOM.newImageGalleryRating && DOM.newImageGalleryRating.value) {
+                    params.append('rating', DOM.newImageGalleryRating.value);
+                }
+                if (DOM.newImageGalleryRatingMin && DOM.newImageGalleryRatingMin.value) {
+                    params.append('rating_min', DOM.newImageGalleryRatingMin.value);
+                }
+                if (DOM.newImageGalleryRatingMax && DOM.newImageGalleryRatingMax.value) {
+                    params.append('rating_max', DOM.newImageGalleryRatingMax.value);
+                }
+                if (DOM.newImageGalleryHasGps && DOM.newImageGalleryHasGps.checked) {
+                    params.append('has_gps', 'true');
+                }
+                if (DOM.newImageGalleryProcessed && DOM.newImageGalleryProcessed.checked) {
+                    params.append('processed', 'true');
+                }
+
+                try {
+                    const response = await fetch('/images/search?' + params.toString());
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    imageData = data;
+                    _renderThumbnailGrid();
+                } catch (error) {
+                    console.error('Error loading image data:', error);
+                    imageData = [];
+                    _renderThumbnailGrid();
+                }
+            }
+
+            function _renderThumbnailGrid() {
+                // Reset pagination when rendering new grid
+                currentPage = 0;
+                hasMoreData = true;
+                DOM.newImageGalleryThumbnailGrid.innerHTML = '';
+
+                if (imageData.length === 0) {
+                    const noResults = document.createElement('div');
+                    noResults.style.textAlign = 'center';
+                    noResults.style.padding = '2em';
+                    noResults.style.color = '#666';
+                    noResults.style.gridColumn = '1 / -1';
+                    // Check if we have any search criteria
+                    const hasCriteria = _hasSearchCriteria();
+                    noResults.textContent = hasCriteria 
+                        ? 'No images found matching your criteria' 
+                        : 'Enter search criteria above and click Search to find images';
+                    DOM.newImageGalleryThumbnailGrid.appendChild(noResults);
+                    return;
+                }
+
+                _loadMoreThumbnails();
+            }
+
+            function _hasSearchCriteria() {
+                return (
+                    (DOM.newImageGalleryTitle && DOM.newImageGalleryTitle.value.trim()) ||
+                    (DOM.newImageGalleryDescription && DOM.newImageGalleryDescription.value.trim()) ||
+                    (DOM.newImageGalleryTags && DOM.newImageGalleryTags.value.trim()) ||
+                    (DOM.newImageGalleryAuthor && DOM.newImageGalleryAuthor.value.trim()) ||
+                    (DOM.newImageGallerySource && DOM.newImageGallerySource.value.trim()) ||
+                    (DOM.newImageGalleryYearFilter && DOM.newImageGalleryYearFilter.value && DOM.newImageGalleryYearFilter.value !== '0') ||
+                    (DOM.newImageGalleryMonthFilter && DOM.newImageGalleryMonthFilter.value && DOM.newImageGalleryMonthFilter.value !== '0') ||
+                    (DOM.newImageGalleryRating && DOM.newImageGalleryRating.value) ||
+                    (DOM.newImageGalleryRatingMin && DOM.newImageGalleryRatingMin.value) ||
+                    (DOM.newImageGalleryRatingMax && DOM.newImageGalleryRatingMax.value) ||
+                    (DOM.newImageGalleryHasGps && DOM.newImageGalleryHasGps.checked) ||
+                    (DOM.newImageGalleryProcessed && DOM.newImageGalleryProcessed.checked)
+                );
+            }
+
+            function _loadMoreThumbnails() {
+                if (isLoading || !hasMoreData) return;
+
+                isLoading = true;
+                
+                const startIndex = currentPage * itemsPerPage;
+                const endIndex = startIndex + itemsPerPage;
+                const imagesToRender = imageData.slice(startIndex, endIndex);
+
+                if (imagesToRender.length === 0) {
+                    hasMoreData = false;
+                    isLoading = false;
+                    return;
+                }
+                
+                imagesToRender.forEach((image, localIndex) => {
+                    const actualIndex = startIndex + localIndex;
+                    
+                    const thumbnailItem = document.createElement('div');
+                    thumbnailItem.className = 'new-image-gallery-thumbnail-item';
+                    thumbnailItem.dataset.index = actualIndex;
+                    
+                    const img = document.createElement('img');
+                    img.loading = 'lazy';
+                    img.src = `/images/${image.id}?type=metadata&preview=true`;
+                    img.alt = image.title || 'Image thumbnail';
+                    img.onerror = function() {
+                        this.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="150" height="150"%3E%3Crect fill="%23ddd" width="150" height="150"/%3E%3Ctext fill="%23999" font-family="sans-serif" font-size="14" x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3ENo Image%3C/text%3E%3C/svg%3E';
+                    };
+                    
+                    thumbnailItem.appendChild(img);
+                    thumbnailItem.addEventListener('click', () => _selectImage(actualIndex));
+                    
+                    DOM.newImageGalleryThumbnailGrid.appendChild(thumbnailItem);
+                });
+
+                currentPage++;
+                hasMoreData = endIndex < imageData.length;
+                isLoading = false;
+
+                // Check if we need to load more to fill the viewport
+                // Use setTimeout to allow DOM to update before checking
+                setTimeout(() => {
+                    if (hasMoreData) {
+                        _checkAndLoadMoreIfNeeded();
+                        // Add loading indicator if viewport is filled and there's more data
+                        const grid = DOM.newImageGalleryThumbnailGrid;
+                        if (grid.scrollHeight > grid.clientHeight + 50) {
+                            _addLoadingIndicator();
+                        }
+                    }
+                }, 100);
+            }
+
+            function _addLoadingIndicator() {
+                // Remove existing loading indicator
+                const existingIndicator = DOM.newImageGalleryThumbnailGrid.querySelector('.loading-indicator');
+                if (existingIndicator) {
+                    existingIndicator.remove();
+                }
+
+                const loadingIndicator = document.createElement('div');
+                loadingIndicator.className = 'loading-indicator';
+                loadingIndicator.style.gridColumn = '1 / -1';
+                loadingIndicator.style.textAlign = 'center';
+                loadingIndicator.style.padding = '1em';
+                loadingIndicator.style.color = '#666';
+                loadingIndicator.innerHTML = `
+                    <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid #f3f3f3; border-top: 2px solid #4a90e2; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    <div style="margin-top: 0.5em;">Loading more images...</div>
+                `;
+                DOM.newImageGalleryThumbnailGrid.appendChild(loadingIndicator);
+            }
+
+            function _handleThumbnailScroll() {
+                const grid = DOM.newImageGalleryThumbnailGrid;
+                const { scrollTop, scrollHeight, clientHeight } = grid;
+                
+                // Load more thumbnails when user scrolls to within 200px of the bottom
+                if (scrollTop + clientHeight >= scrollHeight - 200) {
+                    _loadMoreThumbnails();
+                }
+            }
+
+            function _checkAndLoadMoreIfNeeded() {
+                // Check if viewport needs more content and load if necessary
+                const grid = DOM.newImageGalleryThumbnailGrid;
+                if (hasMoreData && grid.scrollHeight <= grid.clientHeight + 50) {
+                    // Viewport is not filled enough, load more thumbnails
+                    _loadMoreThumbnails();
+                }
+            }
+
+            async function _selectImage(index) {
+                if (index < 0 || index >= imageData.length) return;
+                
+                selectedImageIndex = index;
+                const image = imageData[index];
+                
+                // Update selected state in UI
+                const thumbnails = DOM.newImageGalleryThumbnailGrid.querySelectorAll('.new-image-gallery-thumbnail-item');
+                thumbnails.forEach((thumb, idx) => {
+                    const actualIdx = parseInt(thumb.dataset.index);
+                    if (actualIdx === index) {
+                        thumb.classList.add('selected');
+                        thumb.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    } else {
+                        thumb.classList.remove('selected');
+                    }
+                });
+                
+                // Open detail modal with full image and metadata
+                _openImageDetailModal(image);
+            }
+
+            let currentImageInModal = null;
+
+            function _openImageDetailModal(image) {
+                currentImageInModal = image;
+                
+                // Set image source
+                DOM.newImageGalleryDetailImage.src = `/images/${image.id}?type=metadata&convert_heic_to_jpg=true`;
+                DOM.newImageGalleryDetailImage.alt = image.title || 'Image';
+                
+                // Show delete button
+                if (DOM.newImageGalleryDeleteBtn) {
+                    DOM.newImageGalleryDeleteBtn.style.display = 'inline-block';
+                }
+                
+                // Format date/time in Australian format (DD/MM/YYYY HH:MM)
+                function formatDateTime(dateTime) {
+                    if (!dateTime) return 'N/A';
+                    try {
+                        const date = new Date(dateTime);
+                        if (isNaN(date.getTime())) return 'N/A';
+                        
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const year = date.getFullYear();
+                        const hours = String(date.getHours()).padStart(2, '0');
+                        const minutes = String(date.getMinutes()).padStart(2, '0');
+                        
+                        return `${day}/${month}/${year} ${hours}:${minutes}`;
+                    } catch (e) {
+                        return dateTime.toString();
+                    }
+                }
+                
+                // Populate all metadata fields
+                DOM.newImageDetailTitle.textContent = image.title || 'N/A';
+                DOM.newImageDetailDescription.textContent = image.description || 'N/A';
+                DOM.newImageDetailAuthor.textContent = image.author || 'N/A';
+                DOM.newImageDetailTags.textContent = image.tags || 'N/A';
+                DOM.newImageDetailCategories.textContent = image.categories || 'N/A';
+                DOM.newImageDetailNotes.textContent = image.notes || 'N/A';
+                DOM.newImageDetailDate.textContent = formatDate(image.year, image.month);
+                DOM.newImageDetailRating.textContent = image.rating ? `${image.rating}/5` : 'N/A';
+                DOM.newImageDetailImageType.textContent = image.image_type || 'N/A';
+                DOM.newImageDetailSource.textContent = image.source || 'N/A';
+                DOM.newImageDetailSourceReference.textContent = image.source_reference || 'N/A';
+                DOM.newImageDetailRegion.textContent = image.region || 'N/A';
+                DOM.newImageDetailAvailableForTask.textContent = image.available_for_task ? 'Yes' : 'No';
+                DOM.newImageDetailProcessed.textContent = image.processed ? 'Yes' : 'No';
+                DOM.newImageDetailLocationProcessed.textContent = image.location_processed ? 'Yes' : 'No';
+                DOM.newImageDetailImageProcessed.textContent = image.image_processed ? 'Yes' : 'No';
+                DOM.newImageDetailCreatedAt.textContent = formatDateTime(image.created_at);
+                DOM.newImageDetailUpdatedAt.textContent = formatDateTime(image.updated_at);
+                
+                // GPS Location
+                if (image.has_gps && (image.latitude || image.longitude)) {
+                    let gpsText = '';
+                    if (image.latitude && image.longitude) {
+                        gpsText = `${image.latitude.toFixed(6)}, ${image.longitude.toFixed(6)}`;
+                        if (image.google_maps_url) {
+                            gpsText = `${gpsText} (<a href="${image.google_maps_url}" target="_blank">View on Google Maps</a>)`;
+                        }
+                    }
+                    DOM.newImageDetailGps.innerHTML = gpsText || 'GPS data available';
+                    DOM.newImageDetailGpsRow.style.display = 'flex';
+                } else {
+                    DOM.newImageDetailGpsRow.style.display = 'none';
+                }
+                
+                // Altitude
+                if (image.altitude !== null && image.altitude !== undefined) {
+                    DOM.newImageDetailAltitude.textContent = `${image.altitude.toFixed(2)} meters`;
+                    DOM.newImageDetailAltitudeRow.style.display = 'flex';
+                } else {
+                    DOM.newImageDetailAltitudeRow.style.display = 'none';
+                }
+                
+                // Show modal
+                DOM.newImageGalleryDetailModal.style.display = 'flex';
+            }
+
+            async function _deleteCurrentImage() {
+                if (!currentImageInModal) return;
+                
+                const imageId = currentImageInModal.id;
+                const imageTitle = currentImageInModal.title || 'Image';
+                
+                // Confirm deletion
+                if (!confirm(`Are you sure you want to delete "${imageTitle}"? This action cannot be undone.`)) {
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`/images/${imageId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+                    }
+                    
+                    // Close the modal
+                    DOM.newImageGalleryDetailModal.style.display = 'none';
+                    currentImageInModal = null;
+                    
+                    // Remove from imageData array
+                    imageData = imageData.filter(img => img.id !== imageId);
+                    
+                    // Update selected index
+                    if (selectedImageIndex >= imageData.length) {
+                        selectedImageIndex = -1;
+                    }
+                    
+                    // Refresh thumbnail grid
+                    _renderThumbnailGrid();
+                    
+                    // Remove selected state from thumbnails
+                    const thumbnails = DOM.newImageGalleryThumbnailGrid.querySelectorAll('.new-image-gallery-thumbnail-item');
+                    thumbnails.forEach(thumb => thumb.classList.remove('selected'));
+                    
+                    alert(`Successfully deleted image: ${imageTitle}`);
+                } catch (error) {
+                    console.error('Error deleting image:', error);
+                    alert(`Error deleting image: ${error.message}`);
+                }
+            }
+
+            function _handleSearch() {
+                _loadImageData();
+            }
+
+            function _handleClear() {
+                if (DOM.newImageGalleryTitle) DOM.newImageGalleryTitle.value = '';
+                if (DOM.newImageGalleryDescription) DOM.newImageGalleryDescription.value = '';
+                if (DOM.newImageGalleryTags) DOM.newImageGalleryTags.value = '';
+                if (DOM.newImageGalleryAuthor) DOM.newImageGalleryAuthor.value = '';
+                if (DOM.newImageGallerySource) DOM.newImageGallerySource.value = '';
+                if (DOM.newImageGalleryYearFilter) DOM.newImageGalleryYearFilter.value = 0;
+                if (DOM.newImageGalleryMonthFilter) DOM.newImageGalleryMonthFilter.value = 0;
+                if (DOM.newImageGalleryRating) DOM.newImageGalleryRating.value = '';
+                if (DOM.newImageGalleryRatingMin) DOM.newImageGalleryRatingMin.value = '';
+                if (DOM.newImageGalleryRatingMax) DOM.newImageGalleryRatingMax.value = '';
+                if (DOM.newImageGalleryHasGps) DOM.newImageGalleryHasGps.checked = false;
+                if (DOM.newImageGalleryProcessed) DOM.newImageGalleryProcessed.checked = false;
+                
+                selectedImageIndex = -1;
+                imageData = [];
+                _renderThumbnailGrid();
+            }
+
+
+            return { init, open, close };
         })(),
 
         ConfirmationModal: (() => {
@@ -5274,6 +6109,7 @@ ${textContent}
             Modals.Locations.init();
             Modals.ImageGallery.init();
             Modals.EmailGallery.init();
+            Modals.NewImageGallery.init();
             Modals.SMSMessages.init();
             Modals.SingleImageDisplay.init();
             Modals.ReferenceDocuments.init();
@@ -8432,6 +9268,315 @@ ${textContent}
             // Check initial status on page load
             checkInitialFacebookAlbumsStatus();
 
+            // Filesystem Image Import Controls
+            const startFilesystemImportBtn = document.getElementById('start-filesystem-import-btn');
+            const cancelFilesystemImportBtn = document.getElementById('cancel-filesystem-import-btn');
+            const filesystemImportStatus = document.getElementById('filesystem-import-status');
+            const filesystemImportStatusMessage = document.getElementById('filesystem-import-status-message');
+            const filesystemImportStatusDetails = document.getElementById('filesystem-import-status-details');
+            const filesystemImportProgressContainer = document.getElementById('filesystem-import-progress-container');
+            const filesystemImportDirectoryPath = document.getElementById('filesystem-import-directory');
+            const filesystemImportMaxImages = document.getElementById('filesystem-import-max-images');
+            const filesystemImportCreateThumbnail = document.getElementById('filesystem-import-create-thumbnail');
+            let filesystemImportInProgress = false;
+            let filesystemEventSource = null;
+
+            // Show Filesystem import status
+            function showFilesystemImportStatus(type, message, details = '') {
+                if (!filesystemImportStatus || !filesystemImportStatusMessage) return;
+                
+                filesystemImportStatus.style.display = 'block';
+                filesystemImportStatusMessage.textContent = message;
+                filesystemImportStatusMessage.style.color = type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#333';
+                
+                if (filesystemImportStatusDetails) {
+                    filesystemImportStatusDetails.textContent = details;
+                }
+            }
+
+            // Close Filesystem import SSE connection
+            function closeFilesystemEventSource() {
+                if (filesystemEventSource) {
+                    filesystemEventSource.close();
+                    filesystemEventSource = null;
+                }
+            }
+
+            // Connect to Filesystem import SSE stream
+            function connectToFilesystemProgressStream() {
+                // Close existing connection if any
+                closeFilesystemEventSource();
+
+                // Create EventSource connection
+                filesystemEventSource = new EventSource('/images/import/stream');
+
+                filesystemEventSource.onmessage = (event) => {
+                    try {
+                        const eventData = JSON.parse(event.data);
+                        handleFilesystemProgressEvent(eventData);
+                    } catch (error) {
+                        console.error('Error parsing Filesystem SSE event:', error);
+                    }
+                };
+
+                filesystemEventSource.onerror = (error) => {
+                    console.error('Filesystem SSE connection error:', error);
+                    // Don't close on error - EventSource will attempt to reconnect
+                };
+
+                // Clean up on page unload
+                window.addEventListener('beforeunload', () => {
+                    closeFilesystemEventSource();
+                });
+            }
+
+            // Handle Filesystem import progress events
+            function handleFilesystemProgressEvent(eventData) {
+                const { type, data } = eventData;
+
+                switch (type) {
+                    case 'progress':
+                        updateFilesystemImportProgress(data);
+                        if (data.status === 'in_progress') {
+                            cancelFilesystemImportBtn.style.display = 'inline-block';
+                            startFilesystemImportBtn.disabled = true;
+                            showFilesystemImportStatus('info', 'Import in progress...', `Processing file ${data.files_processed} of ${data.total_files}`);
+                        }
+                        break;
+
+                    case 'completed':
+                        updateFilesystemImportProgress(data);
+                        cancelFilesystemImportBtn.style.display = 'none';
+                        startFilesystemImportBtn.disabled = false;
+                        filesystemImportInProgress = false;
+                        const progressBar = document.getElementById('filesystem-import-progress-bar');
+                        const progressBarText = document.getElementById('filesystem-progress-bar-text');
+                        if (progressBar && progressBarText) {
+                            progressBar.style.width = '100%';
+                            progressBarText.textContent = '100%';
+                        }
+                        showFilesystemImportStatus(
+                            'success',
+                            'Import completed successfully',
+                            `Processed ${data.files_processed} file(s). ` +
+                            `Imported ${data.images_imported} new image(s), ` +
+                            `updated ${data.images_updated} existing image(s), ` +
+                            `${data.errors} error(s).`
+                        );
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('Filesystem Image Import Complete', {
+                                body: `Imported ${data.images_imported} new images, updated ${data.images_updated} existing images.`,
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeFilesystemEventSource();
+                        break;
+
+                    case 'error':
+                        updateFilesystemImportProgress(data);
+                        cancelFilesystemImportBtn.style.display = 'none';
+                        startFilesystemImportBtn.disabled = false;
+                        filesystemImportInProgress = false;
+                        const errorMsg = data.error_messages && data.error_messages.length > 0 
+                            ? data.error_messages[data.error_messages.length - 1] 
+                            : 'An error occurred during import.';
+                        showFilesystemImportStatus('error', 'Import error', errorMsg);
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('Filesystem Image Import Error', {
+                                body: errorMsg,
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeFilesystemEventSource();
+                        break;
+
+                    case 'cancelled':
+                        updateFilesystemImportProgress(data);
+                        cancelFilesystemImportBtn.style.display = 'none';
+                        startFilesystemImportBtn.disabled = false;
+                        filesystemImportInProgress = false;
+                        showFilesystemImportStatus('info', 'Import cancelled', 'Import was cancelled by user.');
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('Filesystem Image Import Cancelled', {
+                                body: 'Import was cancelled by user.',
+                                icon: '/static/images/expert.png'
+                            });
+                        }
+                        closeFilesystemEventSource();
+                        break;
+
+                    case 'heartbeat':
+                        // Keep connection alive - no UI update needed
+                        break;
+
+                    default:
+                        console.log('Unknown Filesystem event type:', type);
+                }
+            }
+
+            // Update Filesystem import progress
+            function updateFilesystemImportProgress(stats) {
+                if (!filesystemImportProgressContainer) return;
+                
+                filesystemImportProgressContainer.style.display = 'block';
+                
+                const currentFileName = document.getElementById('filesystem-current-file-name');
+                const filesystemProgressText = document.getElementById('filesystem-file-progress-text');
+                const filesystemImportProgressBar = document.getElementById('filesystem-import-progress-bar');
+                const filesystemProgressBarText = document.getElementById('filesystem-progress-bar-text');
+                const filesystemImagesImported = document.getElementById('filesystem-images-imported-count');
+                const filesystemImagesUpdated = document.getElementById('filesystem-images-updated-count');
+                const filesystemErrors = document.getElementById('filesystem-errors-count');
+
+                if (currentFileName) {
+                    const fileName = stats.current_file ? stats.current_file.split(/[/\\]/).pop() : '-';
+                    currentFileName.textContent = fileName;
+                }
+
+                if (filesystemProgressText && stats.total_files > 0) {
+                    filesystemProgressText.textContent = `${stats.files_processed} / ${stats.total_files}`;
+                }
+
+                if (filesystemImportProgressBar && filesystemProgressBarText && stats.total_files > 0) {
+                    const percentage = Math.round((stats.files_processed / stats.total_files) * 100);
+                    filesystemImportProgressBar.style.width = `${percentage}%`;
+                    filesystemProgressBarText.textContent = `${percentage}%`;
+                }
+
+                if (filesystemImagesImported) {
+                    filesystemImagesImported.textContent = stats.images_imported || 0;
+                }
+                if (filesystemImagesUpdated) {
+                    filesystemImagesUpdated.textContent = stats.images_updated || 0;
+                }
+                if (filesystemErrors) {
+                    filesystemErrors.textContent = stats.errors || 0;
+                }
+            }
+
+            // Check initial Filesystem import status
+            async function checkInitialFilesystemStatus() {
+                if (!filesystemImportStatus) return;
+                
+                try {
+                    const response = await fetch('/images/import/status');
+                    if (!response.ok) {
+                        return;
+                    }
+                    const status = await response.json();
+                    
+                    if (status.in_progress) {
+                        cancelFilesystemImportBtn.style.display = 'inline-block';
+                        startFilesystemImportBtn.disabled = true;
+                        filesystemImportInProgress = true;
+                        // Connect to stream to get updates
+                        connectToFilesystemProgressStream();
+                        updateFilesystemImportProgress(status);
+                    } else {
+                        cancelFilesystemImportBtn.style.display = 'none';
+                        startFilesystemImportBtn.disabled = false;
+                        filesystemImportInProgress = false;
+                    }
+                } catch (error) {
+                    console.error('Error checking initial Filesystem import status:', error);
+                }
+            }
+
+            // Start Filesystem import
+            if (startFilesystemImportBtn) {
+                startFilesystemImportBtn.addEventListener('click', async () => {
+                    const directoryPath = filesystemImportDirectoryPath?.value?.trim();
+                    
+                    if (!directoryPath) {
+                        showFilesystemImportStatus('error', 'Directory path required', 'Please enter a directory path.');
+                        return;
+                    }
+                    
+                    if (filesystemImportInProgress) {
+                        showFilesystemImportStatus('error', 'Import already in progress', 'Please wait for the current import to complete.');
+                        return;
+                    }
+                    
+                    try {
+                        filesystemImportInProgress = true;
+                        startFilesystemImportBtn.disabled = true;
+                        cancelFilesystemImportBtn.style.display = 'inline-block';
+                        showFilesystemImportStatus('info', 'Starting import...', 'Sending request to server...');
+                        
+                        updateFilesystemImportProgress({
+                            files_processed: 0,
+                            total_files: 0,
+                            images_imported: 0,
+                            images_updated: 0,
+                            errors: 0,
+                            current_file: null
+                        });
+                        
+                        const requestBody = {
+                            root_directory: directoryPath,
+                            create_thumbnail: filesystemImportCreateThumbnail?.checked || false
+                        };
+                        
+                        // Add optional max_images if provided
+                        const maxImages = filesystemImportMaxImages?.value?.trim();
+                        if (maxImages && maxImages !== '') {
+                            const maxImagesNum = parseInt(maxImages, 10);
+                            if (!isNaN(maxImagesNum) && maxImagesNum > 0) {
+                                requestBody.max_images = maxImagesNum;
+                            }
+                        }
+                        
+                        const response = await fetch('/images/import', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(requestBody)
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (response.ok) {
+                            showFilesystemImportStatus('info', 'Import started', result.message || 'Filesystem images import has been initiated.');
+                            
+                            // Connect to SSE stream for real-time updates
+                            connectToFilesystemProgressStream();
+                        } else {
+                            showFilesystemImportStatus('error', 'Failed to start import', result.detail || 'An error occurred while starting import.');
+                            filesystemImportProgressContainer.style.display = 'none';
+                            filesystemImportInProgress = false;
+                            startFilesystemImportBtn.disabled = false;
+                            cancelFilesystemImportBtn.style.display = 'none';
+                        }
+                    } catch (error) {
+                        showFilesystemImportStatus('error', 'Error starting import', error.message);
+                        filesystemImportProgressContainer.style.display = 'none';
+                        filesystemImportInProgress = false;
+                        startFilesystemImportBtn.disabled = false;
+                        cancelFilesystemImportBtn.style.display = 'none';
+                    }
+                });
+            }
+
+            // Cancel Filesystem import
+            if (cancelFilesystemImportBtn) {
+                cancelFilesystemImportBtn.addEventListener('click', async () => {
+                    try {
+                        const response = await fetch('/images/import/cancel', {
+                            method: 'POST'
+                        });
+                        
+                        const result = await response.json();
+                        showFilesystemImportStatus('info', 'Cancellation requested', result.message || 'Cancellation request sent.');
+                    } catch (error) {
+                        showFilesystemImportStatus('error', 'Error cancelling import', error.message);
+                    }
+                });
+            }
+
+            // Check initial status on page load
+            checkInitialFilesystemStatus();
+
             // Sidebar button event listeners
             if (DOM.fbAlbumsSidebarBtn) {
                 DOM.fbAlbumsSidebarBtn.addEventListener('click', () => {
@@ -8454,6 +9599,12 @@ ${textContent}
             if (DOM.emailGallerySidebarBtn) {
                 DOM.emailGallerySidebarBtn.addEventListener('click', () => {
                     Modals.EmailGallery.open();
+                });
+            }
+
+            if (DOM.newImageGallerySidebarBtn) {
+                DOM.newImageGallerySidebarBtn.addEventListener('click', () => {
+                    Modals.NewImageGallery.open();
                 });
             }
 

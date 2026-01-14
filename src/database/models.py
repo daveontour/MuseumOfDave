@@ -3,6 +3,7 @@
 from datetime import datetime
 from sqlalchemy import (
     Column,
+    Float,
     Integer,
     String,
     Text,
@@ -156,3 +157,50 @@ class ReferenceDocument(Base):
     available_for_task = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class ImageMetadata(Base):
+    """Images model."""
+
+    __tablename__ = "image_information"
+
+    id = Column(Integer, primary_key=True)
+    image_blob_id = Column(Integer, ForeignKey("image_blob.id", ondelete="RESTRICT"), nullable=False)
+    description = Column(Text, nullable=True)
+    title = Column(String(1000), nullable=True)
+    author = Column(String(500), nullable=True)
+    tags = Column(Text, nullable=True)
+    categories = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+    available_for_task = Column(Boolean, default=False, nullable=False)
+    image_type = Column(String(255), nullable=True)
+    processed = Column(Boolean, default=False, nullable=False)
+    location_processed = Column(Boolean, default=False, nullable=False)
+    image_processed = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow) 
+    embedding = Column(Text, nullable=True)
+    year = Column(Integer, nullable=True)
+    month = Column(Integer, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    altitude = Column(Float, nullable=True)
+    rating = Column(Integer, nullable=False, default=5)
+    has_gps = Column(Boolean, default=False, nullable=False)
+    google_maps_url = Column(String(500), nullable=True)
+    region=Column(String(255), nullable=True)
+    source=Column(String(255), nullable=True)
+    source_reference=Column(String(500), nullable=True)
+    image_blob = relationship("ImageBlob", back_populates="image_metadata", uselist=False, cascade="all, delete")
+
+class ImageBlob(Base):
+    """Image Blob model."""
+
+    __tablename__ = "image_blob"
+
+    id = Column(Integer, primary_key=True)
+    image_data = Column(LargeBinary, nullable=True)
+    thumbnail_data = Column(LargeBinary, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Relationship back to ImageMetadata (no foreign key needed - ImageMetadata has image_blob_id)
+    image_metadata = relationship("ImageMetadata", back_populates="image_blob", uselist=False)

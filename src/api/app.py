@@ -5,6 +5,7 @@ import threading
 import json
 import asyncio
 from pathlib import Path
+from io import BytesIO
 from fastapi import FastAPI, HTTPException, Response, BackgroundTasks, Query, Request, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -14,9 +15,19 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy import or_, func, and_, extract
 from sqlalchemy.orm import joinedload
+from PIL import Image
+
+# Try to register HEIF/HEIC support if pillow-heif is available
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+    HEIF_SUPPORT = True
+except ImportError:
+    HEIF_SUPPORT = False
 
 from ..database import Database, Attachment, Email, IMessage, FacebookAlbum, FacebookAlbumImage, ReferenceDocument
-from ..database.storage import EmailStorage
+from ..database.models import ImageMetadata, ImageBlob
+from ..database.storage import EmailStorage, ImageStorage
 from ..loader import EmailDatabaseLoader
 from ..config import get_config
 from ..messageimport.imessageimport import import_imessages_from_directory
@@ -24,6 +35,7 @@ from ..messageimport.whatsappimport import import_whatsapp_from_directory
 from ..messageimport.facebookimport import import_facebook_from_directory
 from ..messageimport.facebookalbumsimport import import_facebook_albums_from_directory
 from ..messageimport.instagramimport import import_instagram_from_directory
+from ..imageimport.filesystemimport import import_images_from_filesystem
 
 # Create FastAPI app instance
 app = FastAPI(
@@ -185,6 +197,26 @@ facebook_albums_import_progress: Dict[str, Any] = {
 # SSE event queue for Facebook Albums import progress updates
 facebook_albums_sse_clients: List[asyncio.Queue] = []
 facebook_albums_sse_clients_lock = threading.Lock()
+
+# Filesystem import state management
+filesystem_import_lock = threading.Lock()
+filesystem_import_cancelled = threading.Event()
+filesystem_import_in_progress = False
+
+# Progress state for Filesystem import SSE streaming
+filesystem_import_progress: Dict[str, Any] = {
+    "status": "idle",
+    "current_file": None,
+    "files_processed": 0,
+    "total_files": 0,
+    "images_imported": 0,
+    "images_updated": 0,
+    "errors": 0,
+    "error_messages": []
+}
+
+filesystem_import_sse_clients: List[asyncio.Queue] = []
+filesystem_import_sse_clients_lock = threading.Lock()
 
 
 def update_imessage_progress_state(**kwargs):
@@ -377,6 +409,54 @@ def broadcast_facebook_albums_progress_event_sync(event_type: str, data: Dict[st
         for client in disconnected_clients:
             if client in facebook_albums_sse_clients:
                 facebook_albums_sse_clients.remove(client)
+
+
+def update_filesystem_import_progress_state(**kwargs):
+    """Thread-safe function to update Filesystem import progress state."""
+    global filesystem_import_progress
+    with filesystem_import_lock:
+        for key, value in kwargs.items():
+            if key in filesystem_import_progress:
+                if key == "error_messages" and isinstance(value, list):
+                    # Replace the list with the new one
+                    filesystem_import_progress[key] = value.copy()
+                else:
+                    filesystem_import_progress[key] = value
+
+
+def get_filesystem_import_progress_state() -> Dict[str, Any]:
+    """Thread-safe function to get current Filesystem import progress state."""
+    global filesystem_import_progress
+    with filesystem_import_lock:
+        return filesystem_import_progress.copy()
+
+
+def broadcast_filesystem_import_progress_event_sync(event_type: str, data: Dict[str, Any]):
+    """Thread-safe function to queue Filesystem import progress event for SSE clients."""
+    global filesystem_import_sse_clients
+    event_data = {
+        "type": event_type,
+        "data": data
+    }
+    message = f"data: {json.dumps(event_data)}\n\n"
+    
+    # Queue message for all connected clients
+    with filesystem_import_sse_clients_lock:
+        disconnected_clients = []
+        for client_queue in filesystem_import_sse_clients:
+            try:
+                # Use put_nowait to avoid blocking
+                client_queue.put_nowait(message)
+            except asyncio.QueueFull:
+                # Queue is full, skip this client
+                pass
+            except Exception:
+                disconnected_clients.append(client_queue)
+        
+        # Remove disconnected clients
+        for client in disconnected_clients:
+            if client in filesystem_import_sse_clients:
+                filesystem_import_sse_clients.remove(client)
 
 
 def update_instagram_progress_state(**kwargs):
@@ -594,6 +674,58 @@ class ImportFacebookAlbumsResponse(BaseModel):
     missing_image_filenames: List[str] = []
     errors: int
     timestamp: datetime
+
+
+class ImportFilesystemImagesRequest(BaseModel):
+    """Request model for Filesystem Images import."""
+    root_directory: str
+    max_images: Optional[int] = None
+    create_thumbnail: bool = False
+
+
+class ImportFilesystemImagesResponse(BaseModel):
+    """Response model for Filesystem Images import."""
+    message: str
+    root_directory: str
+    files_processed: int = 0
+    total_files: int = 0
+    images_imported: int = 0
+    images_updated: int = 0
+    errors: int = 0
+    timestamp: datetime
+
+
+class ImageMetadataResponse(BaseModel):
+    """Response model for image metadata."""
+    id: int
+    image_blob_id: int
+    description: Optional[str] = None
+    title: Optional[str] = None
+    author: Optional[str] = None
+    tags: Optional[str] = None
+    categories: Optional[str] = None
+    notes: Optional[str] = None
+    available_for_task: bool = False
+    image_type: Optional[str] = None
+    processed: bool = False
+    location_processed: bool = False
+    image_processed: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    year: Optional[int] = None
+    month: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    altitude: Optional[float] = None
+    rating: int = 5
+    has_gps: bool = False
+    google_maps_url: Optional[str] = None
+    region: Optional[str] = None
+    source: Optional[str] = None
+    source_reference: Optional[str] = None
+
+    class Config:
+        from_attributes = True
 
 
 class EmailMetadataResponse(BaseModel):
@@ -2536,6 +2668,98 @@ def import_facebook_albums_background(directory_path: str, export_root: Optional
             facebook_albums_import_in_progress = False
 
 
+def import_filesystem_images_background(
+    directory_path: str,
+    max_images: Optional[int],
+    create_thumbnail: bool,
+    result_dict: dict
+):
+    """Background function to import images from filesystem."""
+    global filesystem_import_in_progress
+    
+    # Mark processing as started
+    with filesystem_import_lock:
+        filesystem_import_in_progress = True
+        filesystem_import_cancelled.clear()
+    
+    # Initialize progress state
+    update_filesystem_import_progress_state(
+        status="in_progress",
+        current_file=None,
+        files_processed=0,
+        total_files=0,
+        images_imported=0,
+        images_updated=0,
+        errors=0,
+        error_messages=[]
+    )
+    
+    # Broadcast initial progress event
+    broadcast_filesystem_import_progress_event_sync("progress", get_filesystem_import_progress_state())
+    
+    try:
+        def progress_callback(stats: Dict[str, Any]):
+            """Callback function to update progress state."""
+            # Check for cancellation
+            if filesystem_import_cancelled.is_set():
+                return
+            
+            # Update progress state with current stats
+            update_filesystem_import_progress_state(
+                current_file=stats.get("current_file"),
+                files_processed=stats.get("files_processed", 0),
+                total_files=stats.get("total_files", 0),
+                images_imported=stats.get("images_imported", 0),
+                images_updated=stats.get("images_updated", 0),
+                errors=stats.get("errors", 0),
+                error_messages=stats.get("error_messages", []),
+                status="in_progress"
+            )
+            
+            # Broadcast progress event
+            broadcast_filesystem_import_progress_event_sync("progress", get_filesystem_import_progress_state())
+        
+        def cancelled_check() -> bool:
+            """Check if import should be cancelled."""
+            return filesystem_import_cancelled.is_set()
+        
+        # Run import with progress callback
+        stats = import_images_from_filesystem(
+            root_directory=directory_path,
+            max_images=max_images,
+            should_create_thumbnail=create_thumbnail,
+            progress_callback=progress_callback,
+            cancelled_check=cancelled_check
+        )
+        
+        result_dict.update(stats)
+        result_dict["success"] = True
+        
+        # Update final progress state
+        update_filesystem_import_progress_state(
+            status="completed",
+            **{k: v for k, v in stats.items() if k in filesystem_import_progress and k != "status"}
+        )
+        broadcast_filesystem_import_progress_event_sync("completed", get_filesystem_import_progress_state())
+        
+    except Exception as e:
+        error_msg = str(e)
+        result_dict["success"] = False
+        result_dict["error"] = error_msg
+        
+        update_filesystem_import_progress_state(
+            status="error",
+            error_messages=[error_msg]
+        )
+        broadcast_filesystem_import_progress_event_sync("error", get_filesystem_import_progress_state())
+        
+        print(f"[Background Task] Error importing filesystem images: {error_msg}")
+    finally:
+        # Mark processing as completed
+        with filesystem_import_lock:
+            filesystem_import_in_progress = False
+
+
 @app.post("/facebook/albums/import", response_model=ImportFacebookAlbumsResponse)
 async def import_facebook_albums(
     request: ImportFacebookAlbumsRequest,
@@ -2676,6 +2900,157 @@ async def get_facebook_albums_import_status():
         return {
             "in_progress": facebook_albums_import_in_progress,
             "cancelled": facebook_albums_import_cancelled.is_set(),
+            **progress_state
+        }
+
+
+@app.post("/images/import", response_model=ImportFilesystemImagesResponse)
+async def import_filesystem_images(
+    request: ImportFilesystemImagesRequest,
+    background_tasks: BackgroundTasks
+):
+    """Import images from filesystem directory.
+    
+    Args:
+        request: Import request containing root_directory, optional max_images, and create_thumbnail flag
+        background_tasks: FastAPI background tasks
+        
+    Returns:
+        Response indicating import has started
+        
+    Raises:
+        HTTPException: 400 if import is already in progress or directory invalid
+    """
+    global filesystem_import_in_progress
+    
+    with filesystem_import_lock:
+        if filesystem_import_in_progress:
+            raise HTTPException(
+                status_code=400,
+                detail="Filesystem images import is already in progress"
+            )
+    
+    # Validate directory path
+    directory_path = Path(request.root_directory)
+    if not directory_path.exists() or not directory_path.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Directory does not exist or is not a directory: {request.root_directory}"
+        )
+    
+    # Prepare result dictionary for background task
+    result_dict = {}
+    
+    # Start background import task
+    background_tasks.add_task(
+        import_filesystem_images_background,
+        str(directory_path),
+        request.max_images,
+        request.create_thumbnail,
+        result_dict
+    )
+    
+    return ImportFilesystemImagesResponse(
+        message="Filesystem images import started",
+        root_directory=request.root_directory,
+        files_processed=0,
+        total_files=0,
+        images_imported=0,
+        images_updated=0,
+        errors=0,
+        timestamp=datetime.utcnow()
+    )
+
+
+@app.get("/images/import/stream")
+async def stream_filesystem_import_progress(request: Request):
+    """Stream Filesystem import progress via Server-Sent Events (SSE).
+    
+    Returns:
+        StreamingResponse with SSE events containing progress updates
+    """
+    async def event_generator():
+        # Create a queue for this client
+        client_queue = asyncio.Queue()
+        
+        # Add client queue to list
+        with filesystem_import_sse_clients_lock:
+            filesystem_import_sse_clients.append(client_queue)
+        
+        try:
+            # Send initial state
+            initial_state = get_filesystem_import_progress_state()
+            event_data = {
+                "type": "progress",
+                "data": initial_state
+            }
+            yield f"data: {json.dumps(event_data)}\n\n"
+            
+            # Keep connection alive and send events
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+                
+                try:
+                    # Wait for event with timeout
+                    message = await asyncio.wait_for(client_queue.get(), timeout=1.0)
+                    yield message
+                except asyncio.TimeoutError:
+                    # Send keepalive
+                    yield ": keepalive\n\n"
+                    continue
+                except Exception as e:
+                    print(f"Error in SSE stream: {e}")
+                    break
+        finally:
+            # Remove client queue from list
+            with filesystem_import_sse_clients_lock:
+                if client_queue in filesystem_import_sse_clients:
+                    filesystem_import_sse_clients.remove(client_queue)
+    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/images/import/cancel")
+async def cancel_filesystem_import():
+    """Cancel Filesystem import if it is in progress.
+    
+    Returns:
+        Success message indicating cancellation status
+    """
+    global filesystem_import_in_progress
+    
+    with filesystem_import_lock:
+        if not filesystem_import_in_progress:
+            return {
+                "message": "No Filesystem import is currently in progress",
+                "cancelled": False
+            }
+        
+        filesystem_import_cancelled.set()
+        
+        return {
+            "message": "Filesystem import cancellation requested. Processing will stop after current image completes.",
+            "cancelled": True
+        }
+
+
+@app.get("/images/import/status")
+async def get_filesystem_import_status():
+    """Get the current status of Filesystem import.
+    
+    Returns:
+        Status information about Filesystem import
+    """
+    global filesystem_import_in_progress
+    
+    progress_state = get_filesystem_import_progress_state()
+    
+    with filesystem_import_lock:
+        return {
+            "in_progress": filesystem_import_in_progress,
+            "cancelled": filesystem_import_cancelled.is_set(),
             **progress_state
         }
 
@@ -3119,6 +3494,46 @@ async def get_email_metadata(email_id: int):
             attachment_ids=attachment_ids,
             created_at=email.created_at,
             updated_at=email.updated_at
+        )
+    finally:
+        session.close()
+
+
+@app.delete("/emails/{email_id}")
+async def delete_email(email_id: int):
+    """Delete an email by ID.
+    
+    Args:
+        email_id: The ID of the email to delete
+        
+    Returns:
+        Success message with email ID
+        
+    Raises:
+        HTTPException: 404 if email not found
+    """
+    session = db.get_session()
+    try:
+        email = session.query(Email).filter(Email.id == email_id).first()
+        
+        if not email:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Email with ID {email_id} not found"
+            )
+        
+        # Delete the email - attachments will be cascade deleted via SQLAlchemy relationship
+        session.delete(email)
+        session.commit()
+        
+        return {"message": f"Email {email_id} deleted successfully", "email_id": email_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error deleting email: {str(e)}"
         )
     finally:
         session.close()
@@ -3691,6 +4106,439 @@ async def get_attachment_content(attachment_id: int, preview: bool = False):
         media_type=content_type,
         headers=headers
     )
+
+
+@app.get("/images/search", response_model=List[ImageMetadataResponse])
+async def search_images(
+    title: Optional[str] = Query(None, description="Filter by title (partial match, case-insensitive)"),
+    description: Optional[str] = Query(None, description="Filter by description (partial match, case-insensitive)"),
+    author: Optional[str] = Query(None, description="Filter by author (partial match, case-insensitive)"),
+    tags: Optional[str] = Query(None, description="Filter by tags (partial match, case-insensitive)"),
+    categories: Optional[str] = Query(None, description="Filter by categories (partial match, case-insensitive)"),
+    source: Optional[str] = Query(None, description="Filter by source (exact match, case-insensitive)"),
+    source_reference: Optional[str] = Query(None, description="Filter by source_reference (partial match, case-insensitive)"),
+    image_type: Optional[str] = Query(None, description="Filter by image type/MIME type (partial match, case-insensitive)"),
+    year: Optional[int] = Query(None, description="Filter by year"),
+    month: Optional[int] = Query(None, ge=1, le=12, description="Filter by month (1-12)"),
+    has_gps: Optional[bool] = Query(None, description="Filter by whether image has GPS data"),
+    rating: Optional[int] = Query(None, ge=1, le=5, description="Filter by rating (1-5)"),
+    rating_min: Optional[int] = Query(None, ge=1, le=5, description="Filter by minimum rating (1-5)"),
+    rating_max: Optional[int] = Query(None, ge=1, le=5, description="Filter by maximum rating (1-5)"),
+    available_for_task: Optional[bool] = Query(None, description="Filter by available_for_task flag"),
+    processed: Optional[bool] = Query(None, description="Filter by processed flag"),
+    location_processed: Optional[bool] = Query(None, description="Filter by location_processed flag"),
+    image_processed: Optional[bool] = Query(None, description="Filter by image_processed flag"),
+    region: Optional[str] = Query(None, description="Filter by region (partial match, case-insensitive)")
+):
+    """Search images by metadata criteria.
+    
+    All parameters are optional. When multiple parameters are provided, they are combined with AND logic.
+    Text fields support partial matching (case-insensitive) unless otherwise specified.
+    
+    Args:
+        title: Partial match on image title
+        description: Partial match on image description
+        author: Partial match on image author
+        tags: Partial match on tags (comma-separated)
+        categories: Partial match on categories (comma-separated)
+        source: Exact match on source (case-insensitive)
+        source_reference: Partial match on source_reference (file path)
+        image_type: Partial match on image type/MIME type
+        year: Filter by year
+        month: Filter by month (1-12)
+        has_gps: Filter by GPS data presence
+        rating: Exact match on rating (1-5)
+        rating_min: Minimum rating (1-5)
+        rating_max: Maximum rating (1-5)
+        available_for_task: Filter by available_for_task flag
+        processed: Filter by processed flag
+        location_processed: Filter by location_processed flag
+        image_processed: Filter by image_processed flag
+        region: Partial match on region
+        
+    Returns:
+        List of ImageMetadataResponse objects matching all specified criteria
+    """
+    session = db.get_session()
+    try:
+        # Start building query
+        query = session.query(ImageMetadata)
+        filters = []
+        
+        # Text field filters (partial match, case-insensitive)
+        if title:
+            filters.append(ImageMetadata.title.ilike(f"%{title}%"))
+        
+        if description:
+            filters.append(ImageMetadata.description.ilike(f"%{description}%"))
+        
+        if author:
+            filters.append(ImageMetadata.author.ilike(f"%{author}%"))
+        
+        if tags:
+            filters.append(ImageMetadata.tags.ilike(f"%{tags}%"))
+        
+        if categories:
+            filters.append(ImageMetadata.categories.ilike(f"%{categories}%"))
+        
+        if source:
+            filters.append(ImageMetadata.source.ilike(source))
+        
+        if source_reference:
+            filters.append(ImageMetadata.source_reference.ilike(f"%{source_reference}%"))
+        
+        if image_type:
+            filters.append(ImageMetadata.image_type.ilike(f"%{image_type}%"))
+        
+        if region:
+            filters.append(ImageMetadata.region.ilike(f"%{region}%"))
+        
+        # Numeric filters
+        if year is not None:
+            filters.append(ImageMetadata.year == year)
+        
+        if month is not None:
+            filters.append(ImageMetadata.month == month)
+        
+        # Rating filters
+        if rating is not None:
+            filters.append(ImageMetadata.rating == rating)
+        else:
+            if rating_min is not None:
+                filters.append(ImageMetadata.rating >= rating_min)
+            if rating_max is not None:
+                filters.append(ImageMetadata.rating <= rating_max)
+        
+        # Boolean filters
+        if has_gps is not None:
+            filters.append(ImageMetadata.has_gps == has_gps)
+        
+        if available_for_task is not None:
+            filters.append(ImageMetadata.available_for_task == available_for_task)
+        
+        if processed is not None:
+            filters.append(ImageMetadata.processed == processed)
+        
+        if location_processed is not None:
+            filters.append(ImageMetadata.location_processed == location_processed)
+        
+        if image_processed is not None:
+            filters.append(ImageMetadata.image_processed == image_processed)
+        
+        # Apply all filters with AND logic
+        if filters:
+            query = query.filter(and_(*filters))
+        
+        # Sort by created_at descending (newest first)
+        query = query.order_by(ImageMetadata.created_at.desc())
+        
+        # Execute query
+        images = query.all()
+        
+        # Convert to response models
+        result = []
+        for img in images:
+            result.append(ImageMetadataResponse(
+                id=img.id,
+                image_blob_id=img.image_blob_id,
+                description=img.description,
+                title=img.title,
+                author=img.author,
+                tags=img.tags,
+                categories=img.categories,
+                notes=img.notes,
+                available_for_task=img.available_for_task,
+                image_type=img.image_type,
+                processed=img.processed,
+                location_processed=img.location_processed,
+                image_processed=img.image_processed,
+                created_at=img.created_at,
+                updated_at=img.updated_at,
+                year=img.year,
+                month=img.month,
+                latitude=img.latitude,
+                longitude=img.longitude,
+                altitude=img.altitude,
+                rating=img.rating,
+                has_gps=img.has_gps,
+                google_maps_url=img.google_maps_url,
+                region=img.region,
+                source=img.source,
+                source_reference=img.source_reference
+            ))
+        
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error searching images: {str(e)}"
+        )
+    finally:
+        session.close()
+
+
+@app.get("/images/{image_id}")
+async def get_image_content(
+    image_id: int,
+    type: str = Query("blob", regex="^(blob|metadata)$", description="Type of ID: 'blob' for image_blob.id or 'metadata' for image_information.id"),
+    preview: bool = Query(False, description="If True, return thumbnail instead of full image"),
+    convert_heic_to_jpg: bool = Query(True, description="If True, convert HEIC images to JPG format before returning")
+):
+    """Get image content by ID.
+    
+    Args:
+        image_id: The ID of the image (blob ID or metadata ID depending on type parameter)
+        type: Type of ID - 'blob' for image_blob.id or 'metadata' for image_information.id (default: 'blob')
+        preview: If True, return thumbnail instead of full image
+        convert_heic_to_jpg: If True, convert HEIC images to JPG format before returning (default: True)
+        
+    Returns:
+        Image binary data with appropriate content-type
+        
+    Raises:
+        HTTPException: 404 if image not found or has no content
+    """
+    # Use shared database instance to avoid creating new connections
+    storage = ImageStorage(db=db)
+    
+    # Get image blob based on type
+    if type == "metadata":
+        image_blob = storage.get_image_by_metadata_id(image_id)
+    else:
+        image_blob = storage.get_image_by_blob_id(image_id)
+    
+    if not image_blob:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Image with ID {image_id} (type: {type}) not found"
+        )
+    
+    # Determine content
+    if preview:
+        content = image_blob.thumbnail_data
+        if content is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Image with ID {image_id} has no thumbnail available"
+            )
+        content_type = "image/jpeg"  # Thumbnails are always JPEG
+        filename = "image_thumb.jpg"
+    else:
+        content = image_blob.image_data
+        if content is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Image with ID {image_id} has no image data"
+            )
+        # Get content type from metadata using a single optimized query
+        session = db.get_session()
+        try:
+            if type == "metadata":
+                # We already know the metadata ID, so query directly
+                metadata = session.query(ImageMetadata).filter(
+                    ImageMetadata.id == image_id
+                ).first()
+            else:
+                # Query metadata by blob_id
+                metadata = session.query(ImageMetadata).filter(
+                    ImageMetadata.image_blob_id == image_blob.id
+                ).first()
+            
+            if metadata and metadata.image_type:
+                content_type = metadata.image_type
+            else:
+                content_type = "image/jpeg"  # Default
+            filename = metadata.source_reference.split(os.sep)[-1] if metadata and metadata.source_reference else "image"
+        finally:
+            session.close()
+        
+        # Convert HEIC to JPG if requested
+        if convert_heic_to_jpg and content_type and content_type.lower() in ('image/heic', 'image/heif'):
+            try:
+                # Open the HEIC image
+                img = Image.open(BytesIO(content))
+                
+                # Convert to RGB if necessary
+                if img.mode in ("RGBA", "LA", "P"):
+                    background = Image.new("RGB", img.size, (255, 255, 255))
+                    if img.mode == "P":
+                        img = img.convert("RGBA")
+                    background.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
+                    img = background
+                elif img.mode != "RGB":
+                    img = img.convert("RGB")
+                
+                # Convert to JPEG bytes
+                jpg_bytes = BytesIO()
+                img.save(jpg_bytes, format="JPEG", quality=95)
+                jpg_bytes.seek(0)
+                content = jpg_bytes.getvalue()
+                
+                # Update content type and filename
+                content_type = "image/jpeg"
+                if filename and filename.lower().endswith(('.heic', '.heif')):
+                    filename = os.path.splitext(filename)[0] + '.jpg'
+                else:
+                    filename = "image.jpg"
+            except Exception as e:
+                # If conversion fails, return original image with a warning
+                # In production, you might want to log this error
+                pass  # Fall through to return original content
+    
+    # Set Content-Disposition header
+    safe_filename = filename.replace('"', '\\"')
+    headers = {
+        "Content-Disposition": f'inline; filename="{safe_filename}"'
+    }
+    
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers=headers
+    )
+
+
+@app.delete("/images/{image_id}")
+async def delete_image(image_id: int):
+    """Delete an image by metadata ID.
+    
+    Args:
+        image_id: The metadata ID of the image to delete
+        
+    Returns:
+        Success message with image ID
+        
+    Raises:
+        HTTPException: 404 if image not found
+    """
+    storage = ImageStorage(db=db)
+    try:
+        deleted = storage.delete_image_by_metadata_id(image_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Image with metadata ID {image_id} not found"
+            )
+        return {"message": f"Image {image_id} deleted successfully", "image_id": image_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error deleting image: {str(e)}"
+        )
+
+
+@app.delete("/images")
+async def delete_images(
+    all: bool = Query(False, description="If True, delete all images"),
+    start_id: Optional[int] = Query(None, description="Start of ID range (inclusive)"),
+    end_id: Optional[int] = Query(None, description="End of ID range (inclusive)")
+):
+    """Delete images with options to delete all or by ID range.
+    
+    Args:
+        all: If True, delete all images (requires explicit confirmation)
+        start_id: Start of ID range for deletion (inclusive)
+        end_id: End of ID range for deletion (inclusive)
+        
+    Returns:
+        Success message with count of deleted images
+        
+    Raises:
+        HTTPException: 400 if parameters are invalid, 404 if no images found
+    """
+    session = db.get_session()
+    try:
+        # Validate parameters
+        if all and (start_id is not None or end_id is not None):
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot specify both 'all=true' and ID range parameters"
+            )
+        
+        if not all and start_id is None and end_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Must specify either 'all=true' or at least one of 'start_id' or 'end_id'"
+            )
+        
+        # Build query
+        query = session.query(ImageMetadata)
+        
+        if all:
+            # Delete all images
+            count = query.count()
+            if count == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail="No images found to delete"
+                )
+            
+            # Delete all metadata records (cascade will delete blobs)
+            deleted_count = query.delete(synchronize_session=False)
+            session.commit()
+            
+            return {
+                "message": f"Successfully deleted {deleted_count} image(s)",
+                "deleted_count": deleted_count
+            }
+        else:
+            # Delete by ID range
+            if start_id is not None and end_id is not None:
+                if start_id > end_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="start_id must be less than or equal to end_id"
+                    )
+                query = query.filter(
+                    and_(
+                        ImageMetadata.id >= start_id,
+                        ImageMetadata.id <= end_id
+                    )
+                )
+            elif start_id is not None:
+                query = query.filter(ImageMetadata.id >= start_id)
+            elif end_id is not None:
+                query = query.filter(ImageMetadata.id <= end_id)
+            
+            # Count before deletion
+            count = query.count()
+            if count == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail="No images found in the specified range"
+                )
+            
+            # Delete metadata records (cascade will delete blobs)
+            # Need to load relationships for cascade to work properly
+            metadata_records = query.all()
+            deleted_count = 0
+            for metadata in metadata_records:
+                # Load the relationship to ensure cascade works
+                _ = metadata.image_blob
+                session.delete(metadata)
+                deleted_count += 1
+            
+            session.commit()
+            
+            return {
+                "message": f"Successfully deleted {deleted_count} image(s)",
+                "deleted_count": deleted_count,
+                "start_id": start_id,
+                "end_id": end_id
+            }
+    except HTTPException:
+        session.rollback()
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error deleting images: {str(e)}"
+        )
+    finally:
+        session.close()
 
 
 @app.get("/attachments-viewer", response_class=HTMLResponse)
