@@ -1021,6 +1021,17 @@ async def health_check():
     )
 
 
+@app.get("/api/control-defaults")
+async def get_control_defaults():
+    """Get default values for control tab inputs from environment variables.
+    
+    Returns:
+        Dictionary of default values for all control tab inputs
+    """
+    config = get_config()
+    return config.get_control_defaults()
+
+
 @app.post("/emails/process", response_model=ProcessLabelResponse)
 async def process_emails(
     request: ProcessLabelRequest,
@@ -2723,13 +2734,18 @@ def import_filesystem_images_background(
             """Check if import should be cancelled."""
             return filesystem_import_cancelled.is_set()
         
+        # Get exclude patterns from config
+        config = get_config()
+        exclude_patterns = config.get_filesystem_exclude_patterns()
+        
         # Run import with progress callback
         stats = import_images_from_filesystem(
             root_directory=directory_path,
             max_images=max_images,
             should_create_thumbnail=create_thumbnail,
             progress_callback=progress_callback,
-            cancelled_check=cancelled_check
+            cancelled_check=cancelled_check,
+            exclude_patterns=exclude_patterns
         )
         
         result_dict.update(stats)
@@ -4396,6 +4412,196 @@ async def get_image_content(
         media_type=content_type,
         headers=headers
     )
+
+
+@app.put("/images/bulk-update")
+async def bulk_update_images(update_data: Dict[str, Any]):
+    """Bulk update multiple images with tags.
+    
+    Args:
+        update_data: Dictionary containing:
+            - image_ids: List of image metadata IDs to update
+            - tags: Tags to apply (will be appended to existing tags)
+        
+    Returns:
+        Success message with count of updated images
+        
+    Raises:
+        HTTPException: 400 if validation fails
+    """
+    storage = ImageStorage(db=db)
+    try:
+        image_ids = update_data.get("image_ids", [])
+        tags = update_data.get("tags")
+        
+        if not image_ids or not isinstance(image_ids, list):
+            raise HTTPException(
+                status_code=400,
+                detail="image_ids must be a non-empty list"
+            )
+        
+        if not tags or not isinstance(tags, str) or not tags.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="tags must be a non-empty string"
+            )
+        
+        updated_count = 0
+        errors = []
+        
+        # Get existing tags for all images in one query
+        session = db.get_session()
+        try:
+            metadata_list = session.query(ImageMetadata).filter(ImageMetadata.id.in_(image_ids)).all()
+            metadata_dict = {m.id: m for m in metadata_list}
+        finally:
+            session.close()
+        
+        # Update each image
+        for image_id in image_ids:
+            try:
+                metadata = metadata_dict.get(image_id)
+                if metadata:
+                    # Merge tags: append new tags to existing ones
+                    existing_tags = metadata.tags or ''
+                    if existing_tags:
+                        new_tags = f"{existing_tags}, {tags.strip()}"
+                    else:
+                        new_tags = tags.strip()
+                    
+                    # Update using the storage method
+                    updated = storage.update_image_metadata(
+                        metadata_id=image_id,
+                        tags=new_tags
+                    )
+                    if updated:
+                        updated_count += 1
+                else:
+                    errors.append(f"Image {image_id} not found")
+            except Exception as e:
+                errors.append(f"Error updating image {image_id}: {str(e)}")
+        
+        return {
+            "message": f"Updated {updated_count} image(s)",
+            "updated_count": updated_count,
+            "errors": errors if errors else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error bulk updating images: {str(e)}"
+        )
+
+
+@app.put("/images/{image_id}")
+async def update_image_metadata(image_id: int, update_data: Dict[str, Any]):
+    """Update image metadata fields.
+    
+    Args:
+        image_id: The metadata ID of the image to update
+        update_data: Dictionary containing fields to update (description, tags, rating)
+        
+    Returns:
+        Success message with updated image ID
+        
+    Raises:
+        HTTPException: 404 if image not found, 400 if validation fails
+    """
+    storage = ImageStorage(db=db)
+    try:
+        # Extract allowed fields
+        description = update_data.get("description")
+        tags = update_data.get("tags")
+        rating = update_data.get("rating")
+        
+        # Update metadata
+        updated_metadata = storage.update_image_metadata(
+            metadata_id=image_id,
+            description=description,
+            tags=tags,
+            rating=rating
+        )
+        
+        if not updated_metadata:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Image with metadata ID {image_id} not found"
+            )
+        
+        return {
+            "message": f"Image {image_id} updated successfully",
+            "image_id": image_id,
+            "updated_fields": {
+                "description": description is not None,
+                "tags": tags is not None,
+                "rating": rating is not None
+            }
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error updating image: {str(e)}"
+        )
+
+
+@app.delete("/images/bulk-delete")
+async def bulk_delete_images(delete_data: Dict[str, Any]):
+    """Bulk delete multiple images by their metadata IDs.
+    
+    Args:
+        delete_data: Dictionary containing:
+            - image_ids: List of image metadata IDs to delete
+        
+    Returns:
+        Success message with count of deleted images
+        
+    Raises:
+        HTTPException: 400 if validation fails
+    """
+    storage = ImageStorage(db=db)
+    try:
+        image_ids = delete_data.get("image_ids", [])
+        
+        if not image_ids or not isinstance(image_ids, list):
+            raise HTTPException(
+                status_code=400,
+                detail="image_ids must be a non-empty list"
+            )
+        
+        deleted_count = 0
+        errors = []
+        
+        for image_id in image_ids:
+            try:
+                deleted = storage.delete_image_by_metadata_id(image_id)
+                if deleted:
+                    deleted_count += 1
+                else:
+                    errors.append(f"Image {image_id} not found")
+            except Exception as e:
+                errors.append(f"Error deleting image {image_id}: {str(e)}")
+        
+        return {
+            "message": f"Deleted {deleted_count} image(s)",
+            "deleted_count": deleted_count,
+            "errors": errors if errors else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error bulk deleting images: {str(e)}"
+        )
 
 
 @app.delete("/images/{image_id}")

@@ -2989,12 +2989,24 @@ body {
     padding: 1em;
     background-color: aliceblue;
     border-bottom: 1px solid #e9ecef;
-    width: 50%;
-    max-width: 50%;
+    width: 100%;
+    max-width: 100%;
     box-sizing: border-box;
+    display: flex;
+    flex-direction: row;
+    gap: 1.0em;
 }
 
 .new-image-metadata-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+    width: 50%;
+}
+
+.new-image-gallery-right-hand-box {
+    width: 50%;
+    max-width: 50%;
     display: flex;
     flex-direction: column;
     gap: 0.4em;
@@ -3082,6 +3094,49 @@ body {
     border-width: 3px;
     box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
     z-index: 2;
+}
+
+.new-image-gallery-thumbnail-item.bulk-selected {
+    border-color: #28a745;
+    border-width: 3px;
+    box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.3);
+    z-index: 2;
+    position: relative;
+}
+
+.new-image-gallery-thumbnail-item.bulk-selected::after {
+    content: '✓';
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background-color: #28a745;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    z-index: 3;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.new-image-gallery-select-mode-toggle {
+    font-size: 0.9em;
+    color: #233366;
+}
+
+.new-image-gallery-select-mode-toggle input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+#new-image-gallery-bulk-edit-section {
+    border: 1px solid #bfc9da;
+    border-radius: 4px;
 }
 
 .new-image-gallery-thumbnail-item img {
@@ -3181,6 +3236,63 @@ body {
     font-size: 0.9em;
     word-wrap: break-word;
     white-space: pre-wrap;
+}
+
+.new-image-gallery-detail-metadata-editable {
+    width: 100%;
+    padding: 0.5em;
+    border: 1px solid #bfc9da;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-family: inherit;
+    box-sizing: border-box;
+    color: #555;
+    background-color: #fff;
+}
+
+.new-image-gallery-detail-metadata-editable:focus {
+    outline: none;
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+}
+
+.new-image-gallery-detail-metadata-editable[type="text"] {
+    min-height: 2em;
+}
+
+.star-rating-container {
+    display: flex;
+    gap: 0.2em;
+    align-items: center;
+}
+
+.star {
+    font-size: 1.5em;
+    color: #ddd;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.2s;
+}
+
+/* Stars after an active star should be gray - higher specificity than hover */
+/* .star-rating-container .star.active ~ .star {
+     color: #ddd !important; 
+} */
+
+
+/* Active stars should always be gold - higher specificity than hover */
+.star-rating-container .star.active {
+    color: #ffd700 !important;
+}
+
+
+/* Hover effect: highlight stars up to the hovered star, but don't override active */
+.star-rating-container:hover .star:not(.active):hover {
+    color: #ffd700;
+}
+
+.star-rating-container:hover .star:not(.active):hover ~ .star:not(.active) {
+    color: #ddd;
 }
 
 .email-attachment-item {

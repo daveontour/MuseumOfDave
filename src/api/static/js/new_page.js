@@ -283,18 +283,30 @@ document.addEventListener('DOMContentLoaded', () => {
         newImageGalleryClearBtn: document.getElementById('new-image-gallery-clear-btn'),
         newImageGalleryThumbnailGrid: document.getElementById('new-image-gallery-thumbnail-grid'),
         newImageGalleryMasterPane: document.querySelector('.new-image-gallery-master-pane'),
+        newImageGallerySelectMode: document.getElementById('new-image-gallery-select-mode'),
+        newImageGalleryBulkEditSection: document.getElementById('new-image-gallery-bulk-edit-section'),
+        newImageGallerySelectedCount: document.getElementById('new-image-gallery-selected-count'),
+        newImageGalleryBulkTags: document.getElementById('new-image-gallery-bulk-tags'),
+        newImageGalleryApplyTagsBtn: document.getElementById('new-image-gallery-apply-tags-btn'),
+        newImageGalleryDeleteSelectedBtn: document.getElementById('new-image-gallery-delete-selected-btn'),
+        newImageGalleryClearSelectionBtn: document.getElementById('new-image-gallery-clear-selection-btn'),
         // New Image Gallery Detail Modal Elements
         newImageGalleryDetailModal: document.getElementById('new-image-gallery-detail-modal'),
         closeNewImageGalleryDetailModalBtn: document.getElementById('close-new-image-gallery-detail-modal'),
         newImageGalleryDetailImage: document.getElementById('new-image-gallery-detail-image'),
         newImageDetailTitle: document.getElementById('new-image-detail-title'),
         newImageDetailDescription: document.getElementById('new-image-detail-description'),
+        newImageDetailDescriptionEdit: document.getElementById('new-image-detail-description-edit'),
         newImageDetailAuthor: document.getElementById('new-image-detail-author'),
         newImageDetailTags: document.getElementById('new-image-detail-tags'),
+        newImageDetailTagsEdit: document.getElementById('new-image-detail-tags-edit'),
         newImageDetailCategories: document.getElementById('new-image-detail-categories'),
         newImageDetailNotes: document.getElementById('new-image-detail-notes'),
         newImageDetailDate: document.getElementById('new-image-detail-date'),
         newImageDetailRating: document.getElementById('new-image-detail-rating'),
+        newImageDetailRatingContainer: document.getElementById('new-image-detail-rating-container'),
+        newImageDetailRatingEdit: document.getElementById('new-image-detail-rating-edit'),
+        newImageGallerySaveBtn: document.getElementById('new-image-gallery-save-btn'),
         newImageDetailImageType: document.getElementById('new-image-detail-image-type'),
         newImageDetailSource: document.getElementById('new-image-detail-source'),
         newImageDetailSourceReference: document.getElementById('new-image-detail-source-reference'),
@@ -321,12 +333,12 @@ document.addEventListener('DOMContentLoaded', () => {
         haveYourSayDropupBtn: document.getElementById('have-your-say-dropup-btn'),
         // New sidebar buttons
         fbAlbumsSidebarBtn: document.getElementById('fb-albums-sidebar-btn'),
-        imageGallerySidebarBtn: document.getElementById('image-gallery-sidebar-btn'),
+        //imageGallerySidebarBtn: document.getElementById('image-gallery-sidebar-btn'),
         locationsSidebarBtn: document.getElementById('locations-sidebar-btn'),
         emailGallerySidebarBtn: document.getElementById('email-gallery-sidebar-btn'),
         newImageGallerySidebarBtn: document.getElementById('new-image-gallery-sidebar-btn'),
         suggestionsSidebarBtn: document.getElementById('suggestions-sidebar-btn'),
-        haveYourSaySidebarBtn: document.getElementById('have-your-say-sidebar-btn'),
+       // haveYourSaySidebarBtn: document.getElementById('have-your-say-sidebar-btn'),
         // Interviewer mode elements
         interviewerModeBtn: document.getElementById('interviewer-mode-btn'),
         interviewerMain: document.querySelector('.interviewer-main'),
@@ -1689,210 +1701,210 @@ document.addEventListener('DOMContentLoaded', () => {
             return { init, open, openAlbum };
         })(),
         
-        HaveYourSay: (() => {
-            function open() {
-                Modals._openModal(DOM.haveYourSayModal);
-                DOM.haveYourSayTextarea.value = '';
-                DOM.dictationStatus.textContent = '';
-                // DOM.haveYourSayTextarea.focus(); // Can be disruptive
-            }
-            function close() {
-                Modals._closeModal(DOM.haveYourSayModal);
-                stopDictation();
-            }
+        // HaveYourSay: (() => {
+        //     function open() {
+        //         Modals._openModal(DOM.haveYourSayModal);
+        //         DOM.haveYourSayTextarea.value = '';
+        //         DOM.dictationStatus.textContent = '';
+        //         // DOM.haveYourSayTextarea.focus(); // Can be disruptive
+        //     }
+        //     function close() {
+        //         Modals._closeModal(DOM.haveYourSayModal);
+        //         stopDictation();
+        //     }
 
-            function startDictation() {
-                if (!AppState.dictationRecognition) return;
-                if (AppState.isDictationListening) {
-                    stopDictation();
-                    return;
-                }
-                AppState.finalDictationTranscript = '';
-                DOM.haveYourSayTextarea.value = '';
-                AppState.dictationRecognition.start();
-                DOM.startDictationBtn.style.display = 'none';
-                DOM.stopDictationBtn.style.display = 'block';
-            }
+        //     function startDictation() {
+        //         if (!AppState.dictationRecognition) return;
+        //         if (AppState.isDictationListening) {
+        //             stopDictation();
+        //             return;
+        //         }
+        //         AppState.finalDictationTranscript = '';
+        //         DOM.haveYourSayTextarea.value = '';
+        //         AppState.dictationRecognition.start();
+        //         DOM.startDictationBtn.style.display = 'none';
+        //         DOM.stopDictationBtn.style.display = 'block';
+        //     }
 
-            function stopDictation() {
-                if (AppState.dictationRecognition && AppState.isDictationListening) {
-                    AppState.dictationRecognition.stop();
-                    // isListening will be set to false by onend
-                }
-                // Explicitly ensure button state is correct even if onend is delayed
-                DOM.dictationStatus.textContent = 'Dictation stopped.';
-                DOM.stopDictationBtn.style.display = 'none';
-                DOM.startDictationBtn.style.display = 'block';
-                AppState.isDictationListening = false;
-            }
+        //     function stopDictation() {
+        //         if (AppState.dictationRecognition && AppState.isDictationListening) {
+        //             AppState.dictationRecognition.stop();
+        //             // isListening will be set to false by onend
+        //         }
+        //         // Explicitly ensure button state is correct even if onend is delayed
+        //         DOM.dictationStatus.textContent = 'Dictation stopped.';
+        //         DOM.stopDictationBtn.style.display = 'none';
+        //         DOM.startDictationBtn.style.display = 'block';
+        //         AppState.isDictationListening = false;
+        //     }
             
-            function handleSubmit() {
-                const text = DOM.haveYourSayTextarea.value.trim();
-                const name = DOM.haveYourSayName.value.trim();
-                const relationship = DOM.haveYourSayRelationship.value.trim();
-                let prefix = '';
-                if (name && relationship) prefix = `${name} (${relationship}): `;
-                else if (name) prefix = `${name}: `;
-                else if (relationship) prefix = `(${relationship}): `;
+        //     function handleSubmit() {
+        //         const text = DOM.haveYourSayTextarea.value.trim();
+        //         const name = DOM.haveYourSayName.value.trim();
+        //         const relationship = DOM.haveYourSayRelationship.value.trim();
+        //         let prefix = '';
+        //         if (name && relationship) prefix = `${name} (${relationship}): `;
+        //         else if (name) prefix = `${name}: `;
+        //         else if (relationship) prefix = `(${relationship}): `;
                 
-                if (text) {
-                    // DOM.userInput.value = prefix + text;
-                    // close();
-                    // DOM.userInput.focus();
+        //         if (text) {
+        //             // DOM.userInput.value = prefix + text;
+        //             // close();
+        //             // DOM.userInput.focus();
                    
-                fetch(CONSTANTS.API_PATHS.HAVE_YOUR_SAY, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        content: text,
-                        name: name,
-                        relationship: relationship
-                    })
-                })
-                .then(response => {
-                    if (response.ok) {
-                        DOM.dictationStatus.textContent = 'Thank you for your submission!';
-                        close();
-                        DOM.userInput.focus();
-                    } else {
-                        DOM.dictationStatus.textContent = 'Error submitting. Please try again.';
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    DOM.dictationStatus.textContent = 'Error submitting. Please try again.';
-                });
-                } else {
-                    DOM.dictationStatus.textContent = 'Please enter or dictate some text.';
-                }
-            }
+        //         fetch(CONSTANTS.API_PATHS.HAVE_YOUR_SAY, {
+        //             method: 'POST',
+        //             headers: {
+        //                 'Content-Type': 'application/json',
+        //             },
+        //             body: JSON.stringify({
+        //                 content: text,
+        //                 name: name,
+        //                 relationship: relationship
+        //             })
+        //         })
+        //         .then(response => {
+        //             if (response.ok) {
+        //                 DOM.dictationStatus.textContent = 'Thank you for your submission!';
+        //                 close();
+        //                 DOM.userInput.focus();
+        //             } else {
+        //                 DOM.dictationStatus.textContent = 'Error submitting. Please try again.';
+        //             }
+        //         })
+        //         .catch(error => {
+        //             console.error('Error:', error);
+        //             DOM.dictationStatus.textContent = 'Error submitting. Please try again.';
+        //         });
+        //         } else {
+        //             DOM.dictationStatus.textContent = 'Please enter or dictate some text.';
+        //         }
+        //     }
 
-            function initSpeechRecognition() {
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                if (SpeechRecognition) {
-                    AppState.dictationRecognition = new SpeechRecognition();
-                    AppState.dictationRecognition.lang = 'en-US';
-                    AppState.dictationRecognition.interimResults = true;
-                    AppState.dictationRecognition.continuous = true;
+        //     function initSpeechRecognition() {
+        //         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        //         if (SpeechRecognition) {
+        //             AppState.dictationRecognition = new SpeechRecognition();
+        //             AppState.dictationRecognition.lang = 'en-US';
+        //             AppState.dictationRecognition.interimResults = true;
+        //             AppState.dictationRecognition.continuous = true;
 
-                    AppState.dictationRecognition.onstart = () => { AppState.isDictationListening = true; DOM.dictationStatus.textContent = 'Listening...'; };
-                    AppState.dictationRecognition.onerror = (event) => { DOM.dictationStatus.textContent = 'Dictation error: ' + event.error; AppState.isDictationListening = false; stopDictation(); };
-                    AppState.dictationRecognition.onend = () => { AppState.isDictationListening = false; if (DOM.dictationStatus.textContent === 'Listening...') DOM.dictationStatus.textContent = 'Dictation stopped.'; stopDictation();}; // Ensure stop UI updates
-                    AppState.dictationRecognition.onresult = (event) => {
-                        let interimTranscript = '';
-                        for (let i = event.resultIndex; i < event.results.length; ++i) {
-                            if (event.results[i].isFinal) AppState.finalDictationTranscript += event.results[i][0].transcript;
-                            else interimTranscript += event.results[i][0].transcript;
-                        }
-                        DOM.haveYourSayTextarea.value = AppState.finalDictationTranscript + interimTranscript;
-                    };
-                } else {
-                    DOM.startDictationBtn.disabled = true;
-                    DOM.dictationStatus.textContent = 'Speech recognition not supported.';
-                }
-            }
+        //             AppState.dictationRecognition.onstart = () => { AppState.isDictationListening = true; DOM.dictationStatus.textContent = 'Listening...'; };
+        //             AppState.dictationRecognition.onerror = (event) => { DOM.dictationStatus.textContent = 'Dictation error: ' + event.error; AppState.isDictationListening = false; stopDictation(); };
+        //             AppState.dictationRecognition.onend = () => { AppState.isDictationListening = false; if (DOM.dictationStatus.textContent === 'Listening...') DOM.dictationStatus.textContent = 'Dictation stopped.'; stopDictation();}; // Ensure stop UI updates
+        //             AppState.dictationRecognition.onresult = (event) => {
+        //                 let interimTranscript = '';
+        //                 for (let i = event.resultIndex; i < event.results.length; ++i) {
+        //                     if (event.results[i].isFinal) AppState.finalDictationTranscript += event.results[i][0].transcript;
+        //                     else interimTranscript += event.results[i][0].transcript;
+        //                 }
+        //                 DOM.haveYourSayTextarea.value = AppState.finalDictationTranscript + interimTranscript;
+        //             };
+        //         } else {
+        //             DOM.startDictationBtn.disabled = true;
+        //             DOM.dictationStatus.textContent = 'Speech recognition not supported.';
+        //         }
+        //     }
 
-            // Chat dictation functions
-            function startChatDictation() {
-                if (!AppState.chatDictationRecognition) return;
-                if (AppState.isChatDictationListening) {
-                    stopChatDictation();
-                    return;
-                }
-                AppState.finalChatDictationTranscript = '';
-                DOM.userInput.value = '';
-                AppState.chatDictationRecognition.start();
-                DOM.chatStartDictationBtn.style.display = 'none';
-                DOM.chatStopDictationBtn.style.display = 'block';
-            }
+        //     // Chat dictation functions
+        //     function startChatDictation() {
+        //         if (!AppState.chatDictationRecognition) return;
+        //         if (AppState.isChatDictationListening) {
+        //             stopChatDictation();
+        //             return;
+        //         }
+        //         AppState.finalChatDictationTranscript = '';
+        //         DOM.userInput.value = '';
+        //         AppState.chatDictationRecognition.start();
+        //         DOM.chatStartDictationBtn.style.display = 'none';
+        //         DOM.chatStopDictationBtn.style.display = 'block';
+        //     }
 
-            function stopChatDictation() {
-                // Prevent double execution by checking if already stopped
-                if (!AppState.isChatDictationListening) {
-                    return;
-                }
+        //     function stopChatDictation() {
+        //         // Prevent double execution by checking if already stopped
+        //         if (!AppState.isChatDictationListening) {
+        //             return;
+        //         }
                 
-                if (AppState.chatDictationRecognition) {
-                    AppState.chatDictationRecognition.stop();
-                }
-                DOM.chatStopDictationBtn.style.display = 'none';
-                DOM.chatStartDictationBtn.style.display = 'block';
-                AppState.isChatDictationListening = false;
+        //         if (AppState.chatDictationRecognition) {
+        //             AppState.chatDictationRecognition.stop();
+        //         }
+        //         DOM.chatStopDictationBtn.style.display = 'none';
+        //         DOM.chatStartDictationBtn.style.display = 'block';
+        //         AppState.isChatDictationListening = false;
                 
-                // Auto-submit the entered text if there's content
-                const userInput = DOM.userInput.value.trim();
-                if (userInput) {
-                    // Trigger the form submission
-                    // const chatForm = document.getElementById('chat-form');
-                    // if (chatForm) {
-                    //     chatForm.dispatchEvent(new Event('submit', { bubbles: true }));
-                    // }
-                    App.processFormSubmit(userInput);
-                }
-            }
+        //         // Auto-submit the entered text if there's content
+        //         const userInput = DOM.userInput.value.trim();
+        //         if (userInput) {
+        //             // Trigger the form submission
+        //             // const chatForm = document.getElementById('chat-form');
+        //             // if (chatForm) {
+        //             //     chatForm.dispatchEvent(new Event('submit', { bubbles: true }));
+        //             // }
+        //             App.processFormSubmit(userInput);
+        //         }
+        //     }
 
-            function initChatSpeechRecognition() {
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                if (SpeechRecognition) {
-                    AppState.chatDictationRecognition = new SpeechRecognition();
-                    AppState.chatDictationRecognition.lang = 'en-US';
-                    AppState.chatDictationRecognition.interimResults = true;
-                    AppState.chatDictationRecognition.continuous = true;
+        //     function initChatSpeechRecognition() {
+        //         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        //         if (SpeechRecognition) {
+        //             AppState.chatDictationRecognition = new SpeechRecognition();
+        //             AppState.chatDictationRecognition.lang = 'en-US';
+        //             AppState.chatDictationRecognition.interimResults = true;
+        //             AppState.chatDictationRecognition.continuous = true;
 
-                    AppState.chatDictationRecognition.onstart = () => { 
-                        AppState.isChatDictationListening = true; 
-                    };
-                    AppState.chatDictationRecognition.onerror = (event) => { 
-                        DOM.chatDictationStatus.textContent = 'Dictation error: ' + event.error; 
-                        AppState.isChatDictationListening = false; 
-                        stopChatDictation(); 
-                    };
-                    AppState.chatDictationRecognition.onend = () => { 
-                        // Only call stopChatDictation if we're still listening
-                        // This prevents double execution when manually stopping
-                        if (AppState.isChatDictationListening) {
-                            stopChatDictation(); 
-                        }
-                    };
-                    AppState.chatDictationRecognition.onresult = (event) => {
-                        let interimTranscript = '';
-                        for (let i = event.resultIndex; i < event.results.length; ++i) {
-                            if (event.results[i].isFinal) {
-                                AppState.finalChatDictationTranscript += event.results[i][0].transcript;
-                            } else {
-                                interimTranscript += event.results[i][0].transcript;
-                            }
-                        }
-                        DOM.userInput.value = AppState.finalChatDictationTranscript + interimTranscript;
-                    };
-                } else {
-                    if (DOM.chatStartDictationBtn) {
-                        DOM.chatStartDictationBtn.disabled = true;
-                        DOM.chatDictationStatus.textContent = 'Speech recognition not supported.';
-                    }
-                }
-            }
+        //             AppState.chatDictationRecognition.onstart = () => { 
+        //                 AppState.isChatDictationListening = true; 
+        //             };
+        //             AppState.chatDictationRecognition.onerror = (event) => { 
+        //                 DOM.chatDictationStatus.textContent = 'Dictation error: ' + event.error; 
+        //                 AppState.isChatDictationListening = false; 
+        //                 stopChatDictation(); 
+        //             };
+        //             AppState.chatDictationRecognition.onend = () => { 
+        //                 // Only call stopChatDictation if we're still listening
+        //                 // This prevents double execution when manually stopping
+        //                 if (AppState.isChatDictationListening) {
+        //                     stopChatDictation(); 
+        //                 }
+        //             };
+        //             AppState.chatDictationRecognition.onresult = (event) => {
+        //                 let interimTranscript = '';
+        //                 for (let i = event.resultIndex; i < event.results.length; ++i) {
+        //                     if (event.results[i].isFinal) {
+        //                         AppState.finalChatDictationTranscript += event.results[i][0].transcript;
+        //                     } else {
+        //                         interimTranscript += event.results[i][0].transcript;
+        //                     }
+        //                 }
+        //                 DOM.userInput.value = AppState.finalChatDictationTranscript + interimTranscript;
+        //             };
+        //         } else {
+        //             if (DOM.chatStartDictationBtn) {
+        //                 DOM.chatStartDictationBtn.disabled = true;
+        //                 DOM.chatDictationStatus.textContent = 'Speech recognition not supported.';
+        //             }
+        //         }
+        //     }
 
-            function init() {
-                if (DOM.haveYourSayBtn) DOM.haveYourSayBtn.addEventListener('click', open);
-                if (DOM.closeHaveYourSayModalBtn) DOM.closeHaveYourSayModalBtn.addEventListener('click', close);
-                if (DOM.cancelHaveYourSayBtn) DOM.cancelHaveYourSayBtn.addEventListener('click', close);
-                if (DOM.haveYourSayModal) DOM.haveYourSayModal.addEventListener('click', (e) => { if (e.target === DOM.haveYourSayModal) close(); });
+        //     function init() {
+        //         if (DOM.haveYourSayBtn) DOM.haveYourSayBtn.addEventListener('click', open);
+        //         if (DOM.closeHaveYourSayModalBtn) DOM.closeHaveYourSayModalBtn.addEventListener('click', close);
+        //         if (DOM.cancelHaveYourSayBtn) DOM.cancelHaveYourSayBtn.addEventListener('click', close);
+        //         if (DOM.haveYourSayModal) DOM.haveYourSayModal.addEventListener('click', (e) => { if (e.target === DOM.haveYourSayModal) close(); });
                 
-                initSpeechRecognition();
-                if (DOM.startDictationBtn) DOM.startDictationBtn.addEventListener('click', startDictation);
-                if (DOM.stopDictationBtn) DOM.stopDictationBtn.addEventListener('click', stopDictation);
-                if (DOM.submitHaveYourSayBtn) DOM.submitHaveYourSayBtn.addEventListener('click', handleSubmit);
+        //         initSpeechRecognition();
+        //         if (DOM.startDictationBtn) DOM.startDictationBtn.addEventListener('click', startDictation);
+        //         if (DOM.stopDictationBtn) DOM.stopDictationBtn.addEventListener('click', stopDictation);
+        //         if (DOM.submitHaveYourSayBtn) DOM.submitHaveYourSayBtn.addEventListener('click', handleSubmit);
 
-                // Initialize chat dictation
-                initChatSpeechRecognition();
-                if (DOM.chatStartDictationBtn) DOM.chatStartDictationBtn.addEventListener('click', startChatDictation);
-                if (DOM.chatStopDictationBtn) DOM.chatStopDictationBtn.addEventListener('click', stopChatDictation);
-            }
-            return { init,open };
-        })(),
+        //         // Initialize chat dictation
+        //         initChatSpeechRecognition();
+        //         if (DOM.chatStartDictationBtn) DOM.chatStartDictationBtn.addEventListener('click', startChatDictation);
+        //         if (DOM.chatStopDictationBtn) DOM.chatStopDictationBtn.addEventListener('click', stopChatDictation);
+        //     }
+        //     return { init,open };
+        // })(),
 
         Locations: (() => {
 
@@ -2072,438 +2084,438 @@ document.addEventListener('DOMContentLoaded', () => {
              return { init,open,openMapView,shufflePhotoMarkers};
         })(),
 
-        ImageGallery: (() => {
-            let metaData = {};
-            let selectedSource = '';
-            let selectedYear = '';
-            let selectedMonth = '';
-            let searchQuery = '';
-            let selectedLocation = '';
-            let imageData = [];
-            let map = null;
-            let currentMarker = null;
-            let selectedIdx = null;
-            let searchTimeout = null;
-            let currentImageGalleryFileInfo = null; // Store current file information for download
+        // ImageGallery: (() => {
+        //     let metaData = {};
+        //     let selectedSource = '';
+        //     let selectedYear = '';
+        //     let selectedMonth = '';
+        //     let searchQuery = '';
+        //     let selectedLocation = '';
+        //     let imageData = [];
+        //     let map = null;
+        //     let currentMarker = null;
+        //     let selectedIdx = null;
+        //     let searchTimeout = null;
+        //     let currentImageGalleryFileInfo = null; // Store current file information for download
 
-            function init() {
-                DOM.imageGalleryModal.addEventListener('click', function(e) {
-                    if (e.target === DOM.imageGalleryModal) DOM.imageGalleryModal.style.display = 'none';
-                });
-                DOM.closeImageGalleryModalBtn.addEventListener('click', function() {
-                    DOM.imageGalleryModal.style.display = 'none';
-                    close();
-                });
-                // if (DOM.imageGallerySourceFilter) DOM.imageGallerySourceFilter.addEventListener('change', _handleSourceFilterChange);
-                // if (DOM.imageGalleryYearFilter) DOM.imageGalleryYearFilter.addEventListener('change', _handleYearFilterChange);
-                // if (DOM.imageGalleryMonthFilter) DOM.imageGalleryMonthFilter.addEventListener('change', _handleMonthFilterChange);
-                // if (DOM.imageGalleryLocationFilter) DOM.imageGalleryLocationFilter.addEventListener('change', _handleLocationFilterChange);
-               if (DOM.imageGalleryFixedBtn) DOM.imageGalleryFixedBtn.addEventListener('click', _openGeoMapInNewTab);
-                if (DOM.imageGallerySearchBtn) DOM.imageGallerySearchBtn.addEventListener('click', _handleSearch);
-                if (DOM.imageGalleryClearBtn) DOM.imageGalleryClearBtn.addEventListener('click', _handleClear);
-                if (DOM.downloadImageGalleryBtn) DOM.downloadImageGalleryBtn.addEventListener('click', _downloadCurrentImageGalleryItem);
-                if (DOM.imageGallerySearch) {
-                    DOM.imageGallerySearch.addEventListener('input', (e) => {
-                        // Clear any existing timeout
-                        if (searchTimeout) clearTimeout(searchTimeout);
+        //     function init() {
+        //         DOM.imageGalleryModal.addEventListener('click', function(e) {
+        //             if (e.target === DOM.imageGalleryModal) DOM.imageGalleryModal.style.display = 'none';
+        //         });
+        //         DOM.closeImageGalleryModalBtn.addEventListener('click', function() {
+        //             DOM.imageGalleryModal.style.display = 'none';
+        //             close();
+        //         });
+        //         // if (DOM.imageGallerySourceFilter) DOM.imageGallerySourceFilter.addEventListener('change', _handleSourceFilterChange);
+        //         // if (DOM.imageGalleryYearFilter) DOM.imageGalleryYearFilter.addEventListener('change', _handleYearFilterChange);
+        //         // if (DOM.imageGalleryMonthFilter) DOM.imageGalleryMonthFilter.addEventListener('change', _handleMonthFilterChange);
+        //         // if (DOM.imageGalleryLocationFilter) DOM.imageGalleryLocationFilter.addEventListener('change', _handleLocationFilterChange);
+        //        if (DOM.imageGalleryFixedBtn) DOM.imageGalleryFixedBtn.addEventListener('click', _openGeoMapInNewTab);
+        //         if (DOM.imageGallerySearchBtn) DOM.imageGallerySearchBtn.addEventListener('click', _handleSearch);
+        //         if (DOM.imageGalleryClearBtn) DOM.imageGalleryClearBtn.addEventListener('click', _handleClear);
+        //         if (DOM.downloadImageGalleryBtn) DOM.downloadImageGalleryBtn.addEventListener('click', _downloadCurrentImageGalleryItem);
+        //         if (DOM.imageGallerySearch) {
+        //             DOM.imageGallerySearch.addEventListener('input', (e) => {
+        //                 // Clear any existing timeout
+        //                 if (searchTimeout) clearTimeout(searchTimeout);
                         
-                        const query = e.target.value.trim();
+        //                 const query = e.target.value.trim();
                         
-                        // Only search if query is at least 5 characters
-                        if (query.length >= 4) {
-                            // Set a new timeout to debounce the search
-                            searchTimeout = setTimeout(() => {
-                                searchQuery = query;
-                                // Disable other filters when searching
-                                DOM.imageGallerySourceFilter.disabled = true;
-                                DOM.imageGalleryYearFilter.disabled = true;
-                                DOM.imageGalleryMonthFilter.disabled = true;
-                                DOM.imageGalleryLocationFilter.disabled = true;
-                               // _renderImageGalleryList();
-                            }, 300); // 300ms debounce
-                        } else if (query.length === 0) {
-                            // If search is cleared, re-enable filters and reset search
-                            searchTimeout = setTimeout(() => {
-                                searchQuery = '';
-                                DOM.imageGallerySourceFilter.disabled = false;
-                                DOM.imageGalleryYearFilter.disabled = false;
-                                DOM.imageGalleryMonthFilter.disabled = false;
-                                DOM.imageGalleryLocationFilter.disabled = false;
-                                //_renderImageGalleryList();
-                            }, 300);
-                        }
-                    });
-                }
-            }
-            function open() {
-                DOM.imageGalleryModal.style.display = 'flex';
-                fetch('/imagesmetametadata')
-                        .then(r => r.json())
-                        .then(data => {
-                            metaData = data;
-                             _setSourceFilterOptions();
-                        });
+        //                 // Only search if query is at least 5 characters
+        //                 if (query.length >= 4) {
+        //                     // Set a new timeout to debounce the search
+        //                     searchTimeout = setTimeout(() => {
+        //                         searchQuery = query;
+        //                         // Disable other filters when searching
+        //                         DOM.imageGallerySourceFilter.disabled = true;
+        //                         DOM.imageGalleryYearFilter.disabled = true;
+        //                         DOM.imageGalleryMonthFilter.disabled = true;
+        //                         DOM.imageGalleryLocationFilter.disabled = true;
+        //                        // _renderImageGalleryList();
+        //                     }, 300); // 300ms debounce
+        //                 } else if (query.length === 0) {
+        //                     // If search is cleared, re-enable filters and reset search
+        //                     searchTimeout = setTimeout(() => {
+        //                         searchQuery = '';
+        //                         DOM.imageGallerySourceFilter.disabled = false;
+        //                         DOM.imageGalleryYearFilter.disabled = false;
+        //                         DOM.imageGalleryMonthFilter.disabled = false;
+        //                         DOM.imageGalleryLocationFilter.disabled = false;
+        //                         //_renderImageGalleryList();
+        //                     }, 300);
+        //                 }
+        //             });
+        //         }
+        //     }
+        //     function open() {
+        //         DOM.imageGalleryModal.style.display = 'flex';
+        //         fetch('/imagesmetametadata')
+        //                 .then(r => r.json())
+        //                 .then(data => {
+        //                     metaData = data;
+        //                      _setSourceFilterOptions();
+        //                 });
 
-                map = L.map('image-gallery-map');
-                L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 15,
-                    attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                }).addTo(map);
-            }
-            function _setSourceFilterOptions() {
-                const sourceFilter = DOM.imageGallerySourceFilter;
-                sourceFilter.innerHTML = '';
-                // Make sure all sources is first in the list
-                Object.keys(metaData).forEach(source => {         
-                    if (source === 'all_sources') {
-                        const option = document.createElement('option');
-                        option.value = "all_sources";
-                        option.textContent = "All Sources";
-                        sourceFilter.appendChild(option);
-                    } 
-                });
-                Object.keys(metaData).forEach(source => {
+        //         map = L.map('image-gallery-map');
+        //         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        //             maxZoom: 15,
+        //             attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        //         }).addTo(map);
+        //     }
+        //     function _setSourceFilterOptions() {
+        //         const sourceFilter = DOM.imageGallerySourceFilter;
+        //         sourceFilter.innerHTML = '';
+        //         // Make sure all sources is first in the list
+        //         Object.keys(metaData).forEach(source => {         
+        //             if (source === 'all_sources') {
+        //                 const option = document.createElement('option');
+        //                 option.value = "all_sources";
+        //                 option.textContent = "All Sources";
+        //                 sourceFilter.appendChild(option);
+        //             } 
+        //         });
+        //         Object.keys(metaData).forEach(source => {
                     
-                    if (source === 'all_sources') {
-                       return;
-                    } else {
-                        const option = document.createElement('option');
-                        option.value = source;
-                        option.textContent = source;
-                        sourceFilter.appendChild(option);
-                    }
-                });
-                //selectedSource = Object.keys(metaData)[0];
-                selectedSource = "all_sources";
-                DOM.imageGallerySourceFilter.value = selectedSource;
-            //    _setYearFilterOptions();
-            }
-            // function _handleSourceFilterChange() {
+        //             if (source === 'all_sources') {
+        //                return;
+        //             } else {
+        //                 const option = document.createElement('option');
+        //                 option.value = source;
+        //                 option.textContent = source;
+        //                 sourceFilter.appendChild(option);
+        //             }
+        //         });
+        //         //selectedSource = Object.keys(metaData)[0];
+        //         selectedSource = "all_sources";
+        //         DOM.imageGallerySourceFilter.value = selectedSource;
+        //     //    _setYearFilterOptions();
+        //     }
+        //     // function _handleSourceFilterChange() {
 
-            //     selectedSource = DOM.imageGallerySourceFilter.value;
-            //     _setYearFilterOptions();
-            // }
-            // function _setYearFilterOptions() {
+        //     //     selectedSource = DOM.imageGallerySourceFilter.value;
+        //     //     _setYearFilterOptions();
+        //     // }
+        //     // function _setYearFilterOptions() {
 
-            //     DOM.imageGalleryYearFilter.innerHTML = '';
-            //     const option = document.createElement('option');
-            //     option.value = "0";       
-            //     option.textContent = "Select Year";
-            //     option.disabled = true;
-            //     option.selected = true;
-            //     DOM.imageGalleryYearFilter.appendChild(option);
+        //     //     DOM.imageGalleryYearFilter.innerHTML = '';
+        //     //     const option = document.createElement('option');
+        //     //     option.value = "0";       
+        //     //     option.textContent = "Select Year";
+        //     //     option.disabled = true;
+        //     //     option.selected = true;
+        //     //     DOM.imageGalleryYearFilter.appendChild(option);
 
-            //     let years = [];
-            //     Object.keys(metaData[selectedSource]).forEach(year => {
-            //         years.push(year);
-            //     });
-            //     years.sort((a, b) => a - b);
+        //     //     let years = [];
+        //     //     Object.keys(metaData[selectedSource]).forEach(year => {
+        //     //         years.push(year);
+        //     //     });
+        //     //     years.sort((a, b) => a - b);
 
-            //     years.forEach(year => {
-            //         const option = document.createElement('option');
-            //         option.value = year;
-            //         option.textContent = year;
-            //         DOM.imageGalleryYearFilter.appendChild(option);
-            //     });
+        //     //     years.forEach(year => {
+        //     //         const option = document.createElement('option');
+        //     //         option.value = year;
+        //     //         option.textContent = year;
+        //     //         DOM.imageGalleryYearFilter.appendChild(option);
+        //     //     });
                 
-            //     selectedYear = years[Math.floor(Math.random() * years.length)];
-            //     DOM.imageGalleryYearFilter.value = selectedYear;
-            //     _setMonthFilterOptions();
-            // }
+        //     //     selectedYear = years[Math.floor(Math.random() * years.length)];
+        //     //     DOM.imageGalleryYearFilter.value = selectedYear;
+        //     //     _setMonthFilterOptions();
+        //     // }
 
-            // function _handleYearFilterChange() {
-            //     selectedYear = DOM.imageGalleryYearFilter.value;
-            //     _setMonthFilterOptions();
-            // }
+        //     // function _handleYearFilterChange() {
+        //     //     selectedYear = DOM.imageGalleryYearFilter.value;
+        //     //     _setMonthFilterOptions();
+        //     // }
 
-            // function _setMonthFilterOptions() {
-            //     const monthFilter = DOM.imageGalleryMonthFilter;
-            //     monthFilter.innerHTML = '';
-            //     const option = document.createElement('option');
-            //     option.value = "0";       
-            //     option.textContent = "Select Month";
-            //     option.disabled = true;
-            //     option.selected = true;
-            //     monthFilter.appendChild(option);
+        //     // function _setMonthFilterOptions() {
+        //     //     const monthFilter = DOM.imageGalleryMonthFilter;
+        //     //     monthFilter.innerHTML = '';
+        //     //     const option = document.createElement('option');
+        //     //     option.value = "0";       
+        //     //     option.textContent = "Select Month";
+        //     //     option.disabled = true;
+        //     //     option.selected = true;
+        //     //     monthFilter.appendChild(option);
 
-            //     let months = [];
-            //     Object.keys(metaData[selectedSource][selectedYear]).forEach(month => {
-            //         months.push(month);
-            //     });
-            //     months.sort((a, b) => a - b);
+        //     //     let months = [];
+        //     //     Object.keys(metaData[selectedSource][selectedYear]).forEach(month => {
+        //     //         months.push(month);
+        //     //     });
+        //     //     months.sort((a, b) => a - b);
 
-            //     months.forEach(month => {
-            //         const option = document.createElement('option');
-            //         option.value = month;
-            //         option.textContent = month;
-            //         monthFilter.appendChild(option);
-            //     });
-            //     selectedMonth = months[Math.floor(Math.random() * months.length)];
-            //     DOM.imageGalleryMonthFilter.value = selectedMonth;
-            //     _renderImageGalleryList();
-            // }
+        //     //     months.forEach(month => {
+        //     //         const option = document.createElement('option');
+        //     //         option.value = month;
+        //     //         option.textContent = month;
+        //     //         monthFilter.appendChild(option);
+        //     //     });
+        //     //     selectedMonth = months[Math.floor(Math.random() * months.length)];
+        //     //     DOM.imageGalleryMonthFilter.value = selectedMonth;
+        //     //     _renderImageGalleryList();
+        //     // }
 
-            // function _handleMonthFilterChange() {
-            //     selectedMonth = DOM.imageGalleryMonthFilter.value;
-            //     _renderImageGalleryList();
-            // }
-            // function _handleLocationFilterChange() {
-            //     let selectedLocation = DOM.imageGalleryLocationFilter.value;
-            //     if (selectedLocation === 'aus' 
-            //         || selectedLocation === 'dxb' 
-            //         || selectedLocation === 'mea' 
-            //         || selectedLocation === 'eur' 
-            //         || selectedLocation === 'usa' 
-            //         || selectedLocation === 'can'
-            //         || selectedLocation === 'nz' 
-            //         || selectedLocation === 'sa' 
-            //         || selectedLocation === 'af' 
-            //         || selectedLocation === 'asia'
-            //         || selectedLocation === 'oth'
-            //     ) {
+        //     // function _handleMonthFilterChange() {
+        //     //     selectedMonth = DOM.imageGalleryMonthFilter.value;
+        //     //     _renderImageGalleryList();
+        //     // }
+        //     // function _handleLocationFilterChange() {
+        //     //     let selectedLocation = DOM.imageGalleryLocationFilter.value;
+        //     //     if (selectedLocation === 'aus' 
+        //     //         || selectedLocation === 'dxb' 
+        //     //         || selectedLocation === 'mea' 
+        //     //         || selectedLocation === 'eur' 
+        //     //         || selectedLocation === 'usa' 
+        //     //         || selectedLocation === 'can'
+        //     //         || selectedLocation === 'nz' 
+        //     //         || selectedLocation === 'sa' 
+        //     //         || selectedLocation === 'af' 
+        //     //         || selectedLocation === 'asia'
+        //     //         || selectedLocation === 'oth'
+        //     //     ) {
 
-            //         DOM.imageGallerySourceFilter.value = "all";
-            //         selectedSource = "all";
-            //         DOM.imageGallerySourceFilter.disabled = true;
+        //     //         DOM.imageGallerySourceFilter.value = "all";
+        //     //         selectedSource = "all";
+        //     //         DOM.imageGallerySourceFilter.disabled = true;
 
-            //         DOM.imageGalleryYearFilter.value = "0";
-            //         selectedYear = "0";
-            //         DOM.imageGalleryYearFilter.disabled = true;
+        //     //         DOM.imageGalleryYearFilter.value = "0";
+        //     //         selectedYear = "0";
+        //     //         DOM.imageGalleryYearFilter.disabled = true;
 
-            //         DOM.imageGalleryMonthFilter.value = "0";
-            //         selectedMonth = "0";
-            //         DOM.imageGalleryMonthFilter.disabled = true;
-            //     } else {
-            //         DOM.imageGallerySourceFilter.disabled = false;
-            //         DOM.imageGalleryYearFilter.disabled = false;
-            //         DOM.imageGalleryMonthFilter.disabled = false;
-            //     }
+        //     //         DOM.imageGalleryMonthFilter.value = "0";
+        //     //         selectedMonth = "0";
+        //     //         DOM.imageGalleryMonthFilter.disabled = true;
+        //     //     } else {
+        //     //         DOM.imageGallerySourceFilter.disabled = false;
+        //     //         DOM.imageGalleryYearFilter.disabled = false;
+        //     //         DOM.imageGalleryMonthFilter.disabled = false;
+        //     //     }
 
-            //     _renderImageGalleryList();
-            // }
+        //     //     _renderImageGalleryList();
+        //     // }
 
-            function _handleSearch() {
+        //     function _handleSearch() {
               
-                _renderImageGalleryList();
-            }
-            function _handleClear() {
-                DOM.imageGallerySearch.value = '';
-                DOM.imageGallerySourceFilter.value = 'all_sources';
-                DOM.imageGalleryYearFilter.value = '0';
-                DOM.imageGalleryMonthFilter.value = '0';
-                DOM.imageGalleryLocationFilter.value = 'all';
-                searchQuery = '';
-                DOM.imageGallerySourceFilter.disabled = false;
-                DOM.imageGalleryYearFilter.disabled = false;
-                DOM.imageGalleryMonthFilter.disabled = false;
-                DOM.imageGalleryLocationFilter.disabled = false;
+        //         _renderImageGalleryList();
+        //     }
+        //     function _handleClear() {
+        //         DOM.imageGallerySearch.value = '';
+        //         DOM.imageGallerySourceFilter.value = 'all_sources';
+        //         DOM.imageGalleryYearFilter.value = '0';
+        //         DOM.imageGalleryMonthFilter.value = '0';
+        //         DOM.imageGalleryLocationFilter.value = 'all';
+        //         searchQuery = '';
+        //         DOM.imageGallerySourceFilter.disabled = false;
+        //         DOM.imageGalleryYearFilter.disabled = false;
+        //         DOM.imageGalleryMonthFilter.disabled = false;
+        //         DOM.imageGalleryLocationFilter.disabled = false;
 
-                DOM.imageGalleryList.innerHTML = '';
+        //         DOM.imageGalleryList.innerHTML = '';
 
-                DOM.imageGalleryImage.style.display = 'none';
-                DOM.imageGalleryVideoContainer.style.display = 'none';
-                DOM.imageGalleryAudioContainer.style.display = 'none';
-                DOM.imageGalleryPdfContainer.style.display = 'none'
+        //         DOM.imageGalleryImage.style.display = 'none';
+        //         DOM.imageGalleryVideoContainer.style.display = 'none';
+        //         DOM.imageGalleryAudioContainer.style.display = 'none';
+        //         DOM.imageGalleryPdfContainer.style.display = 'none'
 
-                DOM.imageGalleryImageDetails.innerHTML = "";
-                DOM.imageGalleryMap.style.display = 'none';
-                DOM.imageGalleryFixedBtn.style.display = 'none';
-                DOM.downloadImageGalleryBtn.style.display = 'none';
+        //         DOM.imageGalleryImageDetails.innerHTML = "";
+        //         DOM.imageGalleryMap.style.display = 'none';
+        //         DOM.imageGalleryFixedBtn.style.display = 'none';
+        //         DOM.downloadImageGalleryBtn.style.display = 'none';
 
-            }
+        //     }
 
-            function _renderImageGalleryList() {
-                DOM.imageGalleryList.innerHTML = '';
+        //     function _renderImageGalleryList() {
+        //         DOM.imageGalleryList.innerHTML = '';
 
-                selectedSource = DOM.imageGallerySourceFilter.value;
-                selectedYear = DOM.imageGalleryYearFilter.value;
-                selectedMonth = DOM.imageGalleryMonthFilter.value;
-                selectedLocation = DOM.imageGalleryLocationFilter.value;
-                searchQuery = DOM.imageGallerySearch.value;
+        //         selectedSource = DOM.imageGallerySourceFilter.value;
+        //         selectedYear = DOM.imageGalleryYearFilter.value;
+        //         selectedMonth = DOM.imageGalleryMonthFilter.value;
+        //         selectedLocation = DOM.imageGalleryLocationFilter.value;
+        //         searchQuery = DOM.imageGallerySearch.value;
 
           
-                let url = '/imagesmetadata?placeholder=true';
+        //         let url = '/imagesmetadata?placeholder=true';
                 
                 
-                if (searchQuery) {
-                    url += `&like=${encodeURIComponent(searchQuery)}`;
-                } else {
-                        url = '/imagesmetadata?source='+selectedSource;
-                        url += '&year='+selectedYear;
-                        url += '&month='+selectedMonth;
-                        url += '&location='+selectedLocation;
-                }
+        //         if (searchQuery) {
+        //             url += `&like=${encodeURIComponent(searchQuery)}`;
+        //         } else {
+        //                 url = '/imagesmetadata?source='+selectedSource;
+        //                 url += '&year='+selectedYear;
+        //                 url += '&month='+selectedMonth;
+        //                 url += '&location='+selectedLocation;
+        //         }
 
-                url = url.replaceAll(" ", "%20");
+        //         url = url.replaceAll(" ", "%20");
  
-                fetch(url)
-                .then(r => r.json())
-                .then(data => {
-                    imageData = data.images;
-                    _renderImages();
-                });
-            }
+        //         fetch(url)
+        //         .then(r => r.json())
+        //         .then(data => {
+        //             imageData = data.images;
+        //             _renderImages();
+        //         });
+        //     }
 
-            function _renderImages() {
-                // Clear existing images
-                DOM.imageGalleryList.innerHTML = '';
+        //     function _renderImages() {
+        //         // Clear existing images
+        //         DOM.imageGalleryList.innerHTML = '';
 
-                // Create an Intersection Observer
-                const observer = new IntersectionObserver((entries) => {
-                    entries.forEach(entry => {
-                        if (entry.isIntersecting) {
-                            const img = entry.target.querySelector('img');
-                            if (img && img.dataset.src) {
-                                img.src = img.dataset.src;
-                                img.removeAttribute('data-src');
-                            }
-                            observer.unobserve(entry.target);
-                        }
-                    });
-                }, {
-                    root: DOM.imageGalleryList,
-                    threshold: 0.1
-                });
+        //         // Create an Intersection Observer
+        //         const observer = new IntersectionObserver((entries) => {
+        //             entries.forEach(entry => {
+        //                 if (entry.isIntersecting) {
+        //                     const img = entry.target.querySelector('img');
+        //                     if (img && img.dataset.src) {
+        //                         img.src = img.dataset.src;
+        //                         img.removeAttribute('data-src');
+        //                     }
+        //                     observer.unobserve(entry.target);
+        //                 }
+        //             });
+        //         }, {
+        //             root: DOM.imageGalleryList,
+        //             threshold: 0.1
+        //         });
 
-                imageData.forEach((image, idx) => {
+        //         imageData.forEach((image, idx) => {
 
-                        const imageDiv = document.createElement('div');
-                        if (image.has_gps) {
-                            imageDiv.classList.add('image-gallery-has-gps');
-                        } else {
-                            imageDiv.classList.add('image-gallery-has-no-gps');
-                        }
+        //                 const imageDiv = document.createElement('div');
+        //                 if (image.has_gps) {
+        //                     imageDiv.classList.add('image-gallery-has-gps');
+        //                 } else {
+        //                     imageDiv.classList.add('image-gallery-has-no-gps');
+        //                 }
                        
-                        // Use data-src for lazy loading
-                        imageDiv.innerHTML = `<img data-src="/getImage?preview=true&id=${image.file_id}&resize_to=100" alt="${image.file.split('\\').pop()}" loading="lazy">`;
-                        imageDiv.addEventListener('click', () => _selectImage(idx));
-                        DOM.imageGalleryList.appendChild(imageDiv);
+        //                 // Use data-src for lazy loading
+        //                 imageDiv.innerHTML = `<img data-src="/getImage?preview=true&id=${image.file_id}&resize_to=100" alt="${image.file.split('\\').pop()}" loading="lazy">`;
+        //                 imageDiv.addEventListener('click', () => _selectImage(idx));
+        //                 DOM.imageGalleryList.appendChild(imageDiv);
                         
-                        // Start observing the new image div
-                        observer.observe(imageDiv);
-                });
-            }
+        //                 // Start observing the new image div
+        //                 observer.observe(imageDiv);
+        //         });
+        //     }
 
-            function _selectImage(idx) {
-                selectedIdx = idx;
-                let src = `/getImage?id=${imageData[idx].file_id}`;
+        //     function _selectImage(idx) {
+        //         selectedIdx = idx;
+        //         let src = `/getImage?id=${imageData[idx].file_id}`;
                 
-                // Store current file information for download
-                currentImageGalleryFileInfo = {
-                    filename: imageData[idx].file,
-                    file_id: imageData[idx].file_id,
-                    date_taken: imageData[idx].date_taken
-                };
+        //         // Store current file information for download
+        //         currentImageGalleryFileInfo = {
+        //             filename: imageData[idx].file,
+        //             file_id: imageData[idx].file_id,
+        //             date_taken: imageData[idx].date_taken
+        //         };
                 
-                DOM.imageGalleryInstructions.style.display = 'none';
-                DOM.imageGalleryFixedBtn.style.display = 'block';
+        //         DOM.imageGalleryInstructions.style.display = 'none';
+        //         DOM.imageGalleryFixedBtn.style.display = 'block';
 
-                //stop playing any audio or video
-                DOM.imageGalleryAudioPlayer.pause();
-                DOM.imageGalleryVideoPlayer.pause();
-                DOM.imageGalleryAudioPlayer.currentTime = 0;
-                DOM.imageGalleryVideoPlayer.currentTime = 0;
+        //         //stop playing any audio or video
+        //         DOM.imageGalleryAudioPlayer.pause();
+        //         DOM.imageGalleryVideoPlayer.pause();
+        //         DOM.imageGalleryAudioPlayer.currentTime = 0;
+        //         DOM.imageGalleryVideoPlayer.currentTime = 0;
 
-                if (imageData[idx].file.endsWith('.mp4')) {
-                    DOM.imageGalleryImage.style.display = 'none';
-                    DOM.imageGalleryAudioContainer.style.display = 'none';
-                    DOM.imageGalleryPdfContainer.style.display = 'none';
-                    DOM.imageGalleryVideoContainer.style.display = 'block';
-                    DOM.imageGalleryVideoPlayer.src = src;
-                    // Reset video to beginning when selecting a new one
-                    DOM.imageGalleryVideoPlayer.currentTime = 0;
-                } else if (imageData[idx].file.endsWith('.opus') || imageData[idx].file.endsWith('.m4a') || imageData[idx].file.endsWith('.mp3') || imageData[idx].file.endsWith('.wav')) {
-                    DOM.imageGalleryImage.style.display = 'none';
-                    DOM.imageGalleryVideoContainer.style.display = 'none';
-                    DOM.imageGalleryPdfContainer.style.display = 'none';
-                    DOM.imageGalleryAudioContainer.style.display = 'block';
-                    DOM.imageGalleryAudioPlayer.src = src;
-                    // Reset audio to beginning when selecting a new one
-                    DOM.imageGalleryAudioPlayer.currentTime = 0;
-                } else if (imageData[idx].file.toLowerCase().endsWith('.pdf')) {
-                    DOM.imageGalleryImage.style.display = 'none';
-                    DOM.imageGalleryVideoContainer.style.display = 'none';
-                    DOM.imageGalleryAudioContainer.style.display = 'none';
-                    DOM.imageGalleryPdfContainer.style.display = 'block';
-                    // Use the PDF viewer to display the PDF
-                    DOM.imageGalleryPdfViewer.src = src;
-                } else {
-                    DOM.imageGalleryImage.style.display = 'block';
-                    DOM.imageGalleryAudioContainer.style.display = 'none';
-                    DOM.imageGalleryVideoContainer.style.display = 'none';
-                    DOM.imageGalleryPdfContainer.style.display = 'none';
-                    DOM.imageGalleryImage.src = src;
-                }
+        //         if (imageData[idx].file.endsWith('.mp4')) {
+        //             DOM.imageGalleryImage.style.display = 'none';
+        //             DOM.imageGalleryAudioContainer.style.display = 'none';
+        //             DOM.imageGalleryPdfContainer.style.display = 'none';
+        //             DOM.imageGalleryVideoContainer.style.display = 'block';
+        //             DOM.imageGalleryVideoPlayer.src = src;
+        //             // Reset video to beginning when selecting a new one
+        //             DOM.imageGalleryVideoPlayer.currentTime = 0;
+        //         } else if (imageData[idx].file.endsWith('.opus') || imageData[idx].file.endsWith('.m4a') || imageData[idx].file.endsWith('.mp3') || imageData[idx].file.endsWith('.wav')) {
+        //             DOM.imageGalleryImage.style.display = 'none';
+        //             DOM.imageGalleryVideoContainer.style.display = 'none';
+        //             DOM.imageGalleryPdfContainer.style.display = 'none';
+        //             DOM.imageGalleryAudioContainer.style.display = 'block';
+        //             DOM.imageGalleryAudioPlayer.src = src;
+        //             // Reset audio to beginning when selecting a new one
+        //             DOM.imageGalleryAudioPlayer.currentTime = 0;
+        //         } else if (imageData[idx].file.toLowerCase().endsWith('.pdf')) {
+        //             DOM.imageGalleryImage.style.display = 'none';
+        //             DOM.imageGalleryVideoContainer.style.display = 'none';
+        //             DOM.imageGalleryAudioContainer.style.display = 'none';
+        //             DOM.imageGalleryPdfContainer.style.display = 'block';
+        //             // Use the PDF viewer to display the PDF
+        //             DOM.imageGalleryPdfViewer.src = src;
+        //         } else {
+        //             DOM.imageGalleryImage.style.display = 'block';
+        //             DOM.imageGalleryAudioContainer.style.display = 'none';
+        //             DOM.imageGalleryVideoContainer.style.display = 'none';
+        //             DOM.imageGalleryPdfContainer.style.display = 'none';
+        //             DOM.imageGalleryImage.src = src;
+        //         }
                 
-                try {
-                    DOM.imageGalleryImageDetails.innerHTML = "<p style='font-size: 14px;margin-top: 2px;margin-bottom:1px'>"+imageData[idx].file+"</p><p style='font-size: 14px;margin-top: 3px;;margin-bottom:1px'>Taken: "+imageData[idx].date_taken+"</p>";
-                } catch (e) {
-                    console.error('Error setting image details:', e);
-                    DOM.imageGalleryImageDetails.innerHTML = "<p>Error</p>";
-                }
+        //         try {
+        //             DOM.imageGalleryImageDetails.innerHTML = "<p style='font-size: 14px;margin-top: 2px;margin-bottom:1px'>"+imageData[idx].file+"</p><p style='font-size: 14px;margin-top: 3px;;margin-bottom:1px'>Taken: "+imageData[idx].date_taken+"</p>";
+        //         } catch (e) {
+        //             console.error('Error setting image details:', e);
+        //             DOM.imageGalleryImageDetails.innerHTML = "<p>Error</p>";
+        //         }
 
-                if (imageData[idx].has_gps) {
-                    DOM.imageGalleryMap.style.display = 'block';
-                    map.setView([imageData[idx].latitude, imageData[idx].longitude], 15);
-                    // Remove previous marker if it exists
-                    if (currentMarker) {
-                        map.removeLayer(currentMarker);
-                    }
-                    currentMarker = L.marker([imageData[idx].latitude, imageData[idx].longitude]).addTo(map);
-                }
-                else {
-                    DOM.imageGalleryMap.style.display = 'none';
-                    DOM.imageGalleryFixedBtn.style.display = 'none';
-                }
-            }
+        //         if (imageData[idx].has_gps) {
+        //             DOM.imageGalleryMap.style.display = 'block';
+        //             map.setView([imageData[idx].latitude, imageData[idx].longitude], 15);
+        //             // Remove previous marker if it exists
+        //             if (currentMarker) {
+        //                 map.removeLayer(currentMarker);
+        //             }
+        //             currentMarker = L.marker([imageData[idx].latitude, imageData[idx].longitude]).addTo(map);
+        //         }
+        //         else {
+        //             DOM.imageGalleryMap.style.display = 'none';
+        //             DOM.imageGalleryFixedBtn.style.display = 'none';
+        //         }
+        //     }
 
-            function _openGeoMapInNewTab() {
-                try {
-                    let url = "https://www.google.com/maps?q="+imageData[selectedIdx].latitude+","+imageData[selectedIdx].longitude;
-                    window.open(url, '_googleMaps');
-                } catch (e) {
-                    console.error('Error opening geo map in new tab:', e);
-                }
-            }
+        //     function _openGeoMapInNewTab() {
+        //         try {
+        //             let url = "https://www.google.com/maps?q="+imageData[selectedIdx].latitude+","+imageData[selectedIdx].longitude;
+        //             window.open(url, '_googleMaps');
+        //         } catch (e) {
+        //             console.error('Error opening geo map in new tab:', e);
+        //         }
+        //     }
 
-            function _downloadCurrentImageGalleryItem() {
-                if (!currentImageGalleryFileInfo) {
-                    console.error('No file information available for download');
-                    return;
-                }
+        //     function _downloadCurrentImageGalleryItem() {
+        //         if (!currentImageGalleryFileInfo) {
+        //             console.error('No file information available for download');
+        //             return;
+        //         }
 
-                const { filename, file_id } = currentImageGalleryFileInfo;
+        //         const { filename, file_id } = currentImageGalleryFileInfo;
                 
-                // Use the download endpoint for all file types
-                let downloadUrl = `/downloadFile?id=${file_id}`;
+        //         // Use the download endpoint for all file types
+        //         let downloadUrl = `/downloadFile?id=${file_id}`;
 
-                // Create a temporary link element to trigger download
-                const link = document.createElement('a');
-                link.href = downloadUrl;
-                link.download = filename || 'download';
-                link.target = '_blank';
+        //         // Create a temporary link element to trigger download
+        //         const link = document.createElement('a');
+        //         link.href = downloadUrl;
+        //         link.download = filename || 'download';
+        //         link.target = '_blank';
                 
-                // Append to body, click, and remove
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            }
+        //         // Append to body, click, and remove
+        //         document.body.appendChild(link);
+        //         link.click();
+        //         document.body.removeChild(link);
+        //     }
 
-            function close() {
-                DOM.imageGalleryAudioPlayer.pause();
-                DOM.imageGalleryVideoPlayer.pause();
-                DOM.imageGalleryAudioPlayer.currentTime = 0;
-                DOM.imageGalleryVideoPlayer.currentTime = 0;
-                // Clear PDF viewer
-                if (DOM.imageGalleryPdfViewer) {
-                    DOM.imageGalleryPdfViewer.src = '';
-                }
-                // Clear current file info
-                currentImageGalleryFileInfo = null;
-            }
+        //     function close() {
+        //         DOM.imageGalleryAudioPlayer.pause();
+        //         DOM.imageGalleryVideoPlayer.pause();
+        //         DOM.imageGalleryAudioPlayer.currentTime = 0;
+        //         DOM.imageGalleryVideoPlayer.currentTime = 0;
+        //         // Clear PDF viewer
+        //         if (DOM.imageGalleryPdfViewer) {
+        //             DOM.imageGalleryPdfViewer.src = '';
+        //         }
+        //         // Clear current file info
+        //         currentImageGalleryFileInfo = null;
+        //     }
 
-            return { init, open, close };
-        })(),
+        //     return { init, open, close };
+        // })(),
 
         EmailGallery: (() => {
             let emailData = [];
@@ -3588,6 +3600,8 @@ ${textContent}
             let isLoading = false;
             let hasMoreData = true;
             let searchTimeout = null;
+            let selectMode = false;
+            let selectedImageIds = new Set(); // Track selected image IDs
 
             function formatDate(year, month) {
                 if (!year && !month) return 'No Date';
@@ -3647,6 +3661,48 @@ ${textContent}
                 // Add scroll event listener for lazy loading
                 DOM.newImageGalleryThumbnailGrid.addEventListener('scroll', _handleThumbnailScroll);
                 
+                // Select mode toggle
+                if (DOM.newImageGallerySelectMode) {
+                    DOM.newImageGallerySelectMode.addEventListener('change', (e) => {
+                        selectMode = e.target.checked;
+                        _updateSelectModeUI();
+                        if (!selectMode) {
+                            // Clear selection when exiting select mode
+                            selectedImageIds.clear();
+                            _updateSelectionUI();
+                        }
+                    });
+                }
+                
+                // Bulk tag application
+                if (DOM.newImageGalleryApplyTagsBtn) {
+                    DOM.newImageGalleryApplyTagsBtn.addEventListener('click', async () => {
+                        await _applyTagsToSelected();
+                    });
+                }
+                
+                // Bulk delete selected images
+                if (DOM.newImageGalleryDeleteSelectedBtn) {
+                    DOM.newImageGalleryDeleteSelectedBtn.addEventListener('click', async () => {
+                        await _deleteSelectedImages();
+                    });
+                }
+                
+                // Clear selection
+                if (DOM.newImageGalleryClearSelectionBtn) {
+                    DOM.newImageGalleryClearSelectionBtn.addEventListener('click', () => {
+                        selectedImageIds.clear();
+                        _updateSelectionUI();
+                    });
+                }
+                
+                // Enable/disable apply button based on tags input
+                if (DOM.newImageGalleryBulkTags) {
+                    DOM.newImageGalleryBulkTags.addEventListener('input', () => {
+                        _updateSelectionUI();
+                    });
+                }
+                
                 // Initialize resizable panes
                 _initResizablePanes();
                 
@@ -3655,6 +3711,10 @@ ${textContent}
                     DOM.closeNewImageGalleryDetailModalBtn.addEventListener('click', () => {
                         DOM.newImageGalleryDetailModal.style.display = 'none';
                         currentImageInModal = null;
+                        originalImageData = null;
+                        if (DOM.newImageGallerySaveBtn) {
+                            DOM.newImageGallerySaveBtn.disabled = true;
+                        }
                     });
                 }
                 
@@ -3664,6 +3724,10 @@ ${textContent}
                         if (e.target === DOM.newImageGalleryDetailModal) {
                             DOM.newImageGalleryDetailModal.style.display = 'none';
                             currentImageInModal = null;
+                            originalImageData = null;
+                            if (DOM.newImageGallerySaveBtn) {
+                                DOM.newImageGallerySaveBtn.disabled = true;
+                            }
                         }
                     });
                 }
@@ -3673,6 +3737,14 @@ ${textContent}
                     DOM.newImageGalleryDeleteBtn.addEventListener('click', async (e) => {
                         e.stopPropagation();
                         await _deleteCurrentImage();
+                    });
+                }
+                
+                // Save button handler
+                if (DOM.newImageGallerySaveBtn) {
+                    DOM.newImageGallerySaveBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        await _saveImageChanges();
                     });
                 }
             }
@@ -3746,6 +3818,16 @@ ${textContent}
                 _setupFilters();
                 // Don't load images automatically - wait for user to enter search criteria
                 imageData = [];
+                selectedImageIndex = -1;
+                selectMode = false;
+                selectedImageIds.clear();
+                if (DOM.newImageGallerySelectMode) {
+                    DOM.newImageGallerySelectMode.checked = false;
+                }
+                if (DOM.newImageGalleryBulkTags) {
+                    DOM.newImageGalleryBulkTags.value = '';
+                }
+                _updateSelectModeUI();
                 _renderThumbnailGrid();
             }
 
@@ -3969,6 +4051,11 @@ ${textContent}
                     thumbnailItem.appendChild(img);
                     thumbnailItem.addEventListener('click', () => _selectImage(actualIndex));
                     
+                    // Update selection state if in select mode
+                    if (selectMode && selectedImageIds.has(image.id)) {
+                        thumbnailItem.classList.add('bulk-selected');
+                    }
+                    
                     DOM.newImageGalleryThumbnailGrid.appendChild(thumbnailItem);
                 });
 
@@ -4032,37 +4119,210 @@ ${textContent}
             async function _selectImage(index) {
                 if (index < 0 || index >= imageData.length) return;
                 
-                selectedImageIndex = index;
                 const image = imageData[index];
                 
-                // Update selected state in UI
-                const thumbnails = DOM.newImageGalleryThumbnailGrid.querySelectorAll('.new-image-gallery-thumbnail-item');
-                thumbnails.forEach((thumb, idx) => {
-                    const actualIdx = parseInt(thumb.dataset.index);
-                    if (actualIdx === index) {
-                        thumb.classList.add('selected');
-                        thumb.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                if (selectMode) {
+                    // Toggle selection in select mode
+                    if (selectedImageIds.has(image.id)) {
+                        selectedImageIds.delete(image.id);
                     } else {
-                        thumb.classList.remove('selected');
+                        selectedImageIds.add(image.id);
+                    }
+                    _updateSelectionUI();
+                } else {
+                    // Normal mode: open detail modal
+                    selectedImageIndex = index;
+                    
+                    // Update selected state in UI
+                    const thumbnails = DOM.newImageGalleryThumbnailGrid.querySelectorAll('.new-image-gallery-thumbnail-item');
+                    thumbnails.forEach((thumb, idx) => {
+                        const actualIdx = parseInt(thumb.dataset.index);
+                        if (actualIdx === index) {
+                            thumb.classList.add('selected');
+                            thumb.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        } else {
+                            thumb.classList.remove('selected');
+                        }
+                    });
+                    
+                    // Open detail modal with full image and metadata
+                    _openImageDetailModal(image);
+                }
+            }
+            
+            function _updateSelectModeUI() {
+                if (DOM.newImageGalleryBulkEditSection) {
+                    DOM.newImageGalleryBulkEditSection.style.display = selectMode ? 'block' : 'none';
+                }
+                _updateSelectionUI();
+            }
+            
+            function _updateSelectionUI() {
+                // Update selected count
+                if (DOM.newImageGallerySelectedCount) {
+                    DOM.newImageGallerySelectedCount.textContent = selectedImageIds.size;
+                }
+                
+                // Enable/disable apply button
+                if (DOM.newImageGalleryApplyTagsBtn) {
+                    DOM.newImageGalleryApplyTagsBtn.disabled = selectedImageIds.size === 0 || 
+                        !DOM.newImageGalleryBulkTags || !DOM.newImageGalleryBulkTags.value.trim();
+                }
+                
+                // Enable/disable delete button
+                if (DOM.newImageGalleryDeleteSelectedBtn) {
+                    DOM.newImageGalleryDeleteSelectedBtn.disabled = selectedImageIds.size === 0;
+                }
+                
+                // Update thumbnail visual selection state
+                const thumbnails = DOM.newImageGalleryThumbnailGrid.querySelectorAll('.new-image-gallery-thumbnail-item');
+                thumbnails.forEach((thumb) => {
+                    const actualIdx = parseInt(thumb.dataset.index);
+                    if (actualIdx >= 0 && actualIdx < imageData.length) {
+                        const image = imageData[actualIdx];
+                        if (selectedImageIds.has(image.id)) {
+                            thumb.classList.add('bulk-selected');
+                        } else {
+                            thumb.classList.remove('bulk-selected');
+                        }
                     }
                 });
+            }
+            
+            async function _applyTagsToSelected() {
+                if (selectedImageIds.size === 0) return;
                 
-                // Open detail modal with full image and metadata
-                _openImageDetailModal(image);
+                const tags = DOM.newImageGalleryBulkTags ? DOM.newImageGalleryBulkTags.value.trim() : '';
+                if (!tags) {
+                    alert('Please enter tags to apply');
+                    return;
+                }
+                
+                const imageIds = Array.from(selectedImageIds);
+                
+                try {
+                    const response = await fetch('/images/bulk-update', {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            image_ids: imageIds,
+                            tags: tags
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const result = await response.json();
+                    
+                    // Update local image data
+                    imageIds.forEach(id => {
+                        const imageIndex = imageData.findIndex(img => img.id === id);
+                        if (imageIndex !== -1) {
+                            // Merge tags (append if existing)
+                            const existingTags = imageData[imageIndex].tags || '';
+                            const newTags = existingTags ? `${existingTags}, ${tags}` : tags;
+                            imageData[imageIndex].tags = newTags;
+                        }
+                    });
+                    
+                    // Clear selection and tags input
+                    selectedImageIds.clear();
+                    if (DOM.newImageGalleryBulkTags) {
+                        DOM.newImageGalleryBulkTags.value = '';
+                    }
+                    _updateSelectionUI();
+                    
+                    alert(`Successfully applied tags to ${result.updated_count} image(s)`);
+                } catch (error) {
+                    console.error('Error applying tags:', error);
+                    alert(`Error applying tags: ${error.message}`);
+                }
+            }
+            
+            async function _deleteSelectedImages() {
+                if (selectedImageIds.size === 0) return;
+                
+                const imageIds = Array.from(selectedImageIds);
+                const count = imageIds.length;
+                
+                // Confirm deletion
+                if (!confirm(`Are you sure you want to delete ${count} image(s)? This action cannot be undone.`)) {
+                    return;
+                }
+                
+                try {
+                    const response = await fetch('/images/bulk-delete', {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            image_ids: imageIds
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const result = await response.json();
+                    
+                    // Remove deleted images from imageData array
+                    imageData = imageData.filter(img => !selectedImageIds.has(img.id));
+                    
+                    // Clear selection
+                    selectedImageIds.clear();
+                    _updateSelectionUI();
+                    
+                    // Refresh thumbnail grid
+                    _renderThumbnailGrid();
+                    
+                    // Close detail modal if the deleted image was being viewed
+                    const deletedIds = new Set(imageIds);
+                    if (currentImageInModal && deletedIds.has(currentImageInModal.id)) {
+                        DOM.newImageGalleryDetailModal.style.display = 'none';
+                        currentImageInModal = null;
+                        originalImageData = null;
+                    }
+                    
+                    alert(`Successfully deleted ${result.deleted_count} image(s)`);
+                } catch (error) {
+                    console.error('Error deleting images:', error);
+                    alert(`Error deleting images: ${error.message}`);
+                }
             }
 
             let currentImageInModal = null;
+            let originalImageData = null; // Store original values to detect changes
+            let starRatingListenerAttached = false; // Flag to track if star rating listener is attached
 
             function _openImageDetailModal(image) {
                 currentImageInModal = image;
+                
+                // Store original values for change detection
+                originalImageData = {
+                    description: image.description || '',
+                    tags: image.tags || '',
+                    rating: image.rating || null
+                };
                 
                 // Set image source
                 DOM.newImageGalleryDetailImage.src = `/images/${image.id}?type=metadata&convert_heic_to_jpg=true`;
                 DOM.newImageGalleryDetailImage.alt = image.title || 'Image';
                 
-                // Show delete button
+                // Show delete and save buttons
                 if (DOM.newImageGalleryDeleteBtn) {
                     DOM.newImageGalleryDeleteBtn.style.display = 'inline-block';
+                }
+                if (DOM.newImageGallerySaveBtn) {
+                    DOM.newImageGallerySaveBtn.style.display = 'inline-block';
+                    DOM.newImageGallerySaveBtn.disabled = true;
                 }
                 
                 // Format date/time in Australian format (DD/MM/YYYY HH:MM)
@@ -4086,13 +4346,22 @@ ${textContent}
                 
                 // Populate all metadata fields
                 DOM.newImageDetailTitle.textContent = image.title || 'N/A';
-                DOM.newImageDetailDescription.textContent = image.description || 'N/A';
+                
+                // Populate editable fields
+                if (DOM.newImageDetailDescriptionEdit) {
+                    DOM.newImageDetailDescriptionEdit.value = image.description || '';
+                }
+                if (DOM.newImageDetailTagsEdit) {
+                    DOM.newImageDetailTagsEdit.value = image.tags || '';
+                }
+                
+                // Set up star rating
+                _setupStarRating(image.rating || null);
+                
                 DOM.newImageDetailAuthor.textContent = image.author || 'N/A';
-                DOM.newImageDetailTags.textContent = image.tags || 'N/A';
                 DOM.newImageDetailCategories.textContent = image.categories || 'N/A';
                 DOM.newImageDetailNotes.textContent = image.notes || 'N/A';
                 DOM.newImageDetailDate.textContent = formatDate(image.year, image.month);
-                DOM.newImageDetailRating.textContent = image.rating ? `${image.rating}/5` : 'N/A';
                 DOM.newImageDetailImageType.textContent = image.image_type || 'N/A';
                 DOM.newImageDetailSource.textContent = image.source || 'N/A';
                 DOM.newImageDetailSourceReference.textContent = image.source_reference || 'N/A';
@@ -4127,8 +4396,178 @@ ${textContent}
                     DOM.newImageDetailAltitudeRow.style.display = 'none';
                 }
                 
+                // Set up change tracking
+                _setupChangeTracking();
+                
                 // Show modal
                 DOM.newImageGalleryDetailModal.style.display = 'flex';
+            }
+            
+            function _setupStarRating(rating) {
+                if (!DOM.newImageDetailRatingContainer || !DOM.newImageDetailRatingEdit) {
+                    return;
+                }
+                
+                const stars = DOM.newImageDetailRatingContainer.querySelectorAll('.star');
+                if (!stars || stars.length === 0) {
+                    return;
+                }
+                
+                // Convert rating to number - handle various input types
+                let currentRating = 0;
+                if (rating !== null && rating !== undefined && rating !== '') {
+                    // Handle both string and number inputs
+                    const parsed = typeof rating === 'number' ? rating : parseInt(String(rating), 10);
+                    if (!isNaN(parsed) && parsed >= 1 && parsed <= 5) {
+                        currentRating = parsed;
+                    }
+                }
+                
+                // Set hidden input value
+                DOM.newImageDetailRatingEdit.value = currentRating > 0 ? currentRating : '';
+                
+                // Update star display - clear all first, then add active to stars up to rating
+                stars.forEach((star, index) => {
+                    const starRating = index + 1;
+                    // Remove active class first
+                    star.classList.remove('active');
+                    // Add active class if this star should be active
+                    if (starRating <= currentRating) {
+                        star.classList.add('active');
+                    }
+                });
+                
+                // Debug: log the rating and active stars
+                console.log('Star rating setup:', {
+                    inputRating: rating,
+                    currentRating: currentRating,
+                    activeStars: Array.from(stars).filter(s => s.classList.contains('active')).length
+                });
+                
+                // Set up click handler using event delegation (only once)
+                if (!starRatingListenerAttached) {
+                    DOM.newImageDetailRatingContainer.addEventListener('click', (e) => {
+                        const star = e.target.closest('.star');
+                        if (!star) return;
+                        
+                        e.stopPropagation();
+                        const starRating = parseInt(star.getAttribute('data-rating'), 10);
+                        if (isNaN(starRating) || starRating < 1 || starRating > 5) return;
+                        
+                        // Update hidden input
+                        DOM.newImageDetailRatingEdit.value = starRating;
+                        
+                        // Update all stars - clear all first, then add active to stars up to clicked rating
+                        const allStars = DOM.newImageDetailRatingContainer.querySelectorAll('.star');
+                        allStars.forEach((s) => {
+                            s.classList.remove('active');
+                            const sRating = parseInt(s.getAttribute('data-rating'), 10);
+                            if (sRating <= starRating) {
+                                s.classList.add('active');
+                            }
+                        });
+                        
+                        console.log('Star clicked:', {
+                            clickedRating: starRating,
+                            activeStars: Array.from(allStars).filter(s => s.classList.contains('active')).length
+                        });
+                        
+                        _checkForChanges();
+                    });
+                    starRatingListenerAttached = true;
+                }
+            }
+            
+            function _setupChangeTracking() {
+                // Remove existing listeners to avoid duplicates
+                const descriptionEdit = DOM.newImageDetailDescriptionEdit;
+                const tagsEdit = DOM.newImageDetailTagsEdit;
+                
+                if (descriptionEdit) {
+                    descriptionEdit.removeEventListener('input', _checkForChanges);
+                    descriptionEdit.addEventListener('input', _checkForChanges);
+                }
+                
+                if (tagsEdit) {
+                    tagsEdit.removeEventListener('input', _checkForChanges);
+                    tagsEdit.addEventListener('input', _checkForChanges);
+                }
+            }
+            
+            function _checkForChanges() {
+                if (!originalImageData || !currentImageInModal) return;
+                
+                const currentDescription = DOM.newImageDetailDescriptionEdit ? DOM.newImageDetailDescriptionEdit.value.trim() : '';
+                const currentTags = DOM.newImageDetailTagsEdit ? DOM.newImageDetailTagsEdit.value.trim() : '';
+                const currentRating = DOM.newImageDetailRatingEdit ? parseInt(DOM.newImageDetailRatingEdit.value) || null : null;
+                
+                const hasChanges = 
+                    currentDescription !== (originalImageData.description || '') ||
+                    currentTags !== (originalImageData.tags || '') ||
+                    currentRating !== (originalImageData.rating || null);
+                
+                if (DOM.newImageGallerySaveBtn) {
+                    DOM.newImageGallerySaveBtn.disabled = !hasChanges;
+                }
+            }
+            
+            async function _saveImageChanges() {
+                if (!currentImageInModal) return;
+                
+                const imageId = currentImageInModal.id;
+                const description = DOM.newImageDetailDescriptionEdit ? DOM.newImageDetailDescriptionEdit.value.trim() : null;
+                const tags = DOM.newImageDetailTagsEdit ? DOM.newImageDetailTagsEdit.value.trim() : null;
+                const rating = DOM.newImageDetailRatingEdit ? parseInt(DOM.newImageDetailRatingEdit.value) || null : null;
+                
+                const updateData = {};
+                if (description !== null) updateData.description = description || null;
+                if (tags !== null) updateData.tags = tags || null;
+                if (rating !== null) updateData.rating = rating;
+                
+                try {
+                    const response = await fetch(`/images/${imageId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(updateData)
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+                    }
+                    
+                    // Update the image in imageData array
+                    const imageIndex = imageData.findIndex(img => img.id === imageId);
+                    if (imageIndex !== -1) {
+                        imageData[imageIndex].description = description;
+                        imageData[imageIndex].tags = tags;
+                        imageData[imageIndex].rating = rating;
+                    }
+                    
+                    // Update currentImageInModal
+                    currentImageInModal.description = description;
+                    currentImageInModal.tags = tags;
+                    currentImageInModal.rating = rating;
+                    
+                    // Update original data
+                    originalImageData = {
+                        description: description || '',
+                        tags: tags || '',
+                        rating: rating || null
+                    };
+                    
+                    // Disable save button
+                    if (DOM.newImageGallerySaveBtn) {
+                        DOM.newImageGallerySaveBtn.disabled = true;
+                    }
+                    
+                    alert('Image metadata updated successfully');
+                } catch (error) {
+                    console.error('Error updating image:', error);
+                    alert(`Error updating image: ${error.message}`);
+                }
             }
 
             async function _deleteCurrentImage() {
@@ -4197,6 +4636,8 @@ ${textContent}
                 if (DOM.newImageGalleryProcessed) DOM.newImageGalleryProcessed.checked = false;
                 
                 selectedImageIndex = -1;
+                selectedImageIds.clear();
+                _updateSelectionUI();
                 imageData = [];
                 _renderThumbnailGrid();
             }
@@ -6105,9 +6546,9 @@ ${textContent}
             Modals.Suggestions.init();
             Modals.FBAlbums.init();
             Modals.MultiImageDisplay.init();
-            Modals.HaveYourSay.init();
+            //Modals.HaveYourSay.init();
             Modals.Locations.init();
-            Modals.ImageGallery.init();
+            // Modals.ImageGallery.init();
             Modals.EmailGallery.init();
             Modals.NewImageGallery.init();
             Modals.SMSMessages.init();
@@ -7193,11 +7634,327 @@ ${textContent}
             DOM.hamburgerMenu.addEventListener('click', () => {
                 DOM.configPage.style.display = 'block';
                 DOM.chatMain.style.display = 'none';
+                loadControlDefaults();
             });
             DOM.closeConfigBtn.addEventListener('click', () => {
                 DOM.configPage.style.display = 'none';
                 DOM.chatMain.style.display = 'flex';
             });
+
+            // Load control defaults from API
+            let controlDefaults = {};
+            let controlDefaultsListenersSetup = false;
+            
+            async function loadControlDefaults() {
+                try {
+                    const response = await fetch('/api/control-defaults');
+                    if (response.ok) {
+                        controlDefaults = await response.json();
+                        populateControlDefaults();
+                        if (!controlDefaultsListenersSetup) {
+                            setupControlDefaultsListeners();
+                            controlDefaultsListenersSetup = true;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error loading control defaults:', error);
+                }
+            }
+
+            // Helper function to get value from localStorage or defaults
+            function getControlValue(key, defaultValue) {
+                const stored = localStorage.getItem(`control_defaults_${key}`);
+                if (stored !== null) {
+                    // Try to parse as boolean or number, otherwise return as string
+                    if (stored === 'true') return true;
+                    if (stored === 'false') return false;
+                    if (!isNaN(stored) && stored !== '') return stored; // Return as string for numbers
+                    return stored;
+                }
+                return defaultValue;
+            }
+
+            // Helper function to save value to localStorage
+            function saveControlValue(key, value) {
+                if (value === null || value === undefined) {
+                    localStorage.removeItem(`control_defaults_${key}`);
+                } else {
+                    localStorage.setItem(`control_defaults_${key}`, String(value));
+                }
+            }
+
+            // Populate control inputs with localStorage values (preferred) or defaults
+            function populateControlDefaults() {
+                // Email Controls
+                const processAllFoldersCheckbox = document.getElementById('process-all-folders');
+                const newOnlyOption = document.getElementById('new-only-option');
+                if (processAllFoldersCheckbox) {
+                    const value = getControlValue('process_all_folders', controlDefaults.process_all_folders);
+                    if (value !== undefined && value !== null) {
+                        processAllFoldersCheckbox.checked = value === true || value === 'true';
+                    }
+                }
+                if (newOnlyOption) {
+                    const value = getControlValue('new_only_option', controlDefaults.new_only_option);
+                    if (value !== undefined && value !== null) {
+                        newOnlyOption.checked = value === true || value === 'true';
+                    }
+                }
+
+                // WhatsApp Import
+                const whatsappImportDirectory = document.getElementById('whatsapp-import-directory');
+                if (whatsappImportDirectory) {
+                    const value = getControlValue('whatsapp_import_directory', controlDefaults.whatsapp_import_directory);
+                    if (value) {
+                        whatsappImportDirectory.value = value;
+                    }
+                }
+
+                // Facebook Messenger Import
+                const facebookImportDirectory = document.getElementById('facebook-import-directory');
+                const facebookExportRoot = document.getElementById('facebook-export-root');
+                const facebookUserName = document.getElementById('facebook-user-name');
+                if (facebookImportDirectory) {
+                    const value = getControlValue('facebook_import_directory', controlDefaults.facebook_import_directory);
+                    if (value) {
+                        facebookImportDirectory.value = value;
+                    }
+                }
+                if (facebookExportRoot) {
+                    const value = getControlValue('facebook_export_root', controlDefaults.facebook_export_root);
+                    if (value) {
+                        facebookExportRoot.value = value;
+                    }
+                }
+                if (facebookUserName) {
+                    const value = getControlValue('facebook_user_name', controlDefaults.facebook_user_name);
+                    if (value) {
+                        facebookUserName.value = value;
+                    }
+                }
+
+                // Instagram Import
+                const instagramImportDirectory = document.getElementById('instagram-import-directory');
+                const instagramExportRoot = document.getElementById('instagram-export-root');
+                const instagramUserName = document.getElementById('instagram-user-name');
+                if (instagramImportDirectory) {
+                    const value = getControlValue('instagram_import_directory', controlDefaults.instagram_import_directory);
+                    if (value) {
+                        instagramImportDirectory.value = value;
+                    }
+                }
+                if (instagramExportRoot) {
+                    const value = getControlValue('instagram_export_root', controlDefaults.instagram_export_root);
+                    if (value) {
+                        instagramExportRoot.value = value;
+                    }
+                }
+                if (instagramUserName) {
+                    const value = getControlValue('instagram_user_name', controlDefaults.instagram_user_name);
+                    if (value) {
+                        instagramUserName.value = value;
+                    }
+                }
+
+                // iMessage Import
+                const imessageDirectoryPath = document.getElementById('imessage-directory-path');
+                if (imessageDirectoryPath) {
+                    const value = getControlValue('imessage_directory_path', controlDefaults.imessage_directory_path);
+                    if (value) {
+                        imessageDirectoryPath.value = value;
+                    }
+                }
+
+                // Facebook Albums Import
+                const facebookAlbumsImportDirectory = document.getElementById('facebook-albums-import-directory');
+                const facebookAlbumsExportRoot = document.getElementById('facebook-albums-export-root');
+                if (facebookAlbumsImportDirectory) {
+                    const value = getControlValue('facebook_albums_import_directory', controlDefaults.facebook_albums_import_directory);
+                    if (value) {
+                        facebookAlbumsImportDirectory.value = value;
+                    }
+                }
+                if (facebookAlbumsExportRoot) {
+                    const value = getControlValue('facebook_albums_export_root', controlDefaults.facebook_albums_export_root);
+                    if (value) {
+                        facebookAlbumsExportRoot.value = value;
+                    }
+                }
+
+                // Filesystem Image Import
+                const filesystemImportDirectory = document.getElementById('filesystem-import-directory');
+                const filesystemImportMaxImages = document.getElementById('filesystem-import-max-images');
+                const filesystemImportCreateThumbnail = document.getElementById('filesystem-import-create-thumbnail');
+                if (filesystemImportDirectory) {
+                    const value = getControlValue('filesystem_import_directory', controlDefaults.filesystem_import_directory);
+                    if (value) {
+                        filesystemImportDirectory.value = value;
+                    }
+                }
+                if (filesystemImportMaxImages) {
+                    const value = getControlValue('filesystem_import_max_images', controlDefaults.filesystem_import_max_images);
+                    if (value) {
+                        filesystemImportMaxImages.value = value;
+                    }
+                }
+                if (filesystemImportCreateThumbnail) {
+                    const value = getControlValue('filesystem_import_create_thumbnail', controlDefaults.filesystem_import_create_thumbnail);
+                    if (value !== undefined && value !== null) {
+                        filesystemImportCreateThumbnail.checked = value === true || value === 'true';
+                    }
+                }
+            }
+
+            // Setup event listeners to save changes to localStorage
+            function setupControlDefaultsListeners() {
+                // Email Controls
+                const processAllFoldersCheckbox = document.getElementById('process-all-folders');
+                const newOnlyOption = document.getElementById('new-only-option');
+                if (processAllFoldersCheckbox) {
+                    processAllFoldersCheckbox.addEventListener('change', (e) => {
+                        saveControlValue('process_all_folders', e.target.checked);
+                    });
+                }
+                if (newOnlyOption) {
+                    newOnlyOption.addEventListener('change', (e) => {
+                        saveControlValue('new_only_option', e.target.checked);
+                    });
+                }
+
+                // WhatsApp Import
+                const whatsappImportDirectory = document.getElementById('whatsapp-import-directory');
+                if (whatsappImportDirectory) {
+                    whatsappImportDirectory.addEventListener('change', (e) => {
+                        saveControlValue('whatsapp_import_directory', e.target.value);
+                    });
+                    whatsappImportDirectory.addEventListener('blur', (e) => {
+                        saveControlValue('whatsapp_import_directory', e.target.value);
+                    });
+                }
+
+                // Facebook Messenger Import
+                const facebookImportDirectory = document.getElementById('facebook-import-directory');
+                const facebookExportRoot = document.getElementById('facebook-export-root');
+                const facebookUserName = document.getElementById('facebook-user-name');
+                if (facebookImportDirectory) {
+                    facebookImportDirectory.addEventListener('change', (e) => {
+                        saveControlValue('facebook_import_directory', e.target.value);
+                    });
+                    facebookImportDirectory.addEventListener('blur', (e) => {
+                        saveControlValue('facebook_import_directory', e.target.value);
+                    });
+                }
+                if (facebookExportRoot) {
+                    facebookExportRoot.addEventListener('change', (e) => {
+                        saveControlValue('facebook_export_root', e.target.value);
+                    });
+                    facebookExportRoot.addEventListener('blur', (e) => {
+                        saveControlValue('facebook_export_root', e.target.value);
+                    });
+                }
+                if (facebookUserName) {
+                    facebookUserName.addEventListener('change', (e) => {
+                        saveControlValue('facebook_user_name', e.target.value);
+                    });
+                    facebookUserName.addEventListener('blur', (e) => {
+                        saveControlValue('facebook_user_name', e.target.value);
+                    });
+                }
+
+                // Instagram Import
+                const instagramImportDirectory = document.getElementById('instagram-import-directory');
+                const instagramExportRoot = document.getElementById('instagram-export-root');
+                const instagramUserName = document.getElementById('instagram-user-name');
+                if (instagramImportDirectory) {
+                    instagramImportDirectory.addEventListener('change', (e) => {
+                        saveControlValue('instagram_import_directory', e.target.value);
+                    });
+                    instagramImportDirectory.addEventListener('blur', (e) => {
+                        saveControlValue('instagram_import_directory', e.target.value);
+                    });
+                }
+                if (instagramExportRoot) {
+                    instagramExportRoot.addEventListener('change', (e) => {
+                        saveControlValue('instagram_export_root', e.target.value);
+                    });
+                    instagramExportRoot.addEventListener('blur', (e) => {
+                        saveControlValue('instagram_export_root', e.target.value);
+                    });
+                }
+                if (instagramUserName) {
+                    instagramUserName.addEventListener('change', (e) => {
+                        saveControlValue('instagram_user_name', e.target.value);
+                    });
+                    instagramUserName.addEventListener('blur', (e) => {
+                        saveControlValue('instagram_user_name', e.target.value);
+                    });
+                }
+
+                // iMessage Import
+                const imessageDirectoryPath = document.getElementById('imessage-directory-path');
+                if (imessageDirectoryPath) {
+                    imessageDirectoryPath.addEventListener('change', (e) => {
+                        saveControlValue('imessage_directory_path', e.target.value);
+                    });
+                    imessageDirectoryPath.addEventListener('blur', (e) => {
+                        saveControlValue('imessage_directory_path', e.target.value);
+                    });
+                }
+
+                // Facebook Albums Import
+                const facebookAlbumsImportDirectory = document.getElementById('facebook-albums-import-directory');
+                const facebookAlbumsExportRoot = document.getElementById('facebook-albums-export-root');
+                if (facebookAlbumsImportDirectory) {
+                    facebookAlbumsImportDirectory.addEventListener('change', (e) => {
+                        saveControlValue('facebook_albums_import_directory', e.target.value);
+                    });
+                    facebookAlbumsImportDirectory.addEventListener('blur', (e) => {
+                        saveControlValue('facebook_albums_import_directory', e.target.value);
+                    });
+                }
+                if (facebookAlbumsExportRoot) {
+                    facebookAlbumsExportRoot.addEventListener('change', (e) => {
+                        saveControlValue('facebook_albums_export_root', e.target.value);
+                    });
+                    facebookAlbumsExportRoot.addEventListener('blur', (e) => {
+                        saveControlValue('facebook_albums_export_root', e.target.value);
+                    });
+                }
+
+                // Filesystem Image Import
+                const filesystemImportDirectory = document.getElementById('filesystem-import-directory');
+                const filesystemImportMaxImages = document.getElementById('filesystem-import-max-images');
+                const filesystemImportCreateThumbnail = document.getElementById('filesystem-import-create-thumbnail');
+                if (filesystemImportDirectory) {
+                    filesystemImportDirectory.addEventListener('change', (e) => {
+                        saveControlValue('filesystem_import_directory', e.target.value);
+                    });
+                    filesystemImportDirectory.addEventListener('blur', (e) => {
+                        saveControlValue('filesystem_import_directory', e.target.value);
+                    });
+                }
+                if (filesystemImportMaxImages) {
+                    filesystemImportMaxImages.addEventListener('change', (e) => {
+                        saveControlValue('filesystem_import_max_images', e.target.value);
+                    });
+                    filesystemImportMaxImages.addEventListener('blur', (e) => {
+                        saveControlValue('filesystem_import_max_images', e.target.value);
+                    });
+                }
+                if (filesystemImportCreateThumbnail) {
+                    filesystemImportCreateThumbnail.addEventListener('change', (e) => {
+                        saveControlValue('filesystem_import_create_thumbnail', e.target.checked);
+                    });
+                }
+            }
+
+            // Load defaults when config page opens
+            const configBtn = document.getElementById('config-btn');
+            if (configBtn) {
+                configBtn.addEventListener('click', () => {
+                    loadControlDefaults();
+                });
+            }
 
             // Config tab switching
             const configTabButtons = document.querySelectorAll('.config-tab-button');
@@ -7235,6 +7992,15 @@ ${textContent}
                                 }
                             }, 100);
                         }
+                    }
+                    
+                    // Load control defaults when any control tab is opened (if not already loaded)
+                    const controlTabs = ['email-controls', 'messaging-controls', 'facebook-albums', 'image-controls'];
+                    if (controlTabs.includes(targetTab) && Object.keys(controlDefaults).length === 0) {
+                        loadControlDefaults();
+                    } else if (controlTabs.includes(targetTab)) {
+                        // If defaults already loaded, just populate (in case elements weren't ready before)
+                        populateControlDefaults();
                     }
                 });
             });
@@ -9584,11 +10350,11 @@ ${textContent}
                 });
             }
 
-            if (DOM.imageGallerySidebarBtn) {
-                DOM.imageGallerySidebarBtn.addEventListener('click', () => {
-                    Modals.ImageGallery.open();
-                });
-            }
+            // if (DOM.imageGallerySidebarBtn) {
+            //     DOM.imageGallerySidebarBtn.addEventListener('click', () => {
+            //         Modals.ImageGallery.open();
+            //     });
+            // }
 
             if (DOM.locationsSidebarBtn) {
                 DOM.locationsSidebarBtn.addEventListener('click', () => {
@@ -9621,11 +10387,11 @@ ${textContent}
                 });
             }
 
-            if (DOM.haveYourSaySidebarBtn) {
-                DOM.haveYourSaySidebarBtn.addEventListener('click', () => {
-                    Modals.HaveYourSay.open();
-                });
-            }
+            // if (DOM.haveYourSaySidebarBtn) {
+            //     DOM.haveYourSaySidebarBtn.addEventListener('click', () => {
+            //         Modals.HaveYourSay.open();
+            //     });
+            // }
 
             if (DOM.referenceDocumentsSidebarBtn) {
                 DOM.referenceDocumentsSidebarBtn.addEventListener('click', () => {

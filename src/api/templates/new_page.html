@@ -104,27 +104,28 @@
                     <button type="button" class="more-options-btn" id="sms-messages-sidebar-btn">
                         <i class="fas fa-comment-dots"></i> Messages and Chats
                     </button>
-                    <button type="button" class="more-options-btn" id="fb-albums-sidebar-btn">
-                        <i class="fas fa-images"></i> Facebook Albums
-                    </button>
-                    <button type="button" class="more-options-btn" id="image-gallery-sidebar-btn">
-                        <i class="fas fa-photo-video"></i> Image Gallery
-                    </button>
-                    <button type="button" class="more-options-btn" id="locations-sidebar-btn">
-                        <i class="fas fa-map-marker-alt"></i> Locations
-                    </button>
                     <button type="button" class="more-options-btn" id="email-gallery-sidebar-btn">
                         <i class="fas fa-envelope"></i> Email Gallery
                     </button>
                     <button type="button" class="more-options-btn" id="new-image-gallery-sidebar-btn">
                         <i class="fas fa-images"></i> New Image Gallery
                     </button>
+                    <button type="button" class="more-options-btn" id="fb-albums-sidebar-btn">
+                        <i class="fas fa-images"></i> Facebook Albums
+                    </button>
+                    <!-- <button type="button" class="more-options-btn" id="image-gallery-sidebar-btn">
+                        <i class="fas fa-photo-video"></i> Image Gallery
+                    </button> -->
+                    <button type="button" class="more-options-btn" id="locations-sidebar-btn">
+                        <i class="fas fa-map-marker-alt"></i> Locations
+                    </button>
+
                     <button type="button" class="more-options-btn" id="suggestions-sidebar-btn">
                         <i class="fas fa-lightbulb"></i> Suggestions
                     </button>
-                    <button type="button" class="more-options-btn" id="have-your-say-sidebar-btn">
+                    <!-- <button type="button" class="more-options-btn" id="have-your-say-sidebar-btn">
                         <i class="fas fa-microphone"></i> Have Your Say
-                    </button>
+                    </button> -->
                     <button type="button" class="more-options-btn" id="reference-documents-sidebar-btn">
                         <i class="fas fa-folder-open"></i> Reference Documents
                     </button>
@@ -219,7 +220,7 @@
                                 <li>If you choose "Dave's own voice", you can also select his current mood</li>
                                 <li>Type your questions about Dave in the chat box below</li>
                                 <li>Click "Suggestions" for some useful, provocative or fun suggestions</li>
-                                <li>Click "Have Your Say" to enter your own perspective or story about Dave</li>
+                                <!-- <li>Click "Have Your Say" to enter your own perspective or story about Dave</li> -->
                             </ul>
                         </div>
                         <div id="voice-preview" class="voice-preview" style="width: 50%;display: inline;">
@@ -996,9 +997,6 @@
             </div>
         </div>
 
-
-
-
         <!-- Display Suggestions Modal -->
         <div id="tile-suggestions-modal" class="modal">
             <div class="modal-content tile-suggestions-modal-content">
@@ -1083,41 +1081,7 @@
                 </div>
             </div>
         </div>
-        <div id="have-your-say-modal" class="modal">
-            <div class="modal-content" style="max-width: 800px; width: 95vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 2rem; position: relative;">
-                <button class="modal-close-btn" id="close-have-your-say-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer;">&times;</button>
-                <h2 style="margin-top: 0; color: #233366; font-size: 1.3em; text-align: center;">Have Your Say</h2>
-                <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.7em; margin-bottom: 1em; align-items: center;">
-                    <label for="have-your-say-name" style="color: #333; text-align: right; font-weight: bold;">Your Name</label>
-                    <input id="have-your-say-name" type="text" placeholder="Optional" style="border-radius: 6px; border: 1px solid #bfc9da; padding: 0.5em; font-size: 1em;" />
-                    <label for="have-your-say-relationship" style="color: #333; text-align: right; font-weight: bold;">Relationship to Dave</label>
-                    <input id="have-your-say-relationship" type="text" placeholder="Optional" style="border-radius: 6px; border: 1px solid #bfc9da; padding: 0.5em; font-size: 1em;" />
-                </div>
-                <p style="color: #333; margin-bottom: 1em;">Click the button and dictate your input, or type below:</p>
-                <textarea id="have-your-say-textarea" rows="10" style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em; margin-bottom: 1em;"></textarea>
-                <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.7em; margin-bottom: 1em; align-items: left;">
-                <div id="dictation-status" style="margin-top: 0.7em; color: #666; font-size: 0.95em;"></div>
-                    <div style="display: flex; justify-content: flex-end; gap: 0.7em;">
-                        <button type="button" id="start-dictation-btn" class="modal-btn modal-btn-secondary" style="background: #04ec36; color: #233366;">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-mic-fill" viewBox="0 0 16 16">
-                                <path d="M5 3a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0z"/>
-                                <path d="M3.5 6.5A.5.5 0 0 1 4 7v1a4 4 0 0 0 8 0V7a.5.5 0 0 1 1 0v1a5 5 0 0 1-4.5 4.975V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 .5-.5"/>
-                            </svg>
-                            Start Dictation</button>
 
-                        <button id="stop-dictation-btn" class="modal-btn modal-btn-secondary" style="display: none; background: #ec1f04; color: #233366;">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-mic-mute-fill" viewBox="0 0 16 16">
-                            <path d="M13 8c0 .564-.094 1.107-.266 1.613l-.814-.814A4.02 4.02 0 0 0 12 8V7a.5.5 0 0 1 1 0zm-5 4c.818 0 1.578-.245 2.212-.667l.718.719a4.973 4.973 0 0 1-2.43.923V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 1 0v1a4 4 0 0 0 4 4m3-9v4.879L5.158 2.037A3.001 3.001 0 0 1 11 3"/>
-                            <path d="M9.486 10.607 5 6.12V8a3 3 0 0 0 4.486 2.607m-7.84-9.253 12 12L1.646 2.354 1.354 2.06l-.708.708 12 12 .708-.707L2.354 1.646z"/>
-                        </svg>
-                        Stop Dictation
-                        </button>
-                        <button type="button" id="submit-have-your-say-btn" class="modal-btn modal-btn-primary">Submit</button>
-                        <button type="button" id="cancel-have-your-say-btn" class="modal-btn modal-btn-secondary">Cancel</button>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <!-- Geo Metadata Locations Modal -->
         <div id="geo-metadata-modal" class="modal">
@@ -1140,7 +1104,7 @@
         </div>
 
         <!-- Image Gallery Modal -->
-        <div id="image-gallery-modal" class="modal">
+        <!-- <div id="image-gallery-modal" class="modal">
            <div class="modal-content image-gallery-modal-content">
                 <button id="close-image-gallery-modal" class="modal-close-btn">&times;</button>
                 <div class="image-gallery-modal-content">
@@ -1270,7 +1234,7 @@
                     </div>
                 </div>
            </div>
-        </div>
+        </div> -->
 
         <!-- Email Gallery Modal -->
         <div id="email-gallery-modal" class="modal">
@@ -1393,9 +1357,27 @@
                     <div class="new-image-gallery-master-pane">
                         <div class="new-image-gallery-search-section">
                             <div class="new-image-metadata-filters">
-                                <div class="new-image-gallery-title">
-                                    <h2>New Image Gallery</h2> 
+                                <div class="new-image-gallery-title" style="display: flex; justify-content: space-between; align-items: center;">
+                                    <h2 style="margin: 0;">Image Gallery</h2>
+                                    <label class="new-image-gallery-select-mode-toggle" style="display: flex; align-items: center; gap: 0.5em; cursor: pointer;">
+                                        <input type="checkbox" id="new-image-gallery-select-mode" style="cursor: pointer;">
+                                        <span>Select Mode</span>
+                                    </label>
                                 </div>
+                                <!-- <div id="new-image-gallery-bulk-edit-section" style="display: none; padding: 1em; background-color: #e8f4f8; border-radius: 4px; margin-top: 1em;">
+                                    <div style="margin-bottom: 0.5em; font-weight: 600; color: #233366;">
+                                        <span id="new-image-gallery-selected-count">0</span> image(s) selected
+                                    </div>
+                                    <div style="display: flex; gap: 0.5em; align-items: center;">
+                                        <input type="text" id="new-image-gallery-bulk-tags" placeholder="Enter tags to apply..." class="new-image-gallery-input" style="flex: 1;">
+                                        <button id="new-image-gallery-apply-tags-btn" class="modal-btn modal-btn-primary" disabled>
+                                            <i class="fas fa-tags"></i> Apply Tags
+                                        </button>
+                                        <button id="new-image-gallery-clear-selection-btn" class="modal-btn modal-btn-secondary">
+                                            <i class="fas fa-times"></i> Clear Selection
+                                        </button>
+                                    </div>
+                                </div> -->
                                 <div class="new-image-gallery-search-row">
                                     <input type="text" id="new-image-gallery-title" placeholder="Title..." class="new-image-gallery-input">
                                 </div>
@@ -1437,6 +1419,33 @@
                                     </button>
                                 </div>
                             </div>
+                            <div class="new-image-gallery-right-hand-box">
+                                <div id="new-image-gallery-bulk-edit-section" style="display: none; padding: 1em; background-color: #e8f4f8; border-radius: 4px; margin-top: 2em;">
+                                    <div style="margin-bottom: 0.5em; font-weight: 600; color: #233366;">
+                                        <span id="new-image-gallery-selected-count">0</span> image(s) selected
+                                    </div>
+                                    <div style="display: flex; gap: 0.5em; align-items: center;">
+                                        <input type="text" id="new-image-gallery-bulk-tags" placeholder="Enter tags to apply..." class="new-image-gallery-input" style="flex: 1;">
+                                        <button id="new-image-gallery-apply-tags-btn" class="modal-btn modal-btn-primary" disabled style="width: 200px;">
+                                            <i class="fas fa-tags"></i> Apply Tags
+                                        </button>
+                                        <!-- <button id="new-image-gallery-delete-selected-btn" class="modal-btn modal-btn-danger" disabled>
+                                            <i class="fas fa-trash-alt"></i> Delete Selected
+                                        </button>
+                                        <button id="new-image-gallery-clear-selection-btn" class="modal-btn modal-btn-secondary">
+                                            <i class="fas fa-times"></i> Clear Selection
+                                        </button> -->
+                                    </div>
+                                    <div style="display: flex; gap: 0.5em; align-items: end;flex-direction: column; margin-top: 1em;">
+                                        <button id="new-image-gallery-delete-selected-btn" class="modal-btn modal-btn-danger" disabled style="width: 200px;">
+                                            <i class="fas fa-trash-alt"></i> Delete Selected
+                                        </button>
+                                        <button id="new-image-gallery-clear-selection-btn" class="modal-btn modal-btn-secondary" style="width: 200px;">
+                                            <i class="fas fa-times"></i> Clear Selection
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div class="new-image-gallery-thumbnail-grid" id="new-image-gallery-thumbnail-grid"></div>
                     </div>
@@ -1457,9 +1466,14 @@
                     <div class="new-image-gallery-detail-metadata-section">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
                             <h2 style="margin: 0;">Image Metadata</h2>
-                            <button id="new-image-gallery-delete-btn" class="modal-btn modal-btn-danger" style="display: none;">
-                                <i class="fas fa-trash-alt"></i> Delete Image
-                            </button>
+                            <div style="display: flex; gap: 0.5em;">
+                                <button id="new-image-gallery-save-btn" class="modal-btn" style="display: none;" disabled>
+                                    <i class="fas fa-save"></i> Save Changes
+                                </button>
+                                <button id="new-image-gallery-delete-btn" class="modal-btn modal-btn-danger" style="display: none;">
+                                    <i class="fas fa-trash-alt"></i> Delete Image
+                                </button>
+                            </div>
                         </div>
                         <div class="new-image-gallery-detail-metadata-content">
                             <div class="new-image-gallery-detail-metadata-row">
@@ -1468,7 +1482,7 @@
                             </div>
                             <div class="new-image-gallery-detail-metadata-row">
                                 <span class="new-image-gallery-detail-metadata-label">Description:</span>
-                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-description"></span>
+                                <textarea class="new-image-gallery-detail-metadata-editable" id="new-image-detail-description-edit" rows="3" placeholder="Enter description"></textarea>
                             </div>
                             <div class="new-image-gallery-detail-metadata-row">
                                 <span class="new-image-gallery-detail-metadata-label">Author:</span>
@@ -1476,7 +1490,7 @@
                             </div>
                             <div class="new-image-gallery-detail-metadata-row">
                                 <span class="new-image-gallery-detail-metadata-label">Tags:</span>
-                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-tags"></span>
+                                <input type="text" class="new-image-gallery-detail-metadata-editable" id="new-image-detail-tags-edit" placeholder="Enter tags (comma-separated)">
                             </div>
                             <div class="new-image-gallery-detail-metadata-row">
                                 <span class="new-image-gallery-detail-metadata-label">Categories:</span>
@@ -1492,7 +1506,14 @@
                             </div>
                             <div class="new-image-gallery-detail-metadata-row">
                                 <span class="new-image-gallery-detail-metadata-label">Rating:</span>
-                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-rating"></span>
+                                <div class="star-rating-container" id="new-image-detail-rating-container">
+                                    <span class="star" data-rating="1">★</span>
+                                    <span class="star" data-rating="2">★</span>
+                                    <span class="star" data-rating="3">★</span>
+                                    <span class="star" data-rating="4">★</span>
+                                    <span class="star" data-rating="5">★</span>
+                                    <input type="hidden" id="new-image-detail-rating-edit" value="">
+                                </div>
                             </div>
                             <div class="new-image-gallery-detail-metadata-row">
                                 <span class="new-image-gallery-detail-metadata-label">Image Type:</span>

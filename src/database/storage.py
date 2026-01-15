@@ -489,6 +489,60 @@ class ImageStorage:
         finally:
             session.close()
     
+    def update_image_metadata(
+        self,
+        metadata_id: int,
+        description: Optional[str] = None,
+        tags: Optional[str] = None,
+        rating: Optional[int] = None,
+        **kwargs
+    ) -> Optional[ImageMetadata]:
+        """Update image metadata fields.
+        
+        Args:
+            metadata_id: The ID of the ImageMetadata to update
+            description: Optional description to update
+            tags: Optional tags to update
+            rating: Optional rating to update (1-5)
+            **kwargs: Additional metadata fields to update
+            
+        Returns:
+            Updated ImageMetadata instance or None if not found
+        """
+        session = self.db.get_session()
+        try:
+            metadata = session.query(ImageMetadata).filter(ImageMetadata.id == metadata_id).first()
+            if not metadata:
+                return None
+            
+            # Update fields if provided
+            if description is not None:
+                metadata.description = description
+            if tags is not None:
+                metadata.tags = tags
+            if rating is not None:
+                # Validate rating is between 1 and 5
+                if rating < 1 or rating > 5:
+                    raise ValueError("Rating must be between 1 and 5")
+                metadata.rating = rating
+            
+            # Update any additional fields from kwargs
+            for key, value in kwargs.items():
+                if hasattr(metadata, key):
+                    setattr(metadata, key, value)
+            
+            metadata.updated_at = datetime.utcnow()
+            session.commit()
+            
+            # Detach object from session
+            session.expunge(metadata)
+            return metadata
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+    
     def delete_image_by_metadata_id(self, metadata_id: int) -> bool:
         """Delete an image by metadata ID, ensuring cascade deletion of ImageBlob.
         

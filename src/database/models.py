@@ -1,6 +1,6 @@
 """Database models and schema management."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     Column,
     Float,
@@ -17,6 +17,11 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
+
+
+def utcnow():
+    """Get current UTC datetime (replacement for deprecated datetime.utcnow())."""
+    return datetime.now(timezone.utc)
 
 Base = declarative_base()
 
@@ -40,8 +45,8 @@ class Email(Base):
     snippet = Column(Text)
     embedding = Column(Text, nullable=True)  # Will store vector as text/json, can be converted to pgvector later
     has_attachments = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     attachments = relationship("Attachment", back_populates="email", cascade="all, delete-orphan")
 
@@ -65,7 +70,7 @@ class Attachment(Base):
     size = Column(Integer)
     data = Column(LargeBinary)
     image_thumbnail = Column(LargeBinary, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
     email = relationship("Email", back_populates="attachments")
 
@@ -95,8 +100,8 @@ class IMessage(Base):
     processed = Column(Boolean, default=False, nullable=False)
     location_processed = Column(Boolean, default=False, nullable=False)
     image_processed = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
 
 class FacebookAlbum(Base):
@@ -109,8 +114,8 @@ class FacebookAlbum(Base):
     description = Column(Text, nullable=True)
     cover_photo_uri = Column(String(500), nullable=True)
     last_modified_timestamp = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     images = relationship("FacebookAlbumImage", back_populates="album", cascade="all, delete-orphan")
 
@@ -132,8 +137,8 @@ class FacebookAlbumImage(Base):
     processed = Column(Boolean, default=False, nullable=False)
     location_processed = Column(Boolean, default=False, nullable=False)
     image_processed = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     album = relationship("FacebookAlbum", back_populates="images")
 
@@ -154,9 +159,11 @@ class ReferenceDocument(Base):
     tags = Column(Text, nullable=True)
     categories = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
+    ai_detailed_summary = Column(Text, nullable=True)
+    ai_quick_summary = Column(Text, nullable=True)
     available_for_task = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
 class ImageMetadata(Base):
     """Images model."""
@@ -176,8 +183,8 @@ class ImageMetadata(Base):
     processed = Column(Boolean, default=False, nullable=False)
     location_processed = Column(Boolean, default=False, nullable=False)
     image_processed = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow) 
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow) 
     embedding = Column(Text, nullable=True)
     year = Column(Integer, nullable=True)
     month = Column(Integer, nullable=True)
@@ -200,7 +207,56 @@ class ImageBlob(Base):
     id = Column(Integer, primary_key=True)
     image_data = Column(LargeBinary, nullable=True)
     thumbnail_data = Column(LargeBinary, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
     # Relationship back to ImageMetadata (no foreign key needed - ImageMetadata has image_blob_id)
     image_metadata = relationship("ImageMetadata", back_populates="image_blob", uselist=False)
+
+class Places(Base):
+    """Places model."""
+
+    __tablename__ = "locations"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    altitude = Column(Float, nullable=True)
+    has_gps = Column(Boolean, default=False, nullable=False)
+    google_maps_url = Column(String(500), nullable=True)
+    region=Column(String(255), nullable=True)
+    source=Column(String(255), nullable=True)
+    source_reference=Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+class Contacts(Base):
+    """Contacts model."""
+
+    __tablename__ = "contacts"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    email = Column(String(500), nullable=True)
+    phone = Column(String(500), nullable=True)
+    address = Column(Text, nullable=True)
+    city = Column(String(255), nullable=True)
+    state = Column(String(255), nullable=True)
+    zip = Column(String(255), nullable=True)
+    country = Column(String(255), nullable=True)
+    notes = Column(Text, nullable=True)
+    facebook = Column(Boolean, default=False, nullable=False)
+    instagram = Column(Boolean, default=False, nullable=False)
+    twitter = Column(Boolean, default=False, nullable=False)
+    linkedin = Column(Boolean, default=False, nullable=False)
+    youtube = Column(Boolean, default=False, nullable=False)
+    tiktok = Column(Boolean, default=False, nullable=False)
+    pinterest = Column(Boolean, default=False, nullable=False)
+    reddit = Column(Boolean, default=False, nullable=False)
+    telegram = Column(Boolean, default=False, nullable=False)
+    whatsapp = Column(Boolean, default=False, nullable=False)
+    signal = Column(Boolean, default=False, nullable=False)

@@ -2,6 +2,7 @@
 
 import os
 import mimetypes
+import fnmatch
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable, List
@@ -237,12 +238,40 @@ def create_thumbnail(image_data: bytes, max_size: int = 100) -> Optional[bytes]:
         return None
 
 
+def _should_exclude_directory(directory_path: Path, exclude_patterns: List[str]) -> bool:
+    """Check if a directory should be excluded based on patterns.
+    
+    Args:
+        directory_path: Path to the directory to check
+        exclude_patterns: List of patterns to match against (supports wildcards * and ?)
+        
+    Returns:
+        True if directory should be excluded, False otherwise
+    """
+    if not exclude_patterns:
+        return False
+    
+    directory_str = str(directory_path)
+    directory_name = directory_path.name
+    
+    for pattern in exclude_patterns:
+        # Check if pattern matches directory name or any part of the path
+        if fnmatch.fnmatch(directory_name, pattern) or fnmatch.fnmatch(directory_str, pattern):
+            return True
+        # Also check if pattern appears anywhere in the path
+        if pattern in directory_str:
+            return True
+    
+    return False
+
+
 def import_images_from_filesystem(
     root_directory: str,
     max_images: Optional[int] = None,
     should_create_thumbnail: bool = False,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
-    cancelled_check: Optional[Callable[[], bool]] = None
+    cancelled_check: Optional[Callable[[], bool]] = None,
+    exclude_patterns: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """Import images from filesystem directory.
     
@@ -252,6 +281,7 @@ def import_images_from_filesystem(
         should_create_thumbnail: Whether to generate thumbnails
         progress_callback: Optional callback function called after each image is processed
         cancelled_check: Optional function to check if import should be cancelled
+        exclude_patterns: Optional list of directory patterns to exclude (supports wildcards * and ?)
         
     Returns:
         Dictionary with import statistics
@@ -263,6 +293,10 @@ def import_images_from_filesystem(
     storage = ImageStorage()
     image_extensions = get_image_extensions()
     
+    # Default exclude_patterns to empty list if not provided
+    if exclude_patterns is None:
+        exclude_patterns = []
+    
     stats = {
         'total_files': 0,
         'files_processed': 0,
@@ -273,10 +307,43 @@ def import_images_from_filesystem(
         'current_file': None
     }
     
+    # Track files per directory
+    files_per_directory = {}
+    
     # First pass: count total files
     for file_path in root_path.rglob('*'):
+        #ignore any directory path which have a . in the path name
+
+        if ".photostructure" in file_path.parent.name:
+            continue
+        if "._" in file_path.name:
+            continue
+        if "Thumbs.db" in file_path.name:
+            continue
+        if "desktop.ini" in file_path.name:
+            continue
+        if "ehthumbs.db" in file_path.name:
+            continue
+        if "ehthumbs.db-shm" in file_path.name:
+            continue
+        
+        # Check if directory should be excluded
+        if exclude_patterns and _should_exclude_directory(file_path.parent, exclude_patterns):
+            continue
+
         if file_path.is_file() and file_path.suffix.lower() in image_extensions:
             stats['total_files'] += 1
+            # Track per directory
+            directory = str(file_path.parent)
+            files_per_directory[directory] = files_per_directory.get(directory, 0) + 1
+    
+    # Print files per directory
+    print("\nFiles per directory:")
+    print("-" * 80)
+    for directory, count in sorted(files_per_directory.items(), key=lambda item: item[1], reverse=True):
+        print(f"{directory}: {count} file(s)")
+    print("-" * 80)
+    print(f"Total files: {stats['total_files']}\n")
     
     # Second pass: process images
     images_processed = 0
@@ -285,6 +352,23 @@ def import_images_from_filesystem(
         if cancelled_check and cancelled_check():
             stats['status'] = 'cancelled'
             break
+
+        if ".photostructure" in file_path.parent.name:
+            continue
+        if "._" in file_path.parent.name:
+            continue
+        if "Thumbs.db" in file_path.parent.name:
+            continue
+        if "desktop.ini" in file_path.parent.name:
+            continue
+        if "ehthumbs.db" in file_path.parent.name:
+            continue
+        if "ehthumbs.db-shm" in file_path.parent.name:
+            continue
+        
+        # Check if directory should be excluded
+        if exclude_patterns and _should_exclude_directory(file_path.parent, exclude_patterns):
+            continue
         
         # Check max_images limit
         if max_images and images_processed >= max_images:
