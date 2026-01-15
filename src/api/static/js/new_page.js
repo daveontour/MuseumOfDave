@@ -1692,13 +1692,50 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+            async function openAndSelectAlbum(albumId) {
+                // Open the Facebook Albums modal
+                Modals._openModal(DOM.fbAlbumsModal);
+                
+                // Load albums and wait for them to load
+                try {
+                    await loadAlbums();
+                    
+                    // Find album by ID (handle both string and number comparisons)
+                    const albumIdNum = typeof albumId === 'string' ? parseInt(albumId) : albumId;
+                    const album = albums.find(a => {
+                        const aId = typeof a.id === 'string' ? parseInt(a.id) : a.id;
+                        return aId === albumIdNum || a.id === albumId || a.id === albumIdNum;
+                    });
+                    
+                    if (album) {
+                        // Select the album (this will also load its images)
+                        // Use the album's actual ID to ensure type matching
+                        await selectAlbum(album.id);
+                    } else {
+                        console.warn(`Album with ID ${albumId} not found`);
+                        // Reset slave pane if album not found
+                        if (DOM.fbAlbumsAlbumTitle) {
+                            DOM.fbAlbumsAlbumTitle.textContent = 'Select an album';
+                        }
+                        if (DOM.fbAlbumsAlbumDescription) {
+                            DOM.fbAlbumsAlbumDescription.textContent = '';
+                        }
+                        if (DOM.fbAlbumsImagesContainer) {
+                            DOM.fbAlbumsImagesContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666; grid-column: 1 / -1;">Album not found</div>';
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error loading albums:', error);
+                }
+            }
+
             return {
                 open,
                 close,
                 init,
-                startResize  // Expose for global access
+                startResize,
+                openAndSelectAlbum
             };
-            return { init, open, openAlbum };
         })(),
         
         // HaveYourSay: (() => {
@@ -2787,7 +2824,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             async function open() {
                 DOM.emailGalleryModal.style.display = 'flex';
-                 _loadEmailData();
+                _loadEmailData().catch(error => {
+                    console.error('Error loading email data in open():', error);
+                });
             }
 
             function close() {
@@ -2797,48 +2836,52 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             function _loadEmailData() {
-                _setupFilters();
+                return new Promise((resolve, reject) => {
+                    _setupFilters();
 
-                //month equals the current month
-                const currentMonth = new Date().getMonth() + 1;
-                DOM.emailGalleryMonthFilter.value = currentMonth;
-                const currentYear = new Date().getFullYear();
-                DOM.emailGalleryYearFilter.value = currentYear;
+                    //month equals the current month
+                    const currentMonth = new Date().getMonth() + 1;
+                    DOM.emailGalleryMonthFilter.value = currentMonth;
+                    const currentYear = new Date().getFullYear();
+                    DOM.emailGalleryYearFilter.value = currentYear;
 
-                try {
-                    const params = new URLSearchParams();
-                    params.append('year', currentYear);
-                    params.append('month', currentMonth);
-                    
-                    fetch('/emails/search?' + params.toString())
-                    .then(r => r.json())
-                    .then(data => {
-                        // Transform response to match expected format
-                        emailData = data.map(email => ({
-                            id: email.id,
-                            subject: email.subject || 'No Subject',
-                            sender: email.from_address || 'Unknown Sender',
-                            recipient: email.to_addresses || 'Unknown Recipient',
-                            date: email.date ? formatDateAustralian(email.date) : 'No Date',
-                            folder: email.folder || 'Unknown Folder',
-                            body: email.snippet || 'No content',
-                            preview: email.snippet || 'No preview',
-                            attachments: email.attachment_ids.map(id => `/attachments/${id}`),
-                            emailId: email.id // Store email ID for fetching full content
-                        }));
-                        _renderEmailList();
-                        _showInstructions();
-                    })
-                    .catch(error => {
-                        console.error('Error in fetch:', error);
+                    try {
+                        const params = new URLSearchParams();
+                        params.append('year', currentYear);
+                        params.append('month', currentMonth);
+                        
+                        fetch('/emails/search?' + params.toString())
+                        .then(r => r.json())
+                        .then(data => {
+                            // Transform response to match expected format
+                            emailData = data.map(email => ({
+                                id: email.id,
+                                subject: email.subject || 'No Subject',
+                                sender: email.from_address || 'Unknown Sender',
+                                recipient: email.to_addresses || 'Unknown Recipient',
+                                date: email.date ? formatDateAustralian(email.date) : 'No Date',
+                                folder: email.folder || 'Unknown Folder',
+                                body: email.snippet || 'No content',
+                                preview: email.snippet || 'No preview',
+                                attachments: email.attachment_ids.map(id => `/attachments/${id}`),
+                                emailId: email.id // Store email ID for fetching full content
+                            }));
+                            _renderEmailList();
+                            _showInstructions();
+                            resolve(emailData);
+                        })
+                        .catch(error => {
+                            console.error('Error in fetch:', error);
+                            emailData = [];
+                            reject(error);
+                        });
+
+                    } catch (error) {
+                        console.error('Error loading email data:', error);
                         emailData = [];
-                    });
-
-                } catch (error) {
-                    console.error('Error loading email data:', error);
-                    emailData = [];
-                
-                }
+                        reject(error);
+                    }
+                });
             }
 
             function _setupFilters() {
@@ -3589,7 +3632,112 @@ ${textContent}
                 }
             }
 
-            return { init, open, close, openContact };
+            async function openAndSelectEmail(emailId) {
+                // Open the Email Gallery modal
+                DOM.emailGalleryModal.style.display = 'flex';
+                
+                // Helper function to load emails and find the target email
+                async function loadAndFindEmail(clearFilters = false) {
+                    return new Promise((resolve, reject) => {
+                        if (clearFilters) {
+                            // Clear all filters to load all emails
+                            DOM.emailGallerySearch.value = '';
+                            DOM.emailGallerySender.value = '';
+                            DOM.emailGalleryRecipient.value = '';
+                            DOM.emailGalleryToFrom.value = '';
+                            DOM.emailGalleryYearFilter.value = '0';
+                            DOM.emailGalleryMonthFilter.value = '0';
+                            DOM.emailGalleryAttachmentsFilter.checked = false;
+                        }
+                        
+                        // Build query parameters
+                        const params = new URLSearchParams();
+                        const searchTerm = DOM.emailGallerySearch.value.trim();
+                        const senderFilter = DOM.emailGallerySender.value.trim();
+                        const recipientFilter = DOM.emailGalleryRecipient.value.trim();
+                        const toFromFilter = DOM.emailGalleryToFrom.value.trim();
+                        const yearFilter = DOM.emailGalleryYearFilter.value;
+                        const monthFilter = DOM.emailGalleryMonthFilter.value;
+                        const attachmentsFilter = DOM.emailGalleryAttachmentsFilter.checked;
+                        
+                        if (searchTerm) {
+                            params.append('subject', searchTerm);
+                        }
+                        if (senderFilter) {
+                            params.append('from_address', senderFilter);
+                        }
+                        if (recipientFilter) {
+                            params.append('to_address', recipientFilter);
+                        }
+                        if (toFromFilter) {
+                            params.append('to_from', toFromFilter);
+                        }
+                        if (yearFilter && yearFilter !== '0' && yearFilter !== '') {
+                            params.append('year', yearFilter);
+                        }
+                        if (monthFilter && monthFilter !== '0' && monthFilter !== '') {
+                            params.append('month', monthFilter);
+                        }
+                        if (attachmentsFilter) {
+                            params.append('has_attachments', 'true');
+                        }
+                        
+                        fetch('/emails/search?' + params.toString())
+                        .then(r => r.json())
+                        .then(data => {
+                            // Transform response to match expected format
+                            emailData = data.map(email => ({
+                                id: email.id,
+                                subject: email.subject || 'No Subject',
+                                sender: email.from_address || 'Unknown Sender',
+                                recipient: email.to_addresses || 'Unknown Recipient',
+                                date: email.date ? formatDateAustralian(email.date) : 'No Date',
+                                folder: email.folder || 'Unknown Folder',
+                                body: email.snippet || 'No content',
+                                preview: email.snippet || 'No preview',
+                                attachments: email.attachment_ids.map(id => `/attachments/${id}`),
+                                emailId: email.id // Store email ID for fetching full content
+                            }));
+                            _renderEmailList();
+                            _showInstructions();
+                            
+                            // Find email index by ID
+                            const emailIndex = emailData.findIndex(email => 
+                                (email.emailId === emailId) || (email.id === emailId)
+                            );
+                            
+                            resolve(emailIndex);
+                        })
+                        .catch(error => {
+                            console.error('Error loading emails:', error);
+                            reject(error);
+                        });
+                    });
+                }
+                
+                try {
+                    // First try with current filters
+                    let emailIndex = await loadAndFindEmail(false);
+                    
+                    // If not found, clear filters and try again
+                    if (emailIndex === -1) {
+                        emailIndex = await loadAndFindEmail(true);
+                    }
+                    
+                    if (emailIndex !== -1) {
+                        _selectEmail(emailIndex);
+                        _scrollToSelectedEmail();
+                    } else {
+                        console.warn(`Email with ID ${emailId} not found`);
+                        // Show instructions since email wasn't found
+                        _showInstructions();
+                    }
+                } catch (error) {
+                    console.error('Error loading emails:', error);
+                }
+            }
+
+            return { init, open, close, openContact, openAndSelectEmail };
         })(),
 
         NewImageGallery: (() => {
@@ -4018,6 +4166,19 @@ ${textContent}
                 );
             }
 
+            function _getSourceAbbreviation(source) {
+                // Return short abbreviation for source
+                const abbreviations = {
+                    'Email': 'E',
+                    'Facebook Album': 'FB',
+                    'Filesystem': 'FS',
+                    'Instagram': 'IG',
+                    'WhatsApp': 'WA',
+                    'iMessage': 'iM'
+                };
+                return abbreviations[source] || source.substring(0, 2).toUpperCase();
+            }
+
             function _loadMoreThumbnails() {
                 if (isLoading || !hasMoreData) return;
 
@@ -4049,6 +4210,16 @@ ${textContent}
                     };
                     
                     thumbnailItem.appendChild(img);
+                    
+                    // Add source indicator badge
+                    if (image.source) {
+                        const sourceBadge = document.createElement('div');
+                        sourceBadge.className = 'new-image-gallery-source-badge';
+                        sourceBadge.dataset.source = image.source;
+                        sourceBadge.textContent = _getSourceAbbreviation(image.source);
+                        thumbnailItem.appendChild(sourceBadge);
+                    }
+                    
                     thumbnailItem.addEventListener('click', () => _selectImage(actualIndex));
                     
                     // Update selection state if in select mode
@@ -4303,6 +4474,36 @@ ${textContent}
             let starRatingListenerAttached = false; // Flag to track if star rating listener is attached
 
             function _openImageDetailModal(image) {
+                // Check if source is Email - if so, navigate to Email Gallery instead
+                if (image.source === "Email" && image.source_reference) {
+                    const emailId = parseInt(image.source_reference);
+                    
+                    if (!isNaN(emailId)) {
+                        // Close Image Gallery modals
+                        DOM.newImageGalleryModal.style.display = 'none';
+                        DOM.newImageGalleryDetailModal.style.display = 'none';
+                        
+                        // Open Email Gallery and select the email
+                        Modals.EmailGallery.openAndSelectEmail(emailId);
+                        return; // Don't open image detail modal
+                    }
+                }
+                
+                // Check if source is Facebook Album - if so, navigate to Facebook Albums Gallery instead
+                if (image.source === "Facebook Album" && image.source_reference) {
+                    const albumId = image.source_reference;
+                    
+                    if (albumId) {
+                        // Close Image Gallery modals
+                        DOM.newImageGalleryModal.style.display = 'none';
+                        DOM.newImageGalleryDetailModal.style.display = 'none';
+                        
+                        // Open Facebook Albums Gallery and select the album
+                        Modals.FBAlbums.openAndSelectAlbum(albumId);
+                        return; // Don't open image detail modal
+                    }
+                }
+                
                 currentImageInModal = image;
                 
                 // Store original values for change detection
@@ -10464,6 +10665,126 @@ ${textContent}
     })();
 
     App.init();
+
+    // Copy Facebook Album Images button handler
+    const copyFacebookAlbumsBtn = document.getElementById('copy-facebook-albums-btn');
+    if (copyFacebookAlbumsBtn) {
+        copyFacebookAlbumsBtn.addEventListener('click', async () => {
+            const btn = document.getElementById('copy-facebook-albums-btn');
+            const statusDiv = document.getElementById('copy-facebook-albums-status');
+            const messageDiv = document.getElementById('copy-facebook-albums-status-message');
+            const detailsDiv = document.getElementById('copy-facebook-albums-status-details');
+            
+            btn.disabled = true;
+            statusDiv.style.display = 'block';
+            messageDiv.textContent = 'Copying Facebook album images...';
+            messageDiv.style.color = '#333';
+            detailsDiv.textContent = '';
+            
+            try {
+                const response = await fetch('/images/copy-facebook-albums', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.textContent = `Success: ${result.message}`;
+                    messageDiv.style.color = '#28a745';
+                    
+                    let detailsHtml = `
+                        <strong>Images copied:</strong> ${result.images_copied}<br>
+                        <strong>Images skipped:</strong> ${result.images_skipped}<br>
+                    `;
+                    
+                    if (result.errors > 0) {
+                        detailsHtml += `<strong style="color: #dc3545;">Errors:</strong> ${result.errors}<br>`;
+                    }
+                    
+                    if (result.error_messages && result.error_messages.length > 0) {
+                        detailsHtml += '<div style="margin-top: 10px; color: #dc3545;"><strong>Error details:</strong><ul style="margin: 5px 0; padding-left: 20px;">';
+                        result.error_messages.forEach(msg => {
+                            detailsHtml += `<li>${msg}</li>`;
+                        });
+                        detailsHtml += '</ul></div>';
+                    }
+                    
+                    detailsDiv.innerHTML = detailsHtml;
+                } else {
+                    messageDiv.textContent = `Error: ${result.detail || 'Unknown error'}`;
+                    messageDiv.style.color = '#dc3545';
+                    detailsDiv.textContent = '';
+                }
+            } catch (error) {
+                messageDiv.textContent = `Error: ${error.message}`;
+                messageDiv.style.color = '#dc3545';
+                detailsDiv.textContent = '';
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    }
+
+    // Copy Email Attachment Images button handler
+    const copyEmailAttachmentsBtn = document.getElementById('copy-email-attachments-btn');
+    if (copyEmailAttachmentsBtn) {
+        copyEmailAttachmentsBtn.addEventListener('click', async () => {
+            const btn = document.getElementById('copy-email-attachments-btn');
+            const statusDiv = document.getElementById('copy-email-attachments-status');
+            const messageDiv = document.getElementById('copy-email-attachments-status-message');
+            const detailsDiv = document.getElementById('copy-email-attachments-status-details');
+            
+            btn.disabled = true;
+            statusDiv.style.display = 'block';
+            messageDiv.textContent = 'Copying email attachment images...';
+            messageDiv.style.color = '#333';
+            detailsDiv.textContent = '';
+            
+            try {
+                const response = await fetch('/images/copy-email-attachments', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    messageDiv.textContent = `Success: ${result.message}`;
+                    messageDiv.style.color = '#28a745';
+                    
+                    let detailsHtml = `
+                        <strong>Images copied:</strong> ${result.images_copied}<br>
+                        <strong>Attachments skipped:</strong> ${result.images_skipped}<br>
+                    `;
+                    
+                    if (result.errors > 0) {
+                        detailsHtml += `<strong style="color: #dc3545;">Errors:</strong> ${result.errors}<br>`;
+                    }
+                    
+                    if (result.error_messages && result.error_messages.length > 0) {
+                        detailsHtml += '<div style="margin-top: 10px; color: #dc3545;"><strong>Error details:</strong><ul style="margin: 5px 0; padding-left: 20px;">';
+                        result.error_messages.forEach(msg => {
+                            detailsHtml += `<li>${msg}</li>`;
+                        });
+                        detailsHtml += '</ul></div>';
+                    }
+                    
+                    detailsDiv.innerHTML = detailsHtml;
+                } else {
+                    messageDiv.textContent = `Error: ${result.detail || 'Unknown error'}`;
+                    messageDiv.style.color = '#dc3545';
+                    detailsDiv.textContent = '';
+                }
+            } catch (error) {
+                messageDiv.textContent = `Error: ${error.message}`;
+                messageDiv.style.color = '#dc3545';
+                detailsDiv.textContent = '';
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    }
 
 });
 

@@ -28,6 +28,16 @@ except ImportError:
 from ..database import Database, Attachment, Email, IMessage, FacebookAlbum, FacebookAlbumImage, ReferenceDocument
 from ..database.models import ImageMetadata, ImageBlob
 from ..database.storage import EmailStorage, ImageStorage
+from ..services import ImageService, EmailService, ReferenceDocumentService, MessageService, ImportService
+from ..services.exceptions import ServiceException, ValidationError, NotFoundError, ConflictError
+from ..services.dto import (
+    ImageSearchFilters,
+    ImageMetadataUpdate,
+    FileData,
+    DocumentMetadata,
+    DocumentUpdate,
+    ChatSessionInfo
+)
 from ..loader import EmailDatabaseLoader
 from ..config import get_config
 from ..messageimport.imessageimport import import_imessages_from_directory
@@ -1048,65 +1058,65 @@ async def process_emails(
     """
     global processing_in_progress
     
-    # Check if processing is already in progress
-    with processing_lock:
-        if processing_in_progress:
-            raise HTTPException(
-                status_code=409,
-                detail="Email processing is already in progress. Please cancel it first or wait for it to complete."
-            )
+    # Create email service with state accessors
+    def get_state():
+        return processing_in_progress
     
-    # Determine which labels to process
-    labels_to_process = []
+    def set_state(value):
+        global processing_in_progress
+        processing_in_progress = value
     
-    if request.all_folders:
-        # Fetch all folders from the email server
-        try:
-            loader_instance = get_loader()
-            all_labels = loader_instance.client.get_labels()
-            # Extract label names, excluding system labels that shouldn't be processed
-            # (like CHAT, SENT, DRAFT, etc. - but we'll include all user labels)
-            labels_to_process = [label.get("name") for label in all_labels if label.get("name")]
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to retrieve folders from email server: {str(e)}"
-            )
-    elif request.labels:
-        labels_to_process = request.labels
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail="Either 'labels' must be provided or 'all_folders' must be set to true"
-        )
-    
-    if not labels_to_process:
-        raise HTTPException(
-            status_code=400,
-            detail="No labels found to process"
-        )
-    
-    result_dict = {"count": 0, "success": False}
-    
-    # Start background processing
-    background_tasks.add_task(
-        process_emails_background,
-        labels_to_process,
-        request.new_only,
-        result_dict
+    email_service = EmailService(
+        get_processing_state=get_state,
+        set_processing_state=set_state,
+        cancellation_event=processing_cancelled,
+        processing_lock=processing_lock
     )
     
-    labels_str = ", ".join(labels_to_process)
-    message = f"Processing emails from {len(labels_to_process)} label(s) started"
-    if request.all_folders:
-        message = f"Processing emails from all folders ({len(labels_to_process)} labels) started"
-    
-    return ProcessLabelResponse(
-        message=message,
-        labels=labels_to_process,
-        count=0,  # Will be updated in background
-        timestamp=datetime.now()
-    )
+    try:
+        # Check if processing can start
+        email_service.can_start_processing()
+        
+        # Determine which labels to process
+        loader_instance = get_loader() if request.all_folders else None
+        labels_to_process = email_service.determine_labels_to_process(
+            labels=request.labels,
+            all_folders=request.all_folders,
+            loader=loader_instance
+        )
+        
+        result_dict = {"count": 0, "success": False}
+        
+        # Start background processing
+        background_tasks.add_task(
+            process_emails_background,
+            labels_to_process,
+            request.new_only,
+            result_dict
+        )
+        
+        labels_str = ", ".join(labels_to_process)
+        message = f"Processing emails from {len(labels_to_process)} label(s) started"
+        if request.all_folders:
+            message = f"Processing emails from all folders ({len(labels_to_process)} labels) started"
+        
+        return ProcessLabelResponse(
+            message=message,
+            labels=labels_to_process,
+            count=0,  # Will be updated in background
+            timestamp=datetime.now()
+        )
+    except ConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ServiceException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing emails: {str(e)}"
+        )
 
 
 @app.post("/emails/process/cancel")
@@ -1118,20 +1128,36 @@ async def cancel_email_processing():
     """
     global processing_in_progress
     
-    with processing_lock:
-        if not processing_in_progress:
+    # Create email service with state accessors
+    def get_state():
+        return processing_in_progress
+    
+    def set_state(value):
+        global processing_in_progress
+        processing_in_progress = value
+    
+    email_service = EmailService(
+        get_processing_state=get_state,
+        set_processing_state=set_state,
+        cancellation_event=processing_cancelled,
+        processing_lock=processing_lock
+    )
+    
+    try:
+        cancelled = email_service.cancel_processing()
+        
+        if cancelled:
+            return {
+                "message": "Email processing cancellation requested. Processing will stop after current label completes.",
+                "cancelled": True
+            }
+        else:
             return {
                 "message": "No email processing is currently in progress",
                 "cancelled": False
             }
-        
-        # Set cancellation flag
-        processing_cancelled.set()
-        
-        return {
-            "message": "Email processing cancellation requested. Processing will stop after current label completes.",
-            "cancelled": True
-        }
+    except ServiceException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
 
 
 @app.get("/emails/process/status")
@@ -1267,21 +1293,46 @@ async def import_imessages(
     """
     global imessage_import_in_progress
     
-    # Check if import is already in progress
-    with imessage_import_lock:
-        if imessage_import_in_progress:
-            raise HTTPException(
-                status_code=409,
-                detail="iMessage import is already in progress. Please cancel it first or wait for it to complete."
-            )
+    # Create import service with state accessors
+    def get_import_state(import_type: str) -> bool:
+        if import_type == "imessage":
+            return imessage_import_in_progress
+        return False
     
-    # Validate directory exists
-    directory = Path(request.directory_path)
-    if not directory.exists() or not directory.is_dir():
-        raise HTTPException(
-            status_code=400,
-            detail=f"Directory does not exist or is not a directory: {request.directory_path}"
-        )
+    def set_import_state(import_type: str, value: bool):
+        global imessage_import_in_progress
+        if import_type == "imessage":
+            imessage_import_in_progress = value
+    
+    def get_cancellation_event(import_type: str):
+        if import_type == "imessage":
+            return imessage_import_cancelled
+        return None
+    
+    def get_import_lock(import_type: str):
+        if import_type == "imessage":
+            return imessage_import_lock
+        return None
+    
+    import_service = ImportService(
+        get_import_state=get_import_state,
+        set_import_state=set_import_state,
+        get_cancellation_event=get_cancellation_event,
+        get_import_lock=get_import_lock
+    )
+    
+    try:
+        # Check if import can start
+        import_service.can_start_import("imessage")
+        
+        # Validate directory
+        import_service.validate_import_directory(request.directory_path)
+    except ConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ServiceException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     
     result_dict = {
         "conversations_processed": 0,
@@ -1450,159 +1501,34 @@ async def get_chat_sessions():
     Returns:
         Dictionary with contacts_and_groups and other arrays
     """
-    session = db.get_session()
+    message_service = MessageService(db=db)
     try:
-        # Query distinct chat_session values with message counts, attachment counts, and service types
-        from sqlalchemy import func, case, text
-        try:
-            results = session.query(
-                IMessage.chat_session,
-                func.count(IMessage.id).label('message_count'),
-                func.sum(
-                    case((IMessage.attachment_data.isnot(None), 1), else_=0)
-                ).label('attachment_count'),
-                func.max(IMessage.service).label('primary_service'),
-                func.max(IMessage.message_date).label('last_message_date'),
-                func.count(case((IMessage.service.ilike('%iMessage%'), 1), else_=None)).label('imessage_count'),
-                func.count(case((IMessage.service.ilike('%SMS%'), 1), else_=None)).label('sms_count'),
-                func.count(case((IMessage.service == 'WhatsApp', 1), else_=None)).label('whatsapp_count'),
-                func.count(case((IMessage.service == 'Facebook Messenger', 1), else_=None)).label('facebook_count'),
-                func.count(case((IMessage.service == 'Instagram', 1), else_=None)).label('instagram_count')
-            ).filter(
-                IMessage.chat_session.isnot(None)
-            ).group_by(
-                IMessage.chat_session
-            ).order_by(
-                func.max(IMessage.message_date).desc()
-            ).all()
-        except Exception as table_error:
-            # If table doesn't exist or has wrong name, try querying the old table name directly
-            error_msg = str(table_error).lower()
-            if 'does not exist' in error_msg or 'relation' in error_msg or 'table' in error_msg:
-                # Try querying the old 'imessages' table name
-                try:
-                    results = session.execute(text("""
-                        SELECT 
-                            chat_session,
-                            COUNT(id) as message_count,
-                            SUM(CASE WHEN attachment_data IS NOT NULL THEN 1 ELSE 0 END) as attachment_count,
-                            MAX(service) as primary_service,
-                            MAX(message_date) as last_message_date,
-                            COUNT(CASE WHEN service ILIKE '%iMessage%' THEN 1 END) as imessage_count,
-                            COUNT(CASE WHEN service ILIKE '%SMS%' THEN 1 END) as sms_count,
-                            COUNT(CASE WHEN service = 'WhatsApp' THEN 1 END) as whatsapp_count,
-                            COUNT(CASE WHEN service = 'Facebook Messenger' THEN 1 END) as facebook_count,
-                            COUNT(CASE WHEN service = 'Instagram' THEN 1 END) as instagram_count
-                        FROM imessages
-                        WHERE chat_session IS NOT NULL
-                        GROUP BY chat_session
-                        ORDER BY MAX(message_date) DESC
-                    """)).fetchall()
-                except Exception:
-                    # If that also fails, return empty results
-                    results = []
-            else:
-                raise
+        result = message_service.get_chat_sessions()
         
-        import re
-        
-        def is_phone_number(chat_session: str) -> bool:
-            """Check if chat_session is primarily a phone number."""
-            if not chat_session:
-                return False
-            # Remove common separators and check if it's mostly digits
-            cleaned = re.sub(r'[\s\-\(\)]', '', chat_session)
-            # Check if it starts with + followed by digits, or is mostly digits
-            if cleaned.startswith('+'):
-                # Remove + and check if rest is digits
-                return cleaned[1:].isdigit() and len(cleaned[1:]) >= 7
-            # Check if it's mostly digits (at least 7 digits)
-            digit_count = sum(1 for c in cleaned if c.isdigit())
-            return digit_count >= 7 and len(cleaned) <= 20
-        
-        contacts_and_groups = []
-        other_sessions = []
-        
-        for result in results:
-            imessage_count = result[5] or 0
-            sms_count = result[6] or 0
-            whatsapp_count = result[7] or 0
-            facebook_count = result[8] if len(result) > 8 else 0
-            instagram_count = result[9] if len(result) > 9 else 0
-            total_count = result[1] or 0
-            last_message_date = result[4]
-            
-            # Determine message type: 'imessage', 'sms', 'whatsapp', 'facebook', 'instagram', or 'mixed'
-            non_zero_counts = sum([
-                1 if imessage_count > 0 else 0,
-                1 if sms_count > 0 else 0,
-                1 if whatsapp_count > 0 else 0,
-                1 if facebook_count > 0 else 0,
-                1 if instagram_count > 0 else 0
-            ])
-            
-            if non_zero_counts == 1:
-                # Only one service type
-                if imessage_count > 0:
-                    message_type = 'imessage'
-                elif sms_count > 0:
-                    message_type = 'sms'
-                elif whatsapp_count > 0:
-                    message_type = 'whatsapp'
-                elif facebook_count > 0:
-                    message_type = 'facebook'
-                elif instagram_count > 0:
-                    message_type = 'instagram'
+        # Convert ChatSessionInfo objects to dictionaries
+        def session_to_dict(session_info: ChatSessionInfo) -> dict:
+            last_date = None
+            if session_info.last_message_date:
+                if hasattr(session_info.last_message_date, 'isoformat'):
+                    last_date = session_info.last_message_date.isoformat()
                 else:
-                    message_type = 'sms'  # Default fallback
-            elif non_zero_counts > 1:
-                # Multiple service types
-                message_type = 'mixed'
-            else:
-                # Fallback to primary_service if available
-                primary_service = result[3] or ''
-                if 'iMessage' in primary_service:
-                    message_type = 'imessage'
-                elif 'WhatsApp' in primary_service:
-                    message_type = 'whatsapp'
-                elif 'Facebook Messenger' in primary_service:
-                    message_type = 'facebook'
-                elif 'Instagram' in primary_service:
-                    message_type = 'instagram'
-                elif 'SMS' in primary_service:
-                    message_type = 'sms'
-                else:
-                    message_type = 'sms'  # Default to SMS
+                    last_date = str(session_info.last_message_date)
             
-            # Format last_message_date
-            last_message_date_str = None
-            if last_message_date:
-                if hasattr(last_message_date, 'isoformat'):
-                    # datetime object
-                    last_message_date_str = last_message_date.isoformat()
-                else:
-                    # Already a string or other format
-                    last_message_date_str = str(last_message_date)
-            
-            session_data = {
-                "chat_session": result[0],
-                "message_count": result[1],
-                "has_attachments": (result[2] or 0) > 0,
-                "attachment_count": result[2] or 0,
-                "message_type": message_type,
-                "last_message_date": last_message_date_str
+            return {
+                "chat_session": session_info.chat_session,
+                "message_count": session_info.message_count,
+                "has_attachments": session_info.attachment_count > 0,
+                "attachment_count": session_info.attachment_count,
+                "message_type": session_info.message_type,
+                "last_message_date": last_date
             }
-            
-            # Categorize based on whether it's a phone number
-            if is_phone_number(result[0]):
-                other_sessions.append(session_data)
-            else:
-                contacts_and_groups.append(session_data)
         
         return {
-            "contacts_and_groups": contacts_and_groups,
-            "other": other_sessions
+            "contacts_and_groups": [session_to_dict(s) for s in result.contacts_and_groups],
+            "other": [session_to_dict(s) for s in result.other]
         }
+    except ServiceException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     except Exception as e:
         import traceback
         print(f"Error in get_chat_sessions: {e}")
@@ -1612,8 +1538,6 @@ async def get_chat_sessions():
             "contacts_and_groups": [],
             "other": []
         }
-    finally:
-        session.close()
 
 
 @app.get("/imessages/conversation/{chat_session}")
@@ -4175,122 +4099,43 @@ async def search_images(
     Returns:
         List of ImageMetadataResponse objects matching all specified criteria
     """
-    session = db.get_session()
+    image_service = ImageService(db=db)
     try:
-        # Start building query
-        query = session.query(ImageMetadata)
-        filters = []
+        # Build filters from query parameters
+        filters = ImageSearchFilters(
+            title=title,
+            description=description,
+            author=author,
+            tags=tags,
+            categories=categories,
+            source=source,
+            source_reference=source_reference,
+            image_type=image_type,
+            year=year,
+            month=month,
+            has_gps=has_gps,
+            rating=rating,
+            rating_min=rating_min,
+            rating_max=rating_max,
+            available_for_task=available_for_task,
+            processed=processed,
+            location_processed=location_processed,
+            image_processed=image_processed,
+            region=region
+        )
         
-        # Text field filters (partial match, case-insensitive)
-        if title:
-            filters.append(ImageMetadata.title.ilike(f"%{title}%"))
-        
-        if description:
-            filters.append(ImageMetadata.description.ilike(f"%{description}%"))
-        
-        if author:
-            filters.append(ImageMetadata.author.ilike(f"%{author}%"))
-        
-        if tags:
-            filters.append(ImageMetadata.tags.ilike(f"%{tags}%"))
-        
-        if categories:
-            filters.append(ImageMetadata.categories.ilike(f"%{categories}%"))
-        
-        if source:
-            filters.append(ImageMetadata.source.ilike(source))
-        
-        if source_reference:
-            filters.append(ImageMetadata.source_reference.ilike(f"%{source_reference}%"))
-        
-        if image_type:
-            filters.append(ImageMetadata.image_type.ilike(f"%{image_type}%"))
-        
-        if region:
-            filters.append(ImageMetadata.region.ilike(f"%{region}%"))
-        
-        # Numeric filters
-        if year is not None:
-            filters.append(ImageMetadata.year == year)
-        
-        if month is not None:
-            filters.append(ImageMetadata.month == month)
-        
-        # Rating filters
-        if rating is not None:
-            filters.append(ImageMetadata.rating == rating)
-        else:
-            if rating_min is not None:
-                filters.append(ImageMetadata.rating >= rating_min)
-            if rating_max is not None:
-                filters.append(ImageMetadata.rating <= rating_max)
-        
-        # Boolean filters
-        if has_gps is not None:
-            filters.append(ImageMetadata.has_gps == has_gps)
-        
-        if available_for_task is not None:
-            filters.append(ImageMetadata.available_for_task == available_for_task)
-        
-        if processed is not None:
-            filters.append(ImageMetadata.processed == processed)
-        
-        if location_processed is not None:
-            filters.append(ImageMetadata.location_processed == location_processed)
-        
-        if image_processed is not None:
-            filters.append(ImageMetadata.image_processed == image_processed)
-        
-        # Apply all filters with AND logic
-        if filters:
-            query = query.filter(and_(*filters))
-        
-        # Sort by created_at descending (newest first)
-        query = query.order_by(ImageMetadata.created_at.desc())
-        
-        # Execute query
-        images = query.all()
+        # Search images using service
+        images = image_service.search_images(filters)
         
         # Convert to response models
-        result = []
-        for img in images:
-            result.append(ImageMetadataResponse(
-                id=img.id,
-                image_blob_id=img.image_blob_id,
-                description=img.description,
-                title=img.title,
-                author=img.author,
-                tags=img.tags,
-                categories=img.categories,
-                notes=img.notes,
-                available_for_task=img.available_for_task,
-                image_type=img.image_type,
-                processed=img.processed,
-                location_processed=img.location_processed,
-                image_processed=img.image_processed,
-                created_at=img.created_at,
-                updated_at=img.updated_at,
-                year=img.year,
-                month=img.month,
-                latitude=img.latitude,
-                longitude=img.longitude,
-                altitude=img.altitude,
-                rating=img.rating,
-                has_gps=img.has_gps,
-                google_maps_url=img.google_maps_url,
-                region=img.region,
-                source=img.source,
-                source_reference=img.source_reference
-            ))
-        
-        return result
+        return [ImageMetadataResponse(**image_service.to_response_model(img)) for img in images]
+    except ServiceException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=f"Error searching images: {str(e)}"
         )
-    finally:
-        session.close()
 
 
 @app.get("/images/{image_id}")
@@ -4314,104 +4159,36 @@ async def get_image_content(
     Raises:
         HTTPException: 404 if image not found or has no content
     """
-    # Use shared database instance to avoid creating new connections
-    storage = ImageStorage(db=db)
-    
-    # Get image blob based on type
-    if type == "metadata":
-        image_blob = storage.get_image_by_metadata_id(image_id)
-    else:
-        image_blob = storage.get_image_by_blob_id(image_id)
-    
-    if not image_blob:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Image with ID {image_id} (type: {type}) not found"
+    image_service = ImageService(db=db)
+    try:
+        # Get image content using service
+        image_content = image_service.get_image_content(
+            image_id=image_id,
+            id_type=type,
+            preview=preview,
+            convert_heic=convert_heic_to_jpg
         )
-    
-    # Determine content
-    if preview:
-        content = image_blob.thumbnail_data
-        if content is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Image with ID {image_id} has no thumbnail available"
-            )
-        content_type = "image/jpeg"  # Thumbnails are always JPEG
-        filename = "image_thumb.jpg"
-    else:
-        content = image_blob.image_data
-        if content is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Image with ID {image_id} has no image data"
-            )
-        # Get content type from metadata using a single optimized query
-        session = db.get_session()
-        try:
-            if type == "metadata":
-                # We already know the metadata ID, so query directly
-                metadata = session.query(ImageMetadata).filter(
-                    ImageMetadata.id == image_id
-                ).first()
-            else:
-                # Query metadata by blob_id
-                metadata = session.query(ImageMetadata).filter(
-                    ImageMetadata.image_blob_id == image_blob.id
-                ).first()
-            
-            if metadata and metadata.image_type:
-                content_type = metadata.image_type
-            else:
-                content_type = "image/jpeg"  # Default
-            filename = metadata.source_reference.split(os.sep)[-1] if metadata and metadata.source_reference else "image"
-        finally:
-            session.close()
         
-        # Convert HEIC to JPG if requested
-        if convert_heic_to_jpg and content_type and content_type.lower() in ('image/heic', 'image/heif'):
-            try:
-                # Open the HEIC image
-                img = Image.open(BytesIO(content))
-                
-                # Convert to RGB if necessary
-                if img.mode in ("RGBA", "LA", "P"):
-                    background = Image.new("RGB", img.size, (255, 255, 255))
-                    if img.mode == "P":
-                        img = img.convert("RGBA")
-                    background.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
-                    img = background
-                elif img.mode != "RGB":
-                    img = img.convert("RGB")
-                
-                # Convert to JPEG bytes
-                jpg_bytes = BytesIO()
-                img.save(jpg_bytes, format="JPEG", quality=95)
-                jpg_bytes.seek(0)
-                content = jpg_bytes.getvalue()
-                
-                # Update content type and filename
-                content_type = "image/jpeg"
-                if filename and filename.lower().endswith(('.heic', '.heif')):
-                    filename = os.path.splitext(filename)[0] + '.jpg'
-                else:
-                    filename = "image.jpg"
-            except Exception as e:
-                # If conversion fails, return original image with a warning
-                # In production, you might want to log this error
-                pass  # Fall through to return original content
-    
-    # Set Content-Disposition header
-    safe_filename = filename.replace('"', '\\"')
-    headers = {
-        "Content-Disposition": f'inline; filename="{safe_filename}"'
-    }
-    
-    return Response(
-        content=content,
-        media_type=content_type,
-        headers=headers
-    )
+        # Set Content-Disposition header
+        safe_filename = image_content.filename.replace('"', '\\"')
+        headers = {
+            "Content-Disposition": f'inline; filename="{safe_filename}"'
+        }
+        
+        return Response(
+            content=image_content.content,
+            media_type=image_content.content_type,
+            headers=headers
+        )
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ServiceException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving image: {str(e)}"
+        )
 
 
 @app.put("/images/bulk-update")
@@ -4429,69 +4206,104 @@ async def bulk_update_images(update_data: Dict[str, Any]):
     Raises:
         HTTPException: 400 if validation fails
     """
-    storage = ImageStorage(db=db)
+    image_service = ImageService(db=db)
     try:
         image_ids = update_data.get("image_ids", [])
         tags = update_data.get("tags")
         
-        if not image_ids or not isinstance(image_ids, list):
-            raise HTTPException(
-                status_code=400,
-                detail="image_ids must be a non-empty list"
-            )
-        
-        if not tags or not isinstance(tags, str) or not tags.strip():
-            raise HTTPException(
-                status_code=400,
-                detail="tags must be a non-empty string"
-            )
-        
-        updated_count = 0
-        errors = []
-        
-        # Get existing tags for all images in one query
-        session = db.get_session()
-        try:
-            metadata_list = session.query(ImageMetadata).filter(ImageMetadata.id.in_(image_ids)).all()
-            metadata_dict = {m.id: m for m in metadata_list}
-        finally:
-            session.close()
-        
-        # Update each image
-        for image_id in image_ids:
-            try:
-                metadata = metadata_dict.get(image_id)
-                if metadata:
-                    # Merge tags: append new tags to existing ones
-                    existing_tags = metadata.tags or ''
-                    if existing_tags:
-                        new_tags = f"{existing_tags}, {tags.strip()}"
-                    else:
-                        new_tags = tags.strip()
-                    
-                    # Update using the storage method
-                    updated = storage.update_image_metadata(
-                        metadata_id=image_id,
-                        tags=new_tags
-                    )
-                    if updated:
-                        updated_count += 1
-                else:
-                    errors.append(f"Image {image_id} not found")
-            except Exception as e:
-                errors.append(f"Error updating image {image_id}: {str(e)}")
+        # Bulk update using service
+        result = image_service.bulk_update_tags(image_ids, tags)
         
         return {
-            "message": f"Updated {updated_count} image(s)",
-            "updated_count": updated_count,
-            "errors": errors if errors else None
+            "message": f"Updated {result.updated_count} image(s)",
+            "updated_count": result.updated_count,
+            "errors": result.errors
         }
-    except HTTPException:
-        raise
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ServiceException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=f"Error bulk updating images: {str(e)}"
+        )
+
+
+@app.post("/images/copy-facebook-albums")
+async def copy_facebook_album_images(
+    album_id: Optional[int] = Query(None, description="Optional album ID to filter by. If not provided, copies from all albums.")
+):
+    """Copy Facebook album images into the main image table.
+    
+    Args:
+        album_id: Optional album ID to filter by. If None, copies from all albums.
+        
+    Returns:
+        Dictionary with statistics about the copy operation
+        
+    Raises:
+        HTTPException: 500 if an error occurs during processing
+    """
+    image_service = ImageService(db=db)
+    try:
+        result = image_service.copy_facebook_album_images(album_id=album_id)
+        
+        message = f"Successfully copied {result['images_copied']} image(s)"
+        if result['images_skipped'] > 0:
+            message += f", skipped {result['images_skipped']} image(s) without data"
+        if result['errors'] > 0:
+            message += f", encountered {result['errors']} error(s)"
+        
+        return {
+            "message": message,
+            "images_copied": result['images_copied'],
+            "images_skipped": result['images_skipped'],
+            "errors": result['errors'],
+            "error_messages": result.get('error_messages')
+        }
+    except ServiceException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error copying Facebook album images: {str(e)}"
+        )
+
+
+@app.post("/images/copy-email-attachments")
+async def copy_email_attachment_images():
+    """Copy email attachment images into the main image table.
+    
+    Returns:
+        Dictionary with statistics about the copy operation
+        
+    Raises:
+        HTTPException: 500 if an error occurs during processing
+    """
+    image_service = ImageService(db=db)
+    try:
+        result = image_service.copy_email_attachment_images()
+        
+        message = f"Successfully copied {result['images_copied']} image(s)"
+        if result['images_skipped'] > 0:
+            message += f", skipped {result['images_skipped']} attachment(s) without data or not images"
+        if result['errors'] > 0:
+            message += f", encountered {result['errors']} error(s)"
+        
+        return {
+            "message": message,
+            "images_copied": result['images_copied'],
+            "images_skipped": result['images_skipped'],
+            "errors": result['errors'],
+            "error_messages": result.get('error_messages')
+        }
+    except ServiceException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error copying email attachment images: {str(e)}"
         )
 
 
@@ -4509,43 +4321,33 @@ async def update_image_metadata(image_id: int, update_data: Dict[str, Any]):
     Raises:
         HTTPException: 404 if image not found, 400 if validation fails
     """
-    storage = ImageStorage(db=db)
+    image_service = ImageService(db=db)
     try:
         # Extract allowed fields
-        description = update_data.get("description")
-        tags = update_data.get("tags")
-        rating = update_data.get("rating")
-        
-        # Update metadata
-        updated_metadata = storage.update_image_metadata(
-            metadata_id=image_id,
-            description=description,
-            tags=tags,
-            rating=rating
+        updates = ImageMetadataUpdate(
+            description=update_data.get("description"),
+            tags=update_data.get("tags"),
+            rating=update_data.get("rating")
         )
         
-        if not updated_metadata:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Image with metadata ID {image_id} not found"
-            )
+        # Update metadata using service
+        updated_metadata = image_service.update_image_metadata(image_id, updates)
         
         return {
             "message": f"Image {image_id} updated successfully",
             "image_id": image_id,
             "updated_fields": {
-                "description": description is not None,
-                "tags": tags is not None,
-                "rating": rating is not None
+                "description": updates.description is not None,
+                "tags": updates.tags is not None,
+                "rating": updates.rating is not None
             }
         }
-    except ValueError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=str(e)
-        )
-    except HTTPException:
-        raise
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ServiceException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -4567,36 +4369,22 @@ async def bulk_delete_images(delete_data: Dict[str, Any]):
     Raises:
         HTTPException: 400 if validation fails
     """
-    storage = ImageStorage(db=db)
+    image_service = ImageService(db=db)
     try:
         image_ids = delete_data.get("image_ids", [])
         
-        if not image_ids or not isinstance(image_ids, list):
-            raise HTTPException(
-                status_code=400,
-                detail="image_ids must be a non-empty list"
-            )
-        
-        deleted_count = 0
-        errors = []
-        
-        for image_id in image_ids:
-            try:
-                deleted = storage.delete_image_by_metadata_id(image_id)
-                if deleted:
-                    deleted_count += 1
-                else:
-                    errors.append(f"Image {image_id} not found")
-            except Exception as e:
-                errors.append(f"Error deleting image {image_id}: {str(e)}")
+        # Bulk delete using service
+        result = image_service.bulk_delete_images(image_ids)
         
         return {
-            "message": f"Deleted {deleted_count} image(s)",
-            "deleted_count": deleted_count,
-            "errors": errors if errors else None
+            "message": f"Deleted {result.deleted_count} image(s)",
+            "deleted_count": result.deleted_count,
+            "errors": result.errors
         }
-    except HTTPException:
-        raise
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ServiceException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -4967,89 +4755,44 @@ async def create_reference_document(
     Raises:
         HTTPException: 400 if file is invalid or empty
     """
-    # Validate file
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No file provided")
+    doc_service = ReferenceDocumentService(db=db)
     
-    # Read file content
-    file_content = await file.read()
-    if not file_content:
-        raise HTTPException(status_code=400, detail="File is empty")
-    
-    # Get content type
-    content_type = file.content_type or "application/octet-stream"
-    
-    # Validate file type (documents and images)
-    allowed_types = [
-        "application/pdf",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.ms-excel",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "application/vnd.ms-powerpoint",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "text/plain",
-        "text/csv",
-        "application/json",
-        "image/jpeg",
-        "image/png",
-        "image/gif",
-        "image/bmp",
-        "image/webp"
-    ]
-    
-    if content_type not in allowed_types:
-        # Try to guess from filename
-        import mimetypes
-        guessed_type, _ = mimetypes.guess_type(file.filename)
-        if guessed_type and guessed_type in allowed_types:
-            content_type = guessed_type
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File type {content_type} not allowed. Allowed types: documents and images."
-            )
-    
-    session = db.get_session()
     try:
-        document = ReferenceDocument(
+        # Read file content
+        file_content = await file.read()
+        
+        # Validate file
+        validation_result = doc_service.validate_file(file, file_content)
+        
+        # Prepare file data and metadata
+        file_data = FileData(
             filename=file.filename,
+            content=file_content,
+            content_type=validation_result.content_type,
+            size=len(file_content)
+        )
+        
+        metadata = DocumentMetadata(
             title=title,
             description=description,
             author=author,
-            content_type=content_type,
-            size=len(file_content),
-            data=file_content,
             tags=tags,
             categories=categories,
             notes=notes,
             available_for_task=available_for_task
         )
         
-        session.add(document)
-        session.commit()
-        session.refresh(document)
+        # Create document
+        document = doc_service.create_document(file_data, metadata)
         
-        return ReferenceDocumentResponse(
-            id=document.id,
-            filename=document.filename,
-            title=document.title,
-            description=document.description,
-            author=document.author,
-            content_type=document.content_type,
-            size=document.size,
-            tags=document.tags,
-            categories=document.categories,
-            notes=document.notes,
-            available_for_task=document.available_for_task,
-            created_at=document.created_at,
-            updated_at=document.updated_at
-        )
+        # Convert to response model
+        return ReferenceDocumentResponse(**doc_service.to_response_model(document))
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ServiceException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     except Exception as e:
-        session.rollback()
         raise HTTPException(status_code=500, detail=f"Error creating document: {str(e)}")
-    finally:
-        session.close()
 
 
 @app.put("/reference-documents/{document_id}", response_model=ReferenceDocumentResponse)
@@ -5069,59 +4812,31 @@ async def update_reference_document(
     Raises:
         HTTPException: 404 if document not found
     """
-    session = db.get_session()
+    doc_service = ReferenceDocumentService(db=db)
+    
     try:
-        document = session.query(ReferenceDocument).filter(ReferenceDocument.id == document_id).first()
-        
-        if not document:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Reference document with ID {document_id} not found"
-            )
-        
-        # Update fields if provided
-        if update_data.title is not None:
-            document.title = update_data.title
-        if update_data.description is not None:
-            document.description = update_data.description
-        if update_data.author is not None:
-            document.author = update_data.author
-        if update_data.tags is not None:
-            document.tags = update_data.tags
-        if update_data.categories is not None:
-            document.categories = update_data.categories
-        if update_data.notes is not None:
-            document.notes = update_data.notes
-        if update_data.available_for_task is not None:
-            document.available_for_task = update_data.available_for_task
-        
-        document.updated_at = datetime.utcnow()
-        
-        session.commit()
-        session.refresh(document)
-        
-        return ReferenceDocumentResponse(
-            id=document.id,
-            filename=document.filename,
-            title=document.title,
-            description=document.description,
-            author=document.author,
-            content_type=document.content_type,
-            size=document.size,
-            tags=document.tags,
-            categories=document.categories,
-            notes=document.notes,
-            available_for_task=document.available_for_task,
-            created_at=document.created_at,
-            updated_at=document.updated_at
+        # Convert request to DTO
+        updates = DocumentUpdate(
+            title=update_data.title,
+            description=update_data.description,
+            author=update_data.author,
+            tags=update_data.tags,
+            categories=update_data.categories,
+            notes=update_data.notes,
+            available_for_task=update_data.available_for_task
         )
-    except HTTPException:
-        raise
+        
+        # Update document using service
+        document = doc_service.update_document(document_id, updates)
+        
+        # Convert to response model
+        return ReferenceDocumentResponse(**doc_service.to_response_model(document))
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ServiceException as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     except Exception as e:
-        session.rollback()
         raise HTTPException(status_code=500, detail=f"Error updating document: {str(e)}")
-    finally:
-        session.close()
 
 
 @app.delete("/reference-documents/{document_id}")

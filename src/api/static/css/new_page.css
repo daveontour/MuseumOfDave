@@ -3118,9 +3118,50 @@ body {
     align-items: center;
     justify-content: center;
     font-size: 14px;
-    font-weight: bold;
-    z-index: 3;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    z-index: 10;
+}
+
+/* Source indicator badge */
+.new-image-gallery-source-badge {
+    position: absolute;
+    bottom: 5px;
+    left: 5px;
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.2;
+    z-index: 5;
+    pointer-events: none;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Different colors for different sources */
+.new-image-gallery-source-badge[data-source="Email"] {
+    background-color: rgba(74, 144, 226, 0.9);
+}
+
+.new-image-gallery-source-badge[data-source="Facebook Album"] {
+    background-color: rgba(24, 119, 242, 0.9);
+}
+
+.new-image-gallery-source-badge[data-source="Filesystem"] {
+    background-color: rgba(108, 117, 125, 0.9);
+}
+
+.new-image-gallery-source-badge[data-source="Instagram"] {
+    background-color: rgba(225, 48, 108, 0.9);
+}
+
+.new-image-gallery-source-badge[data-source="WhatsApp"] {
+    background-color: rgba(37, 211, 102, 0.9);
+}
+
+.new-image-gallery-source-badge[data-source="iMessage"] {
+    background-color: rgba(0, 122, 255, 0.9);
 }
 
 .new-image-gallery-select-mode-toggle {
