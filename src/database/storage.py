@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from .connection import Database
-from .models import Email, Attachment, IMessage, FacebookAlbum, FacebookAlbumImage, ImageMetadata, ImageBlob
+from .models import Email, IMessage, FacebookAlbum, FacebookAlbumImage, MediaMetadata, MediaBlob, MessageAttachment
 
 
 class EmailStorage:
@@ -94,21 +94,54 @@ class EmailStorage:
             # Save attachments
             has_saved_attachments = False
             if attachments:
-                # Delete existing attachments if updating
+                # Delete existing media items for this email if updating
                 if existing:
-                    session.query(Attachment).filter(Attachment.email_id == email.id).delete()
+                    session.query(MediaMetadata).filter(
+                        MediaMetadata.source == "email_attachment",
+                        MediaMetadata.source_reference == str(email.id)
+                    ).delete()
 
                 for att_data in attachments:
-                    attachment = Attachment(
-                        email_id=email.id,
-                        filename=att_data.get("filename"),
-                        content_type=att_data.get("mimeType") or att_data.get("content_type"),
-                        size=att_data.get("size"),
-                        data=att_data.get("data"),  # Should already be bytes from loader
-                        image_thumbnail=att_data.get("thumbnail"),  # Thumbnail if image
-                    )
-                    session.add(attachment)
-                    has_saved_attachments = True
+                    attachment_data = att_data.get("data")
+                    thumbnail_data = att_data.get("thumbnail")
+                    content_type = att_data.get("mimeType") or att_data.get("content_type")
+                    
+                    # Create MediaBlob and MediaItem entries for unified media system
+                    if attachment_data is not None:
+                        try:
+                            # Create MediaBlob
+                            media_blob = MediaBlob(
+                                image_data=attachment_data,
+                                thumbnail_data=thumbnail_data
+                            )
+                            session.add(media_blob)
+                            session.flush()  # Get blob ID
+                            
+                            # Extract year and month from email date if available
+                            year = None
+                            month = None
+                            if email.date:
+                                if isinstance(email.date, datetime):
+                                    year = email.date.year
+                                    month = email.date.month
+                            
+                            # Create MediaItem with source="email_attachment" and source_reference=email.id
+                            media_item = MediaMetadata(
+                                media_blob_id=media_blob.id,
+                                source="email_attachment",
+                                source_reference=str(email.id),  # Email ID as string in source_reference
+                                title=att_data.get("filename"),  # Use filename as title
+                                description=email.snippet,  # Use email snippet as description
+                                tags=email.subject,  # Use email subject as tags
+                                media_type=content_type,  # Store all content types (images, PDFs, etc.)
+                                year=year,
+                                month=month
+                            )
+                            session.add(media_item)
+                            has_saved_attachments = True
+                        except Exception as e:
+                            # Log error but don't fail the attachment save
+                            print(f"Warning: Could not create unified media entry for email attachment: {e}")
 
             # Set has_attachments flag - True only if attachments passed filter and were saved
             email.has_attachments = has_saved_attachments
@@ -143,8 +176,14 @@ class IMessageStorage:
         self,
         message_data: Dict[str, Any],
         attachment_data: Optional[bytes] = None,
+        attachment_filename: Optional[str] = None,
+        attachment_type: Optional[str] = None,
+        source: Optional[str] = None
     ) -> Tuple[IMessage, bool]:
         """Save iMessage to database. Updates existing message if found, otherwise creates new one.
+        
+        If attachment_data is provided, it will be saved to media_blob/media_items tables
+        and linked via MessageAttachment junction table.
         
         A message is considered duplicate if it has the same:
         - chat_session
@@ -176,10 +215,10 @@ class IMessageStorage:
                 existing.replying_to = message_data.get("replying_to")
                 existing.subject = message_data.get("subject")
                 existing.text = message_data.get("text")
-                existing.attachment_filename = message_data.get("attachment_filename")
-                existing.attachment_type = message_data.get("attachment_type")
-                if attachment_data is not None:
-                    existing.attachment_data = attachment_data
+                
+                # Delete existing message attachments if updating
+                session.query(MessageAttachment).filter(MessageAttachment.message_id == existing.id).delete()
+                
                 imessage = existing
                 is_update = True
             else:
@@ -198,12 +237,63 @@ class IMessageStorage:
                     replying_to=message_data.get("replying_to"),
                     subject=message_data.get("subject"),
                     text=message_data.get("text"),
-                    attachment_filename=message_data.get("attachment_filename"),
-                    attachment_type=message_data.get("attachment_type"),
-                    attachment_data=attachment_data,
                 )
                 session.add(imessage)
+                session.flush()  # Get message ID
                 is_update = False
+            
+            # Handle attachment if provided
+            if attachment_data is not None:
+                try:
+                    # Create thumbnail if it's an image
+                    thumbnail_data = None
+                    if attachment_type and attachment_type.startswith('image/'):
+                        try:
+                            from ..imageimport.filesystemimport import create_thumbnail
+                            thumbnail_data = create_thumbnail(attachment_data)
+                        except Exception as e:
+                            print(f"Warning: Could not create thumbnail for message attachment: {e}")
+                    
+                    # Create MediaBlob
+                    media_blob = MediaBlob(
+                        image_data=attachment_data,
+                        thumbnail_data=thumbnail_data
+                    )
+                    session.add(media_blob)
+                    session.flush()  # Get blob ID
+                    
+                    # Extract year and month from message date if available
+                    year = None
+                    month = None
+                    message_date = message_data.get("message_date")
+                    if message_date:
+                        if isinstance(message_date, datetime):
+                            year = message_date.year
+                            month = message_date.month
+                    
+                    if source == None:
+                        source = "message_attachment"
+                    # Create MediaMetadata entry
+                    media_item = MediaMetadata(
+                        media_blob_id=media_blob.id,
+                        source=source,
+                        source_reference=str(imessage.id),
+                        title=attachment_filename,
+                        media_type=attachment_type,
+                        year=year,
+                        month=month
+                    )
+                    session.add(media_item)
+                    session.flush()  # Get media_item ID
+                    
+                    # Create MessageAttachment junction entry
+                    message_attachment = MessageAttachment(
+                        message_id=imessage.id,
+                        media_item_id=media_item.id
+                    )
+                    session.add(message_attachment)
+                except Exception as e:
+                    print(f"Warning: Could not create unified media entry for message attachment: {e}")
             
             session.commit()
             return (imessage, is_update)
@@ -294,7 +384,7 @@ class FacebookAlbumStorage:
                 title=title,
                 description=description,
                 image_data=image_data,
-                image_type=image_type,
+                media_type=image_type,
             )
             session.add(image)
             session.flush()  # Flush to ensure data is written
@@ -332,7 +422,7 @@ class ImageStorage:
         source_reference: str,
         image_data: bytes,
         thumbnail_data: Optional[bytes] = None,
-        image_type: Optional[str] = None,
+        media_type: Optional[str] = None,
         title: Optional[str] = None,
         description: Optional[str] = None,
         tags: Optional[str] = None,
@@ -344,14 +434,14 @@ class ImageStorage:
         has_gps: bool = False,
         source: str = "Filesystem",
         **kwargs
-    ) -> Tuple[ImageMetadata, bool]:
+    ) -> Tuple[MediaMetadata, bool]:
         """Save or update image with metadata.
         
         Args:
             source_reference: Full file path (used for duplicate detection)
             image_data: Binary image data
             thumbnail_data: Optional thumbnail binary data
-            image_type: MIME type of image
+            media_type: MIME type of media (image, PDF, etc.)
             title: Image title
             description: Image description
             tags: Comma-separated tags
@@ -365,21 +455,21 @@ class ImageStorage:
             **kwargs: Additional metadata fields
             
         Returns:
-            Tuple of (ImageMetadata instance, is_update: bool)
+            Tuple of (MediaMetadata instance, is_update: bool)
         """
         session = self.db.get_session()
         try:
             # Check for existing image by source_reference
-            existing_metadata = session.query(ImageMetadata).filter(
-                ImageMetadata.source_reference == source_reference
+            existing_metadata = session.query(MediaMetadata).filter(
+                MediaMetadata.source_reference == source_reference
             ).first()
             
             if existing_metadata:
                 # Update existing image
                 is_update = True
-                # Update ImageBlob
-                existing_blob = session.query(ImageBlob).filter(
-                    ImageBlob.id == existing_metadata.image_blob_id
+                # Update MediaBlob
+                existing_blob = session.query(MediaBlob).filter(
+                    MediaBlob.id == existing_metadata.media_blob_id
                 ).first()
                 
                 if existing_blob:
@@ -388,11 +478,11 @@ class ImageStorage:
                         existing_blob.thumbnail_data = thumbnail_data
                     existing_blob.updated_at = datetime.utcnow()
                 
-                # Update ImageMetadata
+                # Update MediaMetadata
                 existing_metadata.title = title
                 existing_metadata.description = description
                 existing_metadata.tags = tags
-                existing_metadata.image_type = image_type
+                existing_metadata.media_type = media_type
                 existing_metadata.year = year
                 existing_metadata.month = month
                 existing_metadata.latitude = latitude
@@ -413,21 +503,21 @@ class ImageStorage:
             else:
                 # Create new image
                 is_update = False
-                # Create ImageBlob first
-                image_blob = ImageBlob(
+                # Create MediaBlob first
+                media_blob = MediaBlob(
                     image_data=image_data,
                     thumbnail_data=thumbnail_data
                 )
-                session.add(image_blob)
+                session.add(media_blob)
                 session.flush()  # Get the blob ID
                 
-                # Create ImageMetadata
-                image_metadata = ImageMetadata(
-                    image_blob_id=image_blob.id,
+                # Create MediaMetadata
+                media_metadata = MediaMetadata(
+                    media_blob_id=media_blob.id,
                     title=title,
                     description=description,
                     tags=tags,
-                    image_type=image_type,
+                    media_type=media_type,
                     year=year,
                     month=month,
                     latitude=latitude,
@@ -438,80 +528,80 @@ class ImageStorage:
                     source_reference=source_reference,
                     **kwargs
                 )
-                session.add(image_metadata)
+                session.add(media_metadata)
                 session.commit()
                 
-                return (image_metadata, is_update)
+                return (media_metadata, is_update)
         except Exception:
             session.rollback()
             raise
         finally:
             session.close()
 
-    def get_image_by_blob_id(self, blob_id: int) -> Optional[ImageBlob]:
+    def get_image_by_blob_id(self, blob_id: int) -> Optional[MediaBlob]:
         """Retrieve image by blob ID.
         
         Args:
-            blob_id: The ID of the ImageBlob
+            blob_id: The ID of the MediaBlob
             
         Returns:
-            ImageBlob instance or None if not found
+            MediaBlob instance or None if not found
         """
         session = self.db.get_session()
         try:
-            image_blob = session.query(ImageBlob).filter(ImageBlob.id == blob_id).first()
-            if image_blob:
+            media_blob = session.query(MediaBlob).filter(MediaBlob.id == blob_id).first()
+            if media_blob:
                 # Detach the object from the session to avoid session management issues
-                session.expunge(image_blob)
-            return image_blob
+                session.expunge(media_blob)
+            return media_blob
         finally:
             session.close()
 
-    def get_image_by_metadata_id(self, metadata_id: int) -> Optional[ImageBlob]:
+    def get_image_by_metadata_id(self, metadata_id: int) -> Optional[MediaBlob]:
         """Retrieve image by metadata ID.
         
         Args:
-            metadata_id: The ID of the ImageMetadata
+            metadata_id: The ID of the MediaMetadata
             
         Returns:
-            ImageBlob instance or None if not found
+            MediaBlob instance or None if not found
         """
         session = self.db.get_session()
         try:
-            metadata = session.query(ImageMetadata).filter(ImageMetadata.id == metadata_id).first()
+            metadata = session.query(MediaMetadata).filter(MediaMetadata.id == metadata_id).first()
             if metadata:
-                image_blob = session.query(ImageBlob).filter(ImageBlob.id == metadata.image_blob_id).first()
-                if image_blob:
+                media_blob = session.query(MediaBlob).filter(MediaBlob.id == metadata.media_blob_id).first()
+                if media_blob:
                     # Detach the object from the session to avoid session management issues
-                    session.expunge(image_blob)
-                return image_blob
+                    session.expunge(media_blob)
+                return media_blob
             return None
         finally:
             session.close()
     
-    def update_image_metadata(
+    def update_media_metadata(
         self,
         metadata_id: int,
         description: Optional[str] = None,
         tags: Optional[str] = None,
         rating: Optional[int] = None,
         **kwargs
-    ) -> Optional[ImageMetadata]:
+    ) -> Optional[MediaMetadata]:
         """Update image metadata fields.
         
         Args:
-            metadata_id: The ID of the ImageMetadata to update
+            metadata_id: The ID of the MediaMetadata to update
             description: Optional description to update
             tags: Optional tags to update
             rating: Optional rating to update (1-5)
             **kwargs: Additional metadata fields to update
             
         Returns:
-            Updated ImageMetadata instance or None if not found
+            Updated MediaMetadata instance or None if not found
         """
         session = self.db.get_session()
         try:
-            metadata = session.query(ImageMetadata).filter(ImageMetadata.id == metadata_id).first()
+            metadata = session.query(MediaMetadata).filter(MediaMetadata.id == metadata_id).first()
             if not metadata:
                 return None
             
@@ -544,10 +634,10 @@ class ImageStorage:
             session.close()
     
     def delete_image_by_metadata_id(self, metadata_id: int) -> bool:
-        """Delete an image by metadata ID, ensuring cascade deletion of ImageBlob.
+        """Delete an image by metadata ID, ensuring cascade deletion of MediaBlob.
         
         Args:
-            metadata_id: The ID of the ImageMetadata to delete
+            metadata_id: The ID of the MediaMetadata to delete
             
         Returns:
             True if deleted, False if not found
@@ -555,13 +645,13 @@ class ImageStorage:
         session = self.db.get_session()
         try:
             # Load the metadata with the relationship to ensure cascade works
-            metadata = session.query(ImageMetadata).filter(ImageMetadata.id == metadata_id).first()
+            metadata = session.query(MediaMetadata).filter(MediaMetadata.id == metadata_id).first()
             if not metadata:
                 return False
             
-            # Delete the metadata - this should cascade delete the ImageBlob
+            # Delete the metadata - this should cascade delete the MediaBlob
             # We need to explicitly load the relationship for cascade to work
-            _ = metadata.image_blob  # Load the relationship
+            _ = metadata.media_blob  # Load the relationship
             session.delete(metadata)
             session.commit()
             return True

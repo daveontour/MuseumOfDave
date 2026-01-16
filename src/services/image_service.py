@@ -10,13 +10,13 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from ..database import Database
-from ..database.models import ImageMetadata, ImageBlob, FacebookAlbumImage, FacebookAlbum, Attachment, Email
+from ..database.models import MediaMetadata, MediaBlob, FacebookAlbumImage, FacebookAlbum, Attachment, Email
 from ..database.storage import ImageStorage
 from .exceptions import NotFoundError, ValidationError
 from ..imageimport.filesystemimport import create_thumbnail
 from .dto import (
     ImageSearchFilters,
-    ImageMetadataUpdate,
+    MediaMetadataUpdate,
     BulkUpdateResult,
     BulkDeleteResult,
     ImageContent,
@@ -39,87 +39,89 @@ class ImageService:
         self.db = db
         self.storage = ImageStorage(db=db)
 
-    def search_images(self, filters: ImageSearchFilters) -> List[ImageMetadata]:
+    def search_images(self, filters: ImageSearchFilters) -> List[MediaMetadata]:
         """Search images by metadata criteria.
         
         Args:
             filters: ImageSearchFilters with search criteria
             
         Returns:
-            List of ImageMetadata objects matching criteria
+            List of MediaMetadata objects matching criteria
         """
         session = self.db.get_session()
         try:
             # Start building query
-            query = session.query(ImageMetadata)
+            query = session.query(MediaMetadata)
             filter_list = []
             
             # Text field filters (partial match, case-insensitive)
             if filters.title:
-                filter_list.append(ImageMetadata.title.ilike(f"%{filters.title}%"))
+                filter_list.append(MediaMetadata.title.ilike(f"%{filters.title}%"))
             
             if filters.description:
-                filter_list.append(ImageMetadata.description.ilike(f"%{filters.description}%"))
+                filter_list.append(MediaMetadata.description.ilike(f"%{filters.description}%"))
             
             if filters.author:
-                filter_list.append(ImageMetadata.author.ilike(f"%{filters.author}%"))
+                filter_list.append(MediaMetadata.author.ilike(f"%{filters.author}%"))
             
             if filters.tags:
-                filter_list.append(ImageMetadata.tags.ilike(f"%{filters.tags}%"))
+                filter_list.append(MediaMetadata.tags.ilike(f"%{filters.tags}%"))
             
             if filters.categories:
-                filter_list.append(ImageMetadata.categories.ilike(f"%{filters.categories}%"))
+                filter_list.append(MediaMetadata.categories.ilike(f"%{filters.categories}%"))
             
             if filters.source:
-                filter_list.append(ImageMetadata.source.ilike(filters.source))
+                filter_list.append(MediaMetadata.source.ilike(filters.source))
             
             if filters.source_reference:
-                filter_list.append(ImageMetadata.source_reference.ilike(f"%{filters.source_reference}%"))
+                filter_list.append(MediaMetadata.source_reference.ilike(f"%{filters.source_reference}%"))
             
-            if filters.image_type:
-                filter_list.append(ImageMetadata.image_type.ilike(f"%{filters.image_type}%"))
+            if filters.media_type:
+                filter_list.append(MediaMetadata.media_type.ilike(f"%{filters.media_type}%"))
             
             if filters.region:
-                filter_list.append(ImageMetadata.region.ilike(f"%{filters.region}%"))
+                filter_list.append(MediaMetadata.region.ilike(f"%{filters.region}%"))
             
             # Numeric filters
             if filters.year is not None:
-                filter_list.append(ImageMetadata.year == filters.year)
+                filter_list.append(MediaMetadata.year == filters.year)
             
             if filters.month is not None:
-                filter_list.append(ImageMetadata.month == filters.month)
+                filter_list.append(MediaMetadata.month == filters.month)
             
             # Rating filters
             if filters.rating is not None:
-                filter_list.append(ImageMetadata.rating == filters.rating)
+                filter_list.append(MediaMetadata.rating == filters.rating)
             else:
                 if filters.rating_min is not None:
-                    filter_list.append(ImageMetadata.rating >= filters.rating_min)
+                    filter_list.append(MediaMetadata.rating >= filters.rating_min)
                 if filters.rating_max is not None:
-                    filter_list.append(ImageMetadata.rating <= filters.rating_max)
+                    filter_list.append(MediaMetadata.rating <= filters.rating_max)
             
             # Boolean filters
             if filters.has_gps is not None:
-                filter_list.append(ImageMetadata.has_gps == filters.has_gps)
+                filter_list.append(MediaMetadata.has_gps == filters.has_gps)
             
             if filters.available_for_task is not None:
-                filter_list.append(ImageMetadata.available_for_task == filters.available_for_task)
+                filter_list.append(MediaMetadata.available_for_task == filters.available_for_task)
             
             if filters.processed is not None:
-                filter_list.append(ImageMetadata.processed == filters.processed)
+                filter_list.append(MediaMetadata.processed == filters.processed)
             
             if filters.location_processed is not None:
-                filter_list.append(ImageMetadata.location_processed == filters.location_processed)
+                filter_list.append(MediaMetadata.location_processed == filters.location_processed)
             
             if filters.image_processed is not None:
-                filter_list.append(ImageMetadata.image_processed == filters.image_processed)
+                filter_list.append(MediaMetadata.image_processed == filters.image_processed)
+
+            filter_list.append(MediaMetadata.media_type.like('image/%'))
             
             # Apply all filters with AND logic
             if filter_list:
                 query = query.filter(and_(*filter_list))
             
             # Sort by created_at descending (newest first)
-            query = query.order_by(ImageMetadata.created_at.desc())
+            query = query.order_by(MediaMetadata.created_at.desc())
             
             # Execute query
             images = query.all()
@@ -153,7 +155,7 @@ class ImageService:
         # Get existing tags for all images in one query
         session = self.db.get_session()
         try:
-            metadata_list = session.query(ImageMetadata).filter(ImageMetadata.id.in_(image_ids)).all()
+            metadata_list = session.query(MediaMetadata).filter(MediaMetadata.id.in_(image_ids)).all()
             metadata_dict = {m.id: m for m in metadata_list}
         finally:
             session.close()
@@ -223,16 +225,16 @@ class ImageService:
     def update_image_metadata(
         self,
         image_id: int,
-        updates: ImageMetadataUpdate
-    ) -> ImageMetadata:
+        updates: MediaMetadataUpdate
+    ) -> MediaMetadata:
         """Update image metadata fields.
         
         Args:
             image_id: The metadata ID of the image to update
-            updates: ImageMetadataUpdate with fields to update
+            updates: MediaMetadataUpdate with fields to update
             
         Returns:
-            Updated ImageMetadata instance
+            Updated MediaMetadata instance
             
         Raises:
             NotFoundError: If image not found
@@ -303,17 +305,17 @@ class ImageService:
             try:
                 if id_type == "metadata":
                     # We already know the metadata ID, so query directly
-                    metadata = session.query(ImageMetadata).filter(
-                        ImageMetadata.id == image_id
+                    metadata = session.query(MediaMetadata).filter(
+                        MediaMetadata.id == image_id
                     ).first()
                 else:
                     # Query metadata by blob_id
-                    metadata = session.query(ImageMetadata).filter(
-                        ImageMetadata.image_blob_id == image_blob.id
+                    metadata = session.query(MediaMetadata).filter(
+                        MediaMetadata.media_blob_id == image_blob.id
                     ).first()
                 
-                if metadata and metadata.image_type:
-                    content_type = metadata.image_type
+                if metadata and metadata.media_type:
+                    content_type = metadata.media_type
                 else:
                     content_type = "image/jpeg"  # Default
                 filename = metadata.source_reference.split(os.sep)[-1] if metadata and metadata.source_reference else "image"
@@ -359,18 +361,18 @@ class ImageService:
         )
 
     @staticmethod
-    def to_response_model(image: ImageMetadata) -> dict:
-        """Convert ImageMetadata domain model to response dictionary.
+    def to_response_model(image: MediaMetadata) -> dict:
+        """Convert MediaMetadata domain model to response dictionary.
         
         Args:
-            image: ImageMetadata instance
+            image: MediaMetadata instance
             
         Returns:
-            Dictionary matching ImageMetadataResponse structure
+            Dictionary matching MediaMetadataResponse structure
         """
         return {
             "id": image.id,
-            "image_blob_id": image.image_blob_id,
+            "media_blob_id": image.media_blob_id,
             "description": image.description,
             "title": image.title,
             "author": image.author,
@@ -378,7 +380,7 @@ class ImageService:
             "categories": image.categories,
             "notes": image.notes,
             "available_for_task": image.available_for_task,
-            "image_type": image.image_type,
+            "media_type": image.media_type,
             "processed": image.processed,
             "location_processed": image.location_processed,
             "image_processed": image.image_processed,
@@ -458,27 +460,27 @@ class ImageService:
                     # Create source_reference as string of album ID
                     source_reference = str(album_image.album_id)
                     
-                    # Create ImageBlob first
-                    image_blob = ImageBlob(
+                    # Create MediaBlob first
+                    media_blob = MediaBlob(
                         image_data=album_image.image_data,
                         thumbnail_data=thumbnail_data
                     )
-                    session.add(image_blob)
+                    session.add(media_blob)
                     session.flush()  # Get the blob ID
                     
-                    # Create ImageMetadata
-                    image_metadata = ImageMetadata(
-                        image_blob_id=image_blob.id,
+                    # Create MediaMetadata
+                    media_metadata = MediaMetadata(
+                        media_blob_id=media_blob.id,
                         title=album_image.title,
                         description=album_image.description,
                         tags=album_name,  # Album name as tags
-                        image_type=album_image.image_type,
+                        media_type=album_image.image_type,  # Keep image_type from album_image for now
                         year=year,
                         month=month,
                         source="Facebook Album",
                         source_reference=source_reference
                     )
-                    session.add(image_metadata)
+                    session.add(media_metadata)
                     session.commit()
                     
                     images_copied += 1
@@ -561,27 +563,27 @@ class ImageService:
                     # Get email snippet for description
                     email_snippet = attachment.email.snippet if attachment.email else None
                     
-                    # Create ImageBlob first
-                    image_blob = ImageBlob(
+                    # Create MediaBlob first
+                    image_blob = MediaBlob(
                         image_data=attachment.data,
                         thumbnail_data=thumbnail_data
                     )
                     session.add(image_blob)
                     session.flush()  # Get the blob ID
                     
-                    # Create ImageMetadata
-                    image_metadata = ImageMetadata(
-                        image_blob_id=image_blob.id,
+                    # Create MediaMetadata
+                    media_metadata = MediaMetadata(
+                        media_blob_id=image_blob.id,
                         title=attachment.filename,  # Attachment filename as title
                         description=email_snippet,  # Email snippet as description
                         tags=email_subject,  # Email subject as tags
-                        image_type=attachment.content_type,
+                        media_type=attachment.content_type,  # Store all content types including PDFs
                         year=year,
                         month=month,
                         source="Email",
                         source_reference=source_reference
                     )
-                    session.add(image_metadata)
+                    session.add(media_metadata)
                     session.commit()
                     
                     images_copied += 1

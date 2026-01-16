@@ -170,7 +170,7 @@ def import_instagram_from_directory(
                             }
                             
                             # Save message to database (no attachment data)
-                            _, is_update = storage.save_imessage(message_data, None)
+                            _, is_update = storage.save_imessage(message_data)
                             
                             if is_update:
                                 stats["messages_updated"] += 1

@@ -486,7 +486,12 @@ def import_facebook_from_directory(
                             }
                             
                             # Save main message to database
-                            _, is_update = storage.save_imessage(message_data, attachment_data)
+                            _, is_update = storage.save_imessage(
+                                message_data,
+                                attachment_data=attachment_data,
+                                attachment_filename=attachment_filename,
+                                attachment_type=attachment_type
+                            )
                             
                             if is_update:
                                 stats["messages_updated"] += 1
@@ -522,8 +527,10 @@ def import_facebook_from_directory(
                                 
                                 # Save additional attachment as separate message entry
                                 _, is_update_att = storage.save_imessage(
-                                    additional_message_data, 
-                                    additional_att.get('data')
+                                    additional_message_data,
+                                    attachment_data=additional_att.get('data'),
+                                    attachment_filename=additional_att.get('filename'),
+                                    attachment_type=additional_att.get('type')
                                 )
                                 
                                 if is_update_att:

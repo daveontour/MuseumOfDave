@@ -5,7 +5,7 @@ from typing import List
 from sqlalchemy import func, case, text
 
 from ..database import Database
-from ..database.models import IMessage
+from ..database.models import IMessage, MessageAttachment
 from .exceptions import NotFoundError
 from .dto import ChatSessionsResult, ChatSessionInfo
 
@@ -29,17 +29,17 @@ class MessageService:
             try:
                 results = session.query(
                     IMessage.chat_session,
-                    func.count(IMessage.id).label('message_count'),
-                    func.sum(
-                        case((IMessage.attachment_data.isnot(None), 1), else_=0)
-                    ).label('attachment_count'),
+                    func.count(func.distinct(IMessage.id)).label('message_count'),
+                    func.count(func.distinct(MessageAttachment.id)).label('attachment_count'),
                     func.max(IMessage.service).label('primary_service'),
                     func.max(IMessage.message_date).label('last_message_date'),
-                    func.count(case((IMessage.service.ilike('%iMessage%'), 1), else_=None)).label('imessage_count'),
-                    func.count(case((IMessage.service.ilike('%SMS%'), 1), else_=None)).label('sms_count'),
-                    func.count(case((IMessage.service == 'WhatsApp', 1), else_=None)).label('whatsapp_count'),
-                    func.count(case((IMessage.service == 'Facebook Messenger', 1), else_=None)).label('facebook_count'),
-                    func.count(case((IMessage.service == 'Instagram', 1), else_=None)).label('instagram_count')
+                    func.count(func.distinct(case((IMessage.service.ilike('%iMessage%'), IMessage.id), else_=None))).label('imessage_count'),
+                    func.count(func.distinct(case((IMessage.service.ilike('%SMS%'), IMessage.id), else_=None))).label('sms_count'),
+                    func.count(func.distinct(case((IMessage.service == 'WhatsApp', IMessage.id), else_=None))).label('whatsapp_count'),
+                    func.count(func.distinct(case((IMessage.service == 'Facebook Messenger', IMessage.id), else_=None))).label('facebook_count'),
+                    func.count(func.distinct(case((IMessage.service == 'Instagram', IMessage.id), else_=None))).label('instagram_count')
+                ).outerjoin(
+                    MessageAttachment, MessageAttachment.message_id == IMessage.id
                 ).filter(
                     IMessage.chat_session.isnot(None)
                 ).group_by(
@@ -55,20 +55,21 @@ class MessageService:
                     try:
                         results = session.execute(text("""
                             SELECT 
-                                chat_session,
-                                COUNT(id) as message_count,
-                                SUM(CASE WHEN attachment_data IS NOT NULL THEN 1 ELSE 0 END) as attachment_count,
-                                MAX(service) as primary_service,
-                                MAX(message_date) as last_message_date,
-                                COUNT(CASE WHEN service ILIKE '%iMessage%' THEN 1 END) as imessage_count,
-                                COUNT(CASE WHEN service ILIKE '%SMS%' THEN 1 END) as sms_count,
-                                COUNT(CASE WHEN service = 'WhatsApp' THEN 1 END) as whatsapp_count,
-                                COUNT(CASE WHEN service = 'Facebook Messenger' THEN 1 END) as facebook_count,
-                                COUNT(CASE WHEN service = 'Instagram' THEN 1 END) as instagram_count
-                            FROM imessages
-                            WHERE chat_session IS NOT NULL
-                            GROUP BY chat_session
-                            ORDER BY MAX(message_date) DESC
+                                m.chat_session,
+                                COUNT(DISTINCT m.id) as message_count,
+                                COUNT(DISTINCT ma.id) as attachment_count,
+                                MAX(m.service) as primary_service,
+                                MAX(m.message_date) as last_message_date,
+                                COUNT(CASE WHEN m.service ILIKE '%iMessage%' THEN 1 END) as imessage_count,
+                                COUNT(CASE WHEN m.service ILIKE '%SMS%' THEN 1 END) as sms_count,
+                                COUNT(CASE WHEN m.service = 'WhatsApp' THEN 1 END) as whatsapp_count,
+                                COUNT(CASE WHEN m.service = 'Facebook Messenger' THEN 1 END) as facebook_count,
+                                COUNT(CASE WHEN m.service = 'Instagram' THEN 1 END) as instagram_count
+                            FROM messages m
+                            LEFT JOIN message_attachments ma ON ma.message_id = m.id
+                            WHERE m.chat_session IS NOT NULL
+                            GROUP BY m.chat_session
+                            ORDER BY MAX(m.message_date) DESC
                         """)).fetchall()
                     except Exception:
                         # If that also fails, return empty results

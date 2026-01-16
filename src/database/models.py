@@ -52,7 +52,7 @@ class Email(Base):
     is_promotional = Column(Boolean, default=False, nullable=False)
     is_spam = Column(Boolean, default=False, nullable=False)
     is_important = Column(Boolean, default=False, nullable=False)
-    use_by_ai = Column(Boolean, default=False, nullable=True)
+    use_by_ai = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -83,6 +83,20 @@ class Attachment(Base):
     email = relationship("Email", back_populates="attachments")
 
 
+class MessageAttachment(Base):
+    """Junction table linking messages to media items."""
+
+    __tablename__ = "message_attachments"
+
+    id = Column(Integer, primary_key=True)
+    message_id = Column(Integer, ForeignKey("messages.id", ondelete="CASCADE"), nullable=False)
+    media_item_id = Column(Integer, ForeignKey("media_items.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
+    message = relationship("IMessage", back_populates="media_attachments")
+    media_item = relationship("MediaMetadata", foreign_keys=[media_item_id])
+
+
 class IMessage(Base):
     """Message model (supports iMessage, SMS, and WhatsApp)."""
 
@@ -102,14 +116,13 @@ class IMessage(Base):
     replying_to = Column(String(500), nullable=True)
     subject = Column(String(1000), nullable=True)
     text = Column(Text, nullable=True)
-    attachment_filename = Column(String(500), nullable=True)
-    attachment_type = Column(String(255), nullable=True)
-    attachment_data = Column(LargeBinary, nullable=True)
     processed = Column(Boolean, default=False, nullable=False)
     location_processed = Column(Boolean, default=False, nullable=False)
     image_processed = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    media_attachments = relationship("MessageAttachment", back_populates="message", cascade="all, delete-orphan")
 
 
 class FacebookAlbum(Base):
@@ -141,7 +154,7 @@ class FacebookAlbumImage(Base):
     title = Column(String(1000), nullable=True)
     description = Column(Text, nullable=True)
     image_data = Column(LargeBinary, nullable=True)
-    image_type = Column(String(255), nullable=True)
+    media_type = Column(String(255), nullable=True)
     processed = Column(Boolean, default=False, nullable=False)
     location_processed = Column(Boolean, default=False, nullable=False)
     image_processed = Column(Boolean, default=False, nullable=False)
@@ -173,21 +186,22 @@ class ReferenceDocument(Base):
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
-class ImageMetadata(Base):
-    """Images model."""
+class MediaMetadata(Base):
+    """Media metadata model."""
 
-    __tablename__ = "image_information"
+    __tablename__ = "media_items"
 
     id = Column(Integer, primary_key=True)
-    image_blob_id = Column(Integer, ForeignKey("image_blob.id", ondelete="RESTRICT"), nullable=False)
+    media_blob_id = Column(Integer, ForeignKey("media_blob.id", ondelete="RESTRICT"), nullable=False)
     description = Column(Text, nullable=True)
     title = Column(String(1000), nullable=True)
     author = Column(String(500), nullable=True)
     tags = Column(Text, nullable=True)
+    description = Column(Text, nullable=True)
     categories = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
     available_for_task = Column(Boolean, default=False, nullable=False)
-    image_type = Column(String(255), nullable=True)
+    media_type = Column(String(255), nullable=True)
     processed = Column(Boolean, default=False, nullable=False)
     location_processed = Column(Boolean, default=False, nullable=False)
     image_processed = Column(Boolean, default=False, nullable=False)
@@ -203,22 +217,32 @@ class ImageMetadata(Base):
     has_gps = Column(Boolean, default=False, nullable=False)
     google_maps_url = Column(String(500), nullable=True)
     region=Column(String(255), nullable=True)
+    is_personal = Column(Boolean, default=False, nullable=False)
+    is_business = Column(Boolean, default=False, nullable=False)
+    is_social = Column(Boolean, default=False, nullable=False)
+    is_promotional = Column(Boolean, default=False, nullable=False)
+    is_spam = Column(Boolean, default=False, nullable=False)
+    is_important = Column(Boolean, default=False, nullable=False)
+    use_by_ai = Column(Boolean, default=False, nullable=True)
     source=Column(String(255), nullable=True)
     source_reference=Column(String(500), nullable=True)
-    image_blob = relationship("ImageBlob", back_populates="image_metadata", uselist=False, cascade="all, delete")
+    media_blob = relationship("MediaBlob", back_populates="media_metadata", uselist=False, cascade="all, delete")
+    
+    # Relationship to messages via MessageAttachment junction table
+    message_attachments = relationship("MessageAttachment", foreign_keys="MessageAttachment.media_item_id", back_populates="media_item")
 
-class ImageBlob(Base):
-    """Image Blob model."""
+class MediaBlob(Base):
+    """Media Blob model."""
 
-    __tablename__ = "image_blob"
+    __tablename__ = "media_blob"
 
     id = Column(Integer, primary_key=True)
     image_data = Column(LargeBinary, nullable=True)
     thumbnail_data = Column(LargeBinary, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
-    # Relationship back to ImageMetadata (no foreign key needed - ImageMetadata has image_blob_id)
-    image_metadata = relationship("ImageMetadata", back_populates="image_blob", uselist=False)
+    # Relationship back to MediaMetadata (no foreign key needed - MediaMetadata has media_blob_id)
+    media_metadata = relationship("MediaMetadata", back_populates="media_blob", uselist=False)
 
 class Places(Base):
     """Places model."""

@@ -3935,7 +3935,11 @@ ${textContent}
                             sender: email.from_address || 'Unknown Sender',
                             recipient: email.to_addresses || 'Unknown Recipient',
                             date: email.date ? formatDateAustralian(email.date) : 'No Date',
-                            emailId: email.id
+                            emailId: email.id,
+                            is_personal: email.is_personal || false,
+                            is_business: email.is_business || false,
+                            is_important: email.is_important || false,
+                            use_by_ai: email.use_by_ai !== undefined ? email.use_by_ai : true
                         }));
                         _renderTable();
                         _renderPagination();
@@ -3977,13 +3981,17 @@ ${textContent}
                         row.classList.add('selected');
                     }
                     row.dataset.index = startIndex + index;
-                    row.addEventListener('click', () => _selectRow(startIndex + index));
+                    row.dataset.emailId = email.id;
 
                     // Subject column
                     const subjectCell = document.createElement('td');
                     subjectCell.className = 'email-editor-col-subject';
                     subjectCell.textContent = _truncateText(email.subject, 60);
                     subjectCell.title = email.subject;
+                    subjectCell.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        _selectRow(startIndex + index);
+                    });
                     row.appendChild(subjectCell);
 
                     // From column
@@ -3991,6 +3999,10 @@ ${textContent}
                     fromCell.className = 'email-editor-col-from';
                     fromCell.textContent = _truncateText(email.sender, 40);
                     fromCell.title = email.sender;
+                    fromCell.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        _selectRow(startIndex + index);
+                    });
                     row.appendChild(fromCell);
 
                     // To column
@@ -3998,13 +4010,95 @@ ${textContent}
                     toCell.className = 'email-editor-col-to';
                     toCell.textContent = _truncateText(email.recipient, 40);
                     toCell.title = email.recipient;
+                    toCell.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        _selectRow(startIndex + index);
+                    });
                     row.appendChild(toCell);
 
                     // Date column
                     const dateCell = document.createElement('td');
                     dateCell.className = 'email-editor-col-date';
                     dateCell.textContent = email.date;
+                    dateCell.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        _selectRow(startIndex + index);
+                    });
                     row.appendChild(dateCell);
+
+                    // Personal column (editable)
+                    const personalCell = document.createElement('td');
+                    personalCell.className = 'email-editor-col-personal';
+                    personalCell.innerHTML = email.is_personal ? '✓' : '';
+                    personalCell.style.cursor = 'pointer';
+                    personalCell.style.textAlign = 'center';
+                    personalCell.style.fontWeight = 'bold';
+                    personalCell.style.color = email.is_personal ? '#28a745' : '#ccc';
+                    personalCell.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        _toggleField(email.id, 'is_personal', !email.is_personal);
+                    });
+                    row.appendChild(personalCell);
+
+                    // Business column (editable)
+                    const businessCell = document.createElement('td');
+                    businessCell.className = 'email-editor-col-business';
+                    businessCell.innerHTML = email.is_business ? '✓' : '';
+                    businessCell.style.cursor = 'pointer';
+                    businessCell.style.textAlign = 'center';
+                    businessCell.style.fontWeight = 'bold';
+                    businessCell.style.color = email.is_business ? '#28a745' : '#ccc';
+                    businessCell.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        _toggleField(email.id, 'is_business', !email.is_business);
+                    });
+                    row.appendChild(businessCell);
+
+                    // Important column (editable)
+                    const importantCell = document.createElement('td');
+                    importantCell.className = 'email-editor-col-important';
+                    importantCell.innerHTML = email.is_important ? '✓' : '';
+                    importantCell.style.cursor = 'pointer';
+                    importantCell.style.textAlign = 'center';
+                    importantCell.style.fontWeight = 'bold';
+                    importantCell.style.color = email.is_important ? '#ffc107' : '#ccc';
+                    importantCell.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        _toggleField(email.id, 'is_important', !email.is_important);
+                    });
+                    row.appendChild(importantCell);
+
+                    // Use by AI column (editable)
+                    const useByAiCell = document.createElement('td');
+                    useByAiCell.className = 'email-editor-col-use-by-ai';
+                    if (email.use_by_ai === true) {
+                        useByAiCell.innerHTML = '✓';
+                        useByAiCell.style.color = '#17a2b8';
+                    } else {
+                        useByAiCell.innerHTML = '✗';
+                        useByAiCell.style.color = '#dc3545';
+                    }
+                    useByAiCell.style.cursor = 'pointer';
+                    useByAiCell.style.textAlign = 'center';
+                    useByAiCell.style.fontWeight = 'bold';
+                    useByAiCell.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        // Toggle between true and false
+                        _toggleField(email.id, 'use_by_ai', !email.use_by_ai);
+                    });
+                    row.appendChild(useByAiCell);
+
+                    // Delete column
+                    const deleteCell = document.createElement('td');
+                    deleteCell.className = 'email-editor-col-delete';
+                    deleteCell.style.cursor = 'pointer';
+                    deleteCell.style.textAlign = 'center';
+                    deleteCell.innerHTML = '<i class="fas fa-trash" style="color: #dc3545;"></i>';
+                    deleteCell.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        _confirmDelete(email.id, email.subject || 'this email');
+                    });
+                    row.appendChild(deleteCell);
 
                     DOM.emailEditorTableBody.appendChild(row);
                 });
@@ -4013,6 +4107,99 @@ ${textContent}
             function _selectRow(index) {
                 selectedRowIndex = index;
                 _renderTable();
+            }
+
+            function _toggleField(emailId, fieldName, newValue) {
+                // Update local data immediately for responsive UI
+                const email = emailData.find(e => e.id === emailId);
+                if (email) {
+                    email[fieldName] = newValue;
+                }
+
+                // Update on server
+                fetch(`/emails/${emailId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ [fieldName]: newValue })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to update email');
+                    }
+                    return response.json();
+                })
+                .then(updatedEmail => {
+                    // Update local data with server response
+                    const emailIndex = emailData.findIndex(e => e.id === emailId);
+                    if (emailIndex !== -1) {
+                        emailData[emailIndex] = {
+                            ...emailData[emailIndex],
+                            is_personal: updatedEmail.is_personal,
+                            is_business: updatedEmail.is_business,
+                            is_important: updatedEmail.is_important,
+                            use_by_ai: updatedEmail.use_by_ai
+                        };
+                    }
+                    _renderTable();
+                })
+                .catch(error => {
+                    console.error('Error updating email:', error);
+                    // Revert local change on error
+                    if (email) {
+                        email[fieldName] = !newValue;
+                    }
+                    _renderTable();
+                    alert('Failed to update email. Please try again.');
+                });
+            }
+
+            function _confirmDelete(emailId, emailSubject) {
+                // Use the existing confirmation modal
+                if (window.Modals && window.Modals.Confirmation) {
+                    window.Modals.Confirmation.show(
+                        'Delete Email',
+                        `Are you sure you want to delete "${emailSubject}"? This action cannot be undone.`,
+                        () => {
+                            _deleteEmail(emailId);
+                        }
+                    );
+                } else {
+                    // Fallback to browser confirm
+                    if (confirm(`Are you sure you want to delete "${emailSubject}"? This action cannot be undone.`)) {
+                        _deleteEmail(emailId);
+                    }
+                }
+            }
+
+            function _deleteEmail(emailId) {
+                fetch(`/emails/${emailId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to delete email');
+                    }
+                    return response.json();
+                })
+                .then(() => {
+                    // Remove from local data
+                    emailData = emailData.filter(e => e.id !== emailId);
+                    // Reset to first page if current page is empty
+                    const totalPages = Math.ceil(emailData.length / pageSize);
+                    if (currentPage > totalPages && totalPages > 0) {
+                        currentPage = totalPages;
+                    } else if (totalPages === 0) {
+                        currentPage = 1;
+                    }
+                    _renderTable();
+                    _renderPagination();
+                })
+                .catch(error => {
+                    console.error('Error deleting email:', error);
+                    alert('Failed to delete email. Please try again.');
+                });
             }
 
             function _renderPagination() {
@@ -8544,6 +8731,113 @@ ${textContent}
                     }
                 });
             });
+
+            // Empty Media Tables Button
+            const emptyMediaTablesBtn = document.getElementById('empty-media-tables-btn');
+            const emptyTablesStatus = document.getElementById('empty-tables-status');
+            
+            if (emptyMediaTablesBtn) {
+                emptyMediaTablesBtn.addEventListener('click', async () => {
+                    // Show confirmation dialog
+                    const confirmed = confirm(
+                        'WARNING: This will permanently delete ALL data from:\n\n' +
+                        '- attachments\n' +
+                        '- media_blob\n' +
+                        '- media_items\n' +
+                        '- messages\n' +
+                        '- message_attachments\n\n' +
+                        'This action cannot be undone!\n\n' +
+                        'Are you absolutely sure you want to continue?'
+                    );
+                    
+                    if (!confirmed) {
+                        return;
+                    }
+                    
+                    // Double confirmation
+                    const doubleConfirmed = confirm(
+                        'FINAL WARNING: This will DELETE ALL messages and media data.\n\n' +
+                        'Type "DELETE" in the next prompt to confirm.'
+                    );
+                    
+                    if (!doubleConfirmed) {
+                        return;
+                    }
+                    
+                    const userInput = prompt('Type "DELETE" to confirm:');
+                    if (userInput !== 'DELETE') {
+                        if (emptyTablesStatus) {
+                            emptyTablesStatus.style.display = 'block';
+                            emptyTablesStatus.style.backgroundColor = '#fff3cd';
+                            emptyTablesStatus.style.color = '#856404';
+                            emptyTablesStatus.style.border = '1px solid #ffc107';
+                            emptyTablesStatus.textContent = 'Operation cancelled. Tables were not emptied.';
+                        }
+                        return;
+                    }
+                    
+                    // Disable button and show loading
+                    emptyMediaTablesBtn.disabled = true;
+                    emptyMediaTablesBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Emptying tables...';
+                    
+                    if (emptyTablesStatus) {
+                        emptyTablesStatus.style.display = 'block';
+                        emptyTablesStatus.style.backgroundColor = '#d1ecf1';
+                        emptyTablesStatus.style.color = '#0c5460';
+                        emptyTablesStatus.style.border = '1px solid #bee5eb';
+                        emptyTablesStatus.textContent = 'Emptying tables...';
+                    }
+                    
+                    try {
+                        const response = await fetch('/admin/empty-media-tables', {
+                            method: 'DELETE'
+                        });
+                        
+                        if (!response.ok) {
+                            const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+                            throw new Error(errorData.detail || `HTTP ${response.status}`);
+                        }
+                        
+                        const result = await response.json();
+                        
+                        // Show success message
+                        if (emptyTablesStatus) {
+                            emptyTablesStatus.style.backgroundColor = '#d4edda';
+                            emptyTablesStatus.style.color = '#155724';
+                            emptyTablesStatus.style.border = '1px solid #c3e6cb';
+                            
+                            const counts = result.deleted_counts || {};
+                            emptyTablesStatus.innerHTML = `
+                                <strong>Tables emptied successfully!</strong><br>
+                                Deleted counts:<br>
+                                • Messages: ${counts.messages || 0}<br>
+                                • Message Attachments: ${counts.message_attachments || 0}<br>
+                                • Media Items: ${counts.media_items || 0}<br>
+                                • Media Blobs: ${counts.media_blob || 0}<br>
+                                • Attachments: ${counts.attachments || 0}
+                            `;
+                        }
+                        
+                        // Re-enable button
+                        emptyMediaTablesBtn.disabled = false;
+                        emptyMediaTablesBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Empty Media and Message Tables';
+                        
+                    } catch (error) {
+                        console.error('Error emptying tables:', error);
+                        
+                        if (emptyTablesStatus) {
+                            emptyTablesStatus.style.backgroundColor = '#f8d7da';
+                            emptyTablesStatus.style.color = '#721c24';
+                            emptyTablesStatus.style.border = '1px solid #f5c6cb';
+                            emptyTablesStatus.textContent = `Error: ${error.message}`;
+                        }
+                        
+                        // Re-enable button
+                        emptyMediaTablesBtn.disabled = false;
+                        emptyMediaTablesBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Empty Media and Message Tables';
+                    }
+                });
+            }
 
             // Email Processing Controls
             const processAllFoldersCheckbox = document.getElementById('process-all-folders');

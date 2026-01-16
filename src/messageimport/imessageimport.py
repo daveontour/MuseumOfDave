@@ -1,6 +1,7 @@
 """iMessage import functionality."""
 
 import csv
+import mimetypes
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable
@@ -148,6 +149,21 @@ def import_imessages_from_directory(
                                     try:
                                         with open(attachment_path, 'rb') as att_file:
                                             attachment_data = att_file.read()
+                                        
+                                        # If attachment_type is not set, guess it from the filename
+                                        if not attachment_type:
+                                            guessed_type, _ = mimetypes.guess_type(attachment_filename)
+                                            if guessed_type:
+                                                attachment_type = guessed_type
+                                            else:
+                                                # Fallback: try to determine from actual file path extension
+                                                guessed_type, _ = mimetypes.guess_type(str(attachment_path))
+                                                if guessed_type:
+                                                    attachment_type = guessed_type
+                                                else:
+                                                    # Default fallback
+                                                    attachment_type = "application/octet-stream"
+                                        
                                         stats["attachments_found"] += 1
                                     except Exception as e:
                                         missing_filename = f"{conversation_name}/{attachment_filename}"
@@ -163,6 +179,8 @@ def import_imessages_from_directory(
                                         stats["missing_attachment_filenames"].append(missing_filename)
                             
                             # Prepare message data
+                            # Note: attachment_filename and attachment_type are passed separately to save_imessage
+                            # and stored in media_items table, not in the message table
                             message_data = {
                                 'chat_session': row.get('Chat Session', '').strip(),
                                 'message_date': message_date,
@@ -177,12 +195,15 @@ def import_imessages_from_directory(
                                 'replying_to': row.get('Replying to', '').strip() or None,
                                 'subject': row.get('Subject', '').strip() or None,
                                 'text': row.get('Text', '').strip() or None,
-                                'attachment_filename': attachment_filename,
-                                'attachment_type': attachment_type,
                             }
                             
                             # Save to database
-                            _, is_update = storage.save_imessage(message_data, attachment_data)
+                            _, is_update = storage.save_imessage(
+                                message_data, 
+                                attachment_data=attachment_data,
+                                attachment_filename=attachment_filename,
+                                attachment_type=attachment_type
+                            )
                             if is_update:
                                 stats["messages_updated"] += 1
                             else:

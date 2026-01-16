@@ -13,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from sqlalchemy import or_, func, and_, extract
+from sqlalchemy import or_, func, and_, extract, Integer
 from sqlalchemy.orm import joinedload
 from PIL import Image
 
@@ -25,14 +25,14 @@ try:
 except ImportError:
     HEIF_SUPPORT = False
 
-from ..database import Database, Attachment, Email, IMessage, FacebookAlbum, FacebookAlbumImage, ReferenceDocument
-from ..database.models import ImageMetadata, ImageBlob
+from ..database import Database,  Email, IMessage, FacebookAlbum, FacebookAlbumImage, ReferenceDocument
+from ..database.models import MediaMetadata, MediaBlob, MessageAttachment, Attachment
 from ..database.storage import EmailStorage, ImageStorage
 from ..services import ImageService, EmailService, ReferenceDocumentService, MessageService, ImportService
 from ..services.exceptions import ServiceException, ValidationError, NotFoundError, ConflictError
 from ..services.dto import (
     ImageSearchFilters,
-    ImageMetadataUpdate,
+    MediaMetadataUpdate,
     FileData,
     DocumentMetadata,
     DocumentUpdate,
@@ -705,10 +705,10 @@ class ImportFilesystemImagesResponse(BaseModel):
     timestamp: datetime
 
 
-class ImageMetadataResponse(BaseModel):
+class MediaMetadataResponse(BaseModel):
     """Response model for image metadata."""
     id: int
-    image_blob_id: int
+    media_blob_id: int
     description: Optional[str] = None
     title: Optional[str] = None
     author: Optional[str] = None
@@ -716,7 +716,7 @@ class ImageMetadataResponse(BaseModel):
     categories: Optional[str] = None
     notes: Optional[str] = None
     available_for_task: bool = False
-    image_type: Optional[str] = None
+    media_type: Optional[str] = None
     processed: bool = False
     location_processed: bool = False
     image_processed: bool = False
@@ -753,6 +753,10 @@ class EmailMetadataResponse(BaseModel):
     attachment_ids: List[int]
     created_at: datetime
     updated_at: datetime
+    is_personal: bool = False
+    is_business: bool = False
+    is_important: bool = False
+    use_by_ai: bool = True
 
 
 class LabelResponse(BaseModel):
@@ -1561,8 +1565,27 @@ async def get_conversation_messages(chat_session: str):
             IMessage.message_date.asc()
         ).all()
         
+        from sqlalchemy.orm import joinedload
         messages_data = []
         for msg in messages:
+            # Get attachment info from MessageAttachment junction table
+            message_attachment = session.query(MessageAttachment).filter(
+                MessageAttachment.message_id == msg.id
+            ).first()
+            
+            attachment_filename = None
+            attachment_type = None
+            has_attachment = False
+            
+            if message_attachment:
+                media_item = session.query(MediaMetadata).filter(
+                    MediaMetadata.id == message_attachment.media_item_id
+                ).first()
+                if media_item:
+                    attachment_filename = media_item.title
+                    attachment_type = media_item.media_type
+                    has_attachment = True
+            
             messages_data.append({
                 "id": msg.id,
                 "chat_session": msg.chat_session,
@@ -1578,9 +1601,9 @@ async def get_conversation_messages(chat_session: str):
                 "replying_to": msg.replying_to,
                 "subject": msg.subject,
                 "text": msg.text,
-                "attachment_filename": msg.attachment_filename,
-                "attachment_type": msg.attachment_type,
-                "has_attachment": msg.attachment_data is not None
+                "attachment_filename": attachment_filename,
+                "attachment_type": attachment_type,
+                "has_attachment": has_attachment
             })
         
         return {"messages": messages_data}
@@ -3118,11 +3141,13 @@ async def get_facebook_album_image(image_id: int):
 
 @app.get("/imessages/{message_id}/attachment")
 async def get_imessage_attachment(message_id: int, preview: bool = False):
-    """Get attachment content for an iMessage.
+    """Get attachment content for a message.
+    
+    Uses unified media system via MessageAttachment junction table.
     
     Args:
         message_id: The ID of the message
-        preview: If True, return thumbnail/preview (not implemented yet, returns full)
+        preview: If True, return thumbnail/preview instead of full attachment
         
     Returns:
         Attachment file content with appropriate MIME type
@@ -3133,39 +3158,77 @@ async def get_imessage_attachment(message_id: int, preview: bool = False):
     session = db.get_session()
     try:
         message = session.query(IMessage).filter(IMessage.id == message_id).first()
+        
+        if not message:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Message with ID {message_id} not found"
+            )
+        
+        # Get first attachment via MessageAttachment junction table
+        message_attachment = session.query(MessageAttachment).filter(
+            MessageAttachment.message_id == message_id
+        ).first()
+        
+        if not message_attachment:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Message with ID {message_id} has no attachment"
+            )
+        
+        # Get media item and blob
+        media_item = session.query(MediaMetadata).filter(
+            MediaMetadata.id == message_attachment.media_item_id
+        ).first()
+        
+        if not media_item:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Media item for attachment not found"
+            )
+        
+        media_blob = session.query(MediaBlob).filter(
+            MediaBlob.id == media_item.media_blob_id
+        ).first()
+        
+        if not media_blob:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Media blob for attachment not found"
+            )
+        
+        # Get content
+        if preview:
+            content = media_blob.thumbnail_data
+            if content is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Message attachment has no thumbnail available"
+                )
+            content_type = "image/jpeg"  # Thumbnails are always JPEG
+            filename = media_item.title or "attachment"
+            base_name, ext = os.path.splitext(filename)
+            safe_filename = f"{base_name}_thumb.jpg".replace('"', '\\"')
+        else:
+            content = media_blob.image_data
+            if content is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Message attachment has no content"
+                )
+            content_type = media_item.media_type or "application/octet-stream"
+            filename = media_item.title or "attachment"
+            safe_filename = filename.replace('"', '\\"')
+        
+        return Response(
+            content=content,
+            media_type=content_type,
+            headers={
+                "Content-Disposition": f'inline; filename="{safe_filename}"'
+            }
+        )
     finally:
         session.close()
-    
-    if not message:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Message with ID {message_id} not found"
-        )
-    
-    if not message.attachment_data:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Message with ID {message_id} has no attachment"
-        )
-    
-    # Determine content type from attachment_type or filename
-    content_type = message.attachment_type or "application/octet-stream"
-    if message.attachment_filename:
-        import mimetypes
-        guessed_type, _ = mimetypes.guess_type(message.attachment_filename)
-        if guessed_type:
-            content_type = guessed_type
-    
-    filename = message.attachment_filename or "attachment"
-    safe_filename = filename.replace('"', '\\"')
-    
-    return Response(
-        content=message.attachment_data,
-        media_type=content_type,
-        headers={
-            "Content-Disposition": f'inline; filename="{safe_filename}"'
-        }
-    )
 
 
 @app.get("/emails/process/stream")
@@ -3407,8 +3470,7 @@ async def get_email_metadata(email_id: int):
     """
     session = db.get_session()
     try:
-        # Eagerly load attachments to avoid lazy loading issues
-        email = session.query(Email).options(joinedload(Email.attachments)).filter(Email.id == email_id).filter(Email.user_deleted == False).first()
+        email = session.query(Email).filter(Email.id == email_id).filter(Email.user_deleted == False).first()
         
         if not email:
             raise HTTPException(
@@ -3416,8 +3478,12 @@ async def get_email_metadata(email_id: int):
                 detail=f"Email with ID {email_id} not found"
             )
         
-        # Get attachment IDs and create response while session is open
-        attachment_ids = [att.id for att in email.attachments]
+        # Get media item IDs (attachment IDs) for this email
+        media_items = session.query(MediaMetadata).filter(
+            MediaMetadata.source == "email_attachment",
+            MediaMetadata.source_reference == str(email_id)
+        ).all()
+        attachment_ids = [item.id for item in media_items]
         
         # Return the metadata as JSON
         return EmailMetadataResponse(
@@ -3433,7 +3499,85 @@ async def get_email_metadata(email_id: int):
             snippet=email.snippet,
             attachment_ids=attachment_ids,
             created_at=email.created_at,
-            updated_at=email.updated_at
+            updated_at=email.updated_at,
+            is_personal=email.is_personal,
+            is_business=email.is_business,
+            is_important=email.is_important,
+            use_by_ai=email.use_by_ai
+        )
+    finally:
+        session.close()
+
+
+@app.put("/emails/{email_id}")
+async def update_email(email_id: int, updates: Dict[str, Any]):
+    """Update email fields.
+    
+    Args:
+        email_id: The ID of the email to update
+        updates: Dictionary with fields to update (is_personal, is_business, is_important, use_by_ai)
+        
+    Returns:
+        Updated EmailMetadataResponse
+        
+    Raises:
+        HTTPException: 404 if email not found
+    """
+    session = db.get_session()
+    try:
+        email = session.query(Email).filter(Email.id == email_id).filter(Email.user_deleted == False).first()
+        
+        if not email:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Email with ID {email_id} not found"
+            )
+        
+        # Update allowed fields
+        if 'is_personal' in updates:
+            email.is_personal = bool(updates['is_personal'])
+        if 'is_business' in updates:
+            email.is_business = bool(updates['is_business'])
+        if 'is_important' in updates:
+            email.is_important = bool(updates['is_important'])
+        if 'use_by_ai' in updates:
+            email.use_by_ai = bool(updates['use_by_ai'])
+        
+        session.commit()
+        
+        # Get media item IDs (attachment IDs) for this email
+        media_items = session.query(MediaMetadata).filter(
+            MediaMetadata.source == "email_attachment",
+            MediaMetadata.source_reference == str(email_id)
+        ).all()
+        attachment_ids = [item.id for item in media_items]
+        
+        return EmailMetadataResponse(
+            id=email.id,
+            uid=email.uid,
+            folder=email.folder,
+            subject=email.subject,
+            from_address=email.from_address,
+            to_addresses=email.to_addresses,
+            cc_addresses=email.cc_addresses,
+            bcc_addresses=email.bcc_addresses,
+            date=email.date,
+            snippet=email.snippet,
+            attachment_ids=attachment_ids,
+            created_at=email.created_at,
+            updated_at=email.updated_at,
+            is_personal=email.is_personal,
+            is_business=email.is_business,
+            is_important=email.is_important,
+            use_by_ai=email.use_by_ai
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error updating email: {str(e)}"
         )
     finally:
         session.close()
@@ -3465,10 +3609,30 @@ async def delete_email(email_id: int):
                 detail=f"Email with ID {email_id} not found"
             )
         
-        # Delete all attachments associated with the email
-        attachments = session.query(Attachment).filter(Attachment.email_id == email_id).all()
-        for attachment in attachments:
-            session.delete(attachment)
+        # Delete all media items associated with the email
+        media_items = session.query(MediaMetadata).filter(
+            MediaMetadata.source == "email_attachment",
+            MediaMetadata.source_reference == str(email_id)
+        ).all()
+        
+        for media_item in media_items:
+            # Get the media blob
+            media_blob = session.query(MediaBlob).filter(
+                MediaBlob.id == media_item.media_blob_id
+            ).first()
+            
+            # Delete media item
+            session.delete(media_item)
+            
+            # Check if any other media items reference this blob
+            if media_blob:
+                other_items_count = session.query(MediaMetadata).filter(
+                    MediaMetadata.media_blob_id == media_blob.id
+                ).count()
+                
+                # If no other items reference this blob, delete it
+                if other_items_count == 0:
+                    session.delete(media_blob)
         
         # Set user_deleted flag to True (soft delete) and clear other fields
         # This is a soft delete, so we don't actually delete the email record,
@@ -3562,18 +3726,25 @@ async def get_emails_by_label(labels: List[str] = Query(..., description="List o
             ])
         
         # Query emails where the folder field contains any of the labels
-        # Eagerly load attachments to avoid lazy loading issues
         # Exclude emails where user_deleted is True
-        emails = session.query(Email).options(joinedload(Email.attachments)).filter(
+        emails = session.query(Email).filter(
             and_(
                 or_(*label_filters),
                 Email.user_deleted == False
             )
         ).all()
         
-        # Convert to response models (access attachments while session is open)
-        result = [
-            EmailMetadataResponse(
+        # Convert to response models (get attachment IDs from media items)
+        result = []
+        for email in emails:
+            # Get media item IDs (attachment IDs) for this email
+            media_items = session.query(MediaMetadata).filter(
+                MediaMetadata.source == "email_attachment",
+                MediaMetadata.source_reference == str(email.id)
+            ).all()
+            attachment_ids = [item.id for item in media_items]
+            
+            result.append(EmailMetadataResponse(
                 id=email.id,
                 uid=email.uid,
                 folder=email.folder,
@@ -3584,12 +3755,10 @@ async def get_emails_by_label(labels: List[str] = Query(..., description="List o
                 bcc_addresses=email.bcc_addresses,
                 date=email.date,
                 snippet=email.snippet,
-                attachment_ids=[att.id for att in email.attachments],
+                attachment_ids=attachment_ids,
                 created_at=email.created_at,
                 updated_at=email.updated_at
-            )
-            for email in emails
-        ]
+            ))
     finally:
         session.close()
     
@@ -3626,7 +3795,7 @@ async def search_emails(
     session = db.get_session()
     try:
         # Start building query with base filter
-        query = session.query(Email).options(joinedload(Email.attachments))
+        query = session.query(Email)
         filters = []
         
         # Filter by from_address (partial match, case-insensitive)
@@ -3675,9 +3844,17 @@ async def search_emails(
         # Execute query
         emails = query.all()
         
-        # Convert to response models (access attachments while session is open)
-        result = [
-            EmailMetadataResponse(
+        # Convert to response models (get attachment IDs from media items)
+        result = []
+        for email in emails:
+            # Get media item IDs (attachment IDs) for this email
+            media_items = session.query(MediaMetadata).filter(
+                MediaMetadata.source == "email_attachment",
+                MediaMetadata.source_reference == str(email.id)
+            ).all()
+            attachment_ids = [item.id for item in media_items]
+            
+            result.append(EmailMetadataResponse(
                 id=email.id,
                 uid=email.uid,
                 folder=email.folder,
@@ -3688,12 +3865,10 @@ async def search_emails(
                 bcc_addresses=email.bcc_addresses,
                 date=email.date,
                 snippet=email.snippet,
-                attachment_ids=[att.id for att in email.attachments],
+                attachment_ids=attachment_ids,
                 created_at=email.created_at,
                 updated_at=email.updated_at
-            )
-            for email in emails
-        ]
+            ))
         
         return result
     finally:
@@ -3709,23 +3884,29 @@ async def get_random_attachment():
     """
     session = db.get_session()
     try:
-        # Get a random attachment
-        attachment = session.query(Attachment).order_by(func.random()).first()
+        # Get a random media item with source="email_attachment"
+        media_item = session.query(MediaMetadata).filter(
+            MediaMetadata.source == "email_attachment"
+        ).order_by(func.random()).first()
         
-        if not attachment:
+        if not media_item:
             return None
         
-        # Get the email for this attachment
-        email = session.query(Email).filter(Email.id == attachment.email_id).first()
+        # Get the email for this attachment (from source_reference)
+        email_id = int(media_item.source_reference)
+        email = session.query(Email).filter(Email.id == email_id).first()
         
         if not email:
             return None
         
+        # Get content type from media_type or default
+        content_type = media_item.media_type or "application/octet-stream"
+        
         return AttachmentInfoResponse(
-            attachment_id=attachment.id,
-            filename=attachment.filename,
-            content_type=attachment.content_type,
-            size=attachment.size,
+            attachment_id=media_item.id,
+            filename=media_item.title or "attachment",
+            content_type=content_type,
+            size=None,  # Size not stored in MediaMetadata
             email_id=email.id,
             email_subject=email.subject,
             email_from=email.from_address,
@@ -3748,22 +3929,29 @@ async def get_attachment_by_id_order(offset: int = Query(0, ge=0, description="O
     """
     session = db.get_session()
     try:
-        attachment = session.query(Attachment).order_by(Attachment.id.asc()).offset(offset).first()
+        # Get media item by ID order with source="email_attachment"
+        media_item = session.query(MediaMetadata).filter(
+            MediaMetadata.source == "email_attachment"
+        ).order_by(MediaMetadata.id.asc()).offset(offset).first()
         
-        if not attachment:
+        if not media_item:
             return None
         
-        # Get the email for this attachment
-        email = session.query(Email).filter(Email.id == attachment.email_id).first()
+        # Get the email for this attachment (from source_reference)
+        email_id = int(media_item.source_reference)
+        email = session.query(Email).filter(Email.id == email_id).first()
         
         if not email:
             return None
         
+        # Get content type from media_type or default
+        content_type = media_item.media_type or "application/octet-stream"
+        
         return AttachmentInfoResponse(
-            attachment_id=attachment.id,
-            filename=attachment.filename,
-            content_type=attachment.content_type,
-            size=attachment.size,
+            attachment_id=media_item.id,
+            filename=media_item.title or "attachment",
+            content_type=content_type,
+            size=None,  # Size not stored in MediaMetadata
             email_id=email.id,
             email_subject=email.subject,
             email_from=email.from_address,
@@ -3781,6 +3969,8 @@ async def get_attachment_by_size_order(
 ):
     """Get attachment by size order with offset.
     
+    Note: Size ordering is based on media blob data length since MediaMetadata doesn't store size.
+    
     Args:
         order: Order direction - 'asc' for smallest to biggest, 'desc' for biggest to smallest
         offset: Offset for pagination (0-based)
@@ -3790,25 +3980,42 @@ async def get_attachment_by_size_order(
     """
     session = db.get_session()
     try:
-        if order == "asc":
-            attachment = session.query(Attachment).order_by(Attachment.size.asc().nullslast()).offset(offset).first()
-        else:
-            attachment = session.query(Attachment).order_by(Attachment.size.desc().nullslast()).offset(offset).first()
+        # Query media items with their blobs, ordered by blob data length
+        query = session.query(MediaMetadata).join(MediaBlob).filter(
+            MediaMetadata.source == "email_attachment"
+        )
         
-        if not attachment:
+        # Order by blob data length (using func.length for binary data)
+        from sqlalchemy import func
+        if order == "asc":
+            query = query.order_by(func.length(MediaBlob.image_data).asc().nullslast())
+        else:
+            query = query.order_by(func.length(MediaBlob.image_data).desc().nullslast())
+        
+        media_item = query.offset(offset).first()
+        
+        if not media_item:
             return None
         
-        # Get the email for this attachment
-        email = session.query(Email).filter(Email.id == attachment.email_id).first()
+        # Get the email for this attachment (from source_reference)
+        email_id = int(media_item.source_reference)
+        email = session.query(Email).filter(Email.id == email_id).first()
         
         if not email:
             return None
         
+        # Get content type from media_type or default
+        content_type = media_item.media_type or "application/octet-stream"
+        
+        # Calculate size from blob data length
+        media_blob = session.query(MediaBlob).filter(MediaBlob.id == media_item.media_blob_id).first()
+        size = len(media_blob.image_data) if media_blob and media_blob.image_data else None
+        
         return AttachmentInfoResponse(
-            attachment_id=attachment.id,
-            filename=attachment.filename,
-            content_type=attachment.content_type,
-            size=attachment.size,
+            attachment_id=media_item.id,
+            filename=media_item.title or "attachment",
+            content_type=content_type,
+            size=size,
             email_id=email.id,
             email_subject=email.subject,
             email_from=email.from_address,
@@ -3828,7 +4035,9 @@ async def get_attachment_count():
     """
     session = db.get_session()
     try:
-        count = session.query(Attachment).count()
+        count = session.query(MediaMetadata).filter(
+            MediaMetadata.source == "email_attachment"
+        ).count()
         return {"count": count}
     finally:
         session.close()
@@ -3859,52 +4068,67 @@ async def get_images_grid(
         # Calculate offset
         offset = (page - 1) * page_size
         
-        # Query attachments - filter by type if not showing all types
+        # Query media items with source="email_attachment" - filter by type if not showing all types
         if all_types:
-            attachments_query = session.query(Attachment).join(Email)
+            media_query = session.query(MediaMetadata).join(MediaBlob).join(
+                Email, Email.id == func.cast(MediaMetadata.source_reference, Integer)
+            ).filter(MediaMetadata.source == "email_attachment")
         else:
-            attachments_query = session.query(Attachment).join(Email).filter(
-                Attachment.content_type.like('image/%')
+            media_query = session.query(MediaMetadata).join(MediaBlob).join(
+                Email, Email.id == func.cast(MediaMetadata.source_reference, Integer)
+            ).filter(
+                MediaMetadata.source == "email_attachment",
+                MediaMetadata.media_type.like('image/%')
             )
         
         # Apply sorting
         if order == "id":
             if direction == "asc":
-                attachments_query = attachments_query.order_by(Attachment.id.asc())
+                media_query = media_query.order_by(MediaMetadata.id.asc())
             else:
-                attachments_query = attachments_query.order_by(Attachment.id.desc())
+                media_query = media_query.order_by(MediaMetadata.id.desc())
         elif order == "size":
+            # Order by blob data length
             if direction == "asc":
-                attachments_query = attachments_query.order_by(Attachment.size.asc().nullslast())
+                media_query = media_query.order_by(func.length(MediaBlob.image_data).asc().nullslast())
             else:
-                attachments_query = attachments_query.order_by(Attachment.size.desc().nullslast())
+                media_query = media_query.order_by(func.length(MediaBlob.image_data).desc().nullslast())
         elif order == "date":
             if direction == "asc":
-                attachments_query = attachments_query.order_by(Email.date.asc().nullslast())
+                media_query = media_query.order_by(Email.date.asc().nullslast())
             else:
-                attachments_query = attachments_query.order_by(Email.date.desc().nullslast())
+                media_query = media_query.order_by(Email.date.desc().nullslast())
         
         # Get total count
-        total = attachments_query.count()
+        total = media_query.count()
         
         # Get paginated results
-        attachments = attachments_query.offset(offset).limit(page_size).all()
+        media_items = media_query.offset(offset).limit(page_size).all()
         
         # Build response
         image_list = []
-        for att in attachments:
-            email = att.email
-            image_list.append(AttachmentInfoResponse(
-                attachment_id=att.id,
-                filename=att.filename,
-                content_type=att.content_type,
-                size=att.size,
-                email_id=email.id,
-                email_subject=email.subject,
-                email_from=email.from_address,
-                email_date=email.date,
-                email_folder=email.folder
-            ))
+        for media_item in media_items:
+            # Get email from source_reference
+            email_id = int(media_item.source_reference)
+            email = session.query(Email).filter(Email.id == email_id).first()
+            
+            if email:
+                # Get content type and size
+                content_type = media_item.image_type or "application/octet-stream"
+                media_blob = session.query(MediaBlob).filter(MediaBlob.id == media_item.media_blob_id).first()
+                size = len(media_blob.image_data) if media_blob and media_blob.image_data else None
+                
+                image_list.append(AttachmentInfoResponse(
+                    attachment_id=media_item.id,
+                    filename=media_item.title or "attachment",
+                    content_type=content_type,
+                    size=size,
+                    email_id=email.id,
+                    email_subject=email.subject,
+                    email_from=email.from_address,
+                    email_date=email.date,
+                    email_folder=email.folder
+                ))
         
         total_pages = (total + page_size - 1) // page_size  # Ceiling division
         
@@ -3924,7 +4148,7 @@ async def get_attachment_info(attachment_id: int):
     """Get attachment information with email metadata.
     
     Args:
-        attachment_id: The ID of the attachment
+        attachment_id: The media_item ID of the attachment
         
     Returns:
         AttachmentInfoResponse with attachment and email metadata
@@ -3934,16 +4158,21 @@ async def get_attachment_info(attachment_id: int):
     """
     session = db.get_session()
     try:
-        attachment = session.query(Attachment).filter(Attachment.id == attachment_id).first()
+        # Get media item (attachment_id is now media_item_id)
+        media_item = session.query(MediaMetadata).filter(
+            MediaMetadata.id == attachment_id,
+            MediaMetadata.source == "email_attachment"
+        ).first()
         
-        if not attachment:
+        if not media_item:
             raise HTTPException(
                 status_code=404,
                 detail=f"Attachment with ID {attachment_id} not found"
             )
         
-        # Get the email for this attachment
-        email = session.query(Email).filter(Email.id == attachment.email_id).first()
+        # Get the email for this attachment (from source_reference)
+        email_id = int(media_item.source_reference)
+        email = session.query(Email).filter(Email.id == email_id).first()
         
         if not email:
             raise HTTPException(
@@ -3951,11 +4180,14 @@ async def get_attachment_info(attachment_id: int):
                 detail=f"Email for attachment {attachment_id} not found"
             )
         
+        # Get content type from media_type or default
+        content_type = media_item.media_type or "application/octet-stream"
+        
         return AttachmentInfoResponse(
-            attachment_id=attachment.id,
-            filename=attachment.filename,
-            content_type=attachment.content_type,
-            size=attachment.size,
+            attachment_id=media_item.id,
+            filename=media_item.title or "attachment",
+            content_type=content_type,
+            size=None,  # Size not stored in MediaMetadata
             email_id=email.id,
             email_subject=email.subject,
             email_from=email.from_address,
@@ -3968,10 +4200,12 @@ async def get_attachment_info(attachment_id: int):
 
 @app.delete("/attachments/{attachment_id}")
 async def delete_attachment(attachment_id: int):
-    """Delete an attachment by ID.
+    """Delete an attachment by ID (media_item_id).
+    
+    Deletes from unified MediaMetadata/MediaBlob tables.
     
     Args:
-        attachment_id: The ID of the attachment to delete
+        attachment_id: The media_item ID of the attachment to delete
         
     Returns:
         Success message
@@ -3981,15 +4215,36 @@ async def delete_attachment(attachment_id: int):
     """
     session = db.get_session()
     try:
-        attachment = session.query(Attachment).filter(Attachment.id == attachment_id).first()
+        # Get media item (attachment_id is now media_item_id)
+        media_item = session.query(MediaMetadata).filter(
+            MediaMetadata.id == attachment_id,
+            MediaMetadata.source == "email_attachment"
+        ).first()
         
-        if not attachment:
+        if not media_item:
             raise HTTPException(
                 status_code=404,
                 detail=f"Attachment with ID {attachment_id} not found"
             )
         
-        session.delete(attachment)
+        # Get the media blob
+        media_blob = session.query(MediaBlob).filter(
+            MediaBlob.id == media_item.media_blob_id
+        ).first()
+        
+        if media_blob:
+            # Check if any other media items reference this blob (before deleting)
+            other_items_count = session.query(MediaMetadata).filter(
+                MediaMetadata.media_blob_id == media_blob.id
+            ).count()
+            
+            # Delete media item
+            session.delete(media_item)
+            
+            # If this was the only item referencing this blob, delete the blob too
+            if other_items_count == 1:
+                session.delete(media_blob)
+        
         session.commit()
         
         return {"message": f"Attachment {attachment_id} deleted successfully"}
@@ -4007,10 +4262,12 @@ async def delete_attachment(attachment_id: int):
 
 @app.get("/attachments/{attachment_id}")
 async def get_attachment_content(attachment_id: int, preview: bool = False):
-    """Get attachment content by ID.
+    """Get attachment content by ID (media_item_id).
+    
+    Uses unified MediaMetadata/MediaBlob tables.
     
     Args:
-        attachment_id: The ID of the attachment to retrieve
+        attachment_id: The media_item ID of the attachment to retrieve
         preview: If True and attachment is an image, return thumbnail instead of full image
         
     Returns:
@@ -4021,58 +4278,67 @@ async def get_attachment_content(attachment_id: int, preview: bool = False):
     """
     session = db.get_session()
     try:
-        attachment = session.query(Attachment).filter(Attachment.id == attachment_id).first()
+        # Get media item (attachment_id is now media_item_id)
+        media_item = session.query(MediaMetadata).filter(
+            MediaMetadata.id == attachment_id,
+            MediaMetadata.source == "email_attachment"
+        ).first()
+        
+        if not media_item:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Attachment with ID {attachment_id} not found"
+            )
+        
+        # Get the media blob
+        media_blob = session.query(MediaBlob).filter(
+            MediaBlob.id == media_item.media_blob_id
+        ).first()
+        
+        if not media_blob:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Media blob for attachment {attachment_id} not found"
+            )
+        
+        # Determine content type from media_type or default
+        content_type = media_item.media_type or "application/octet-stream"
+        
+        if preview:
+            content = media_blob.thumbnail_data
+            if content is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Attachment with ID {attachment_id} has no thumbnail available"
+                )
+            content_type = "image/jpeg"
+            filename = media_item.title or "attachment"
+            base_name, ext = os.path.splitext(filename)
+            safe_filename = f"{base_name}_thumb.jpg".replace('"', '\\"')
+        else:
+            content = media_blob.image_data
+            if content is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Attachment with ID {attachment_id} has no content"
+                )
+            filename = media_item.title or "attachment"
+            safe_filename = filename.replace('"', '\\"')
+        
+        headers = {
+            "Content-Disposition": f'inline; filename="{safe_filename}"'
+        }
+        
+        return Response(
+            content=content,
+            media_type=content_type,
+            headers=headers
+        )
     finally:
         session.close()
-    
-    if not attachment:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Attachment with ID {attachment_id} not found"
-        )
-    
-    # Check if preview is requested
-    content_type = attachment.content_type or "application/octet-stream"
-    
-    if preview:
-        # Return thumbnail if available (for all file types)
-        content = attachment.image_thumbnail
-        if content is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Attachment with ID {attachment_id} has no thumbnail available"
-            )
-        # Thumbnails are always JPEG
-        content_type = "image/jpeg"
-        filename = attachment.filename or "attachment"
-        # Add _thumb suffix to filename
-        base_name, ext = os.path.splitext(filename)
-        safe_filename = f"{base_name}_thumb.jpg".replace('"', '\\"')
-    else:
-        # Return full attachment
-        content = attachment.data
-        if content is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Attachment with ID {attachment_id} has no content"
-            )
-        filename = attachment.filename or "attachment"
-        safe_filename = filename.replace('"', '\\"')
-    
-    # Set Content-Disposition header for filename
-    headers = {
-        "Content-Disposition": f'inline; filename="{safe_filename}"'
-    }
-    
-    # Return the binary content with proper headers
-    return Response(
-        content=content,
-        media_type=content_type,
-        headers=headers
-    )
 
 
-@app.get("/images/search", response_model=List[ImageMetadataResponse])
+@app.get("/images/search", response_model=List[MediaMetadataResponse])
 async def search_images(
     title: Optional[str] = Query(None, description="Filter by title (partial match, case-insensitive)"),
     description: Optional[str] = Query(None, description="Filter by description (partial match, case-insensitive)"),
@@ -4081,7 +4347,7 @@ async def search_images(
     categories: Optional[str] = Query(None, description="Filter by categories (partial match, case-insensitive)"),
     source: Optional[str] = Query(None, description="Filter by source (exact match, case-insensitive)"),
     source_reference: Optional[str] = Query(None, description="Filter by source_reference (partial match, case-insensitive)"),
-    image_type: Optional[str] = Query(None, description="Filter by image type/MIME type (partial match, case-insensitive)"),
+    media_type: Optional[str] = Query(None, description="Filter by media type/MIME type (partial match, case-insensitive)"),
     year: Optional[int] = Query(None, description="Filter by year"),
     month: Optional[int] = Query(None, ge=1, le=12, description="Filter by month (1-12)"),
     has_gps: Optional[bool] = Query(None, description="Filter by whether image has GPS data"),
@@ -4107,7 +4373,7 @@ async def search_images(
         categories: Partial match on categories (comma-separated)
         source: Exact match on source (case-insensitive)
         source_reference: Partial match on source_reference (file path)
-        image_type: Partial match on image type/MIME type
+        media_type: Partial match on media type/MIME type
         year: Filter by year
         month: Filter by month (1-12)
         has_gps: Filter by GPS data presence
@@ -4121,7 +4387,7 @@ async def search_images(
         region: Partial match on region
         
     Returns:
-        List of ImageMetadataResponse objects matching all specified criteria
+        List of MediaMetadataResponse objects matching all specified criteria
     """
     image_service = ImageService(db=db)
     try:
@@ -4134,7 +4400,7 @@ async def search_images(
             categories=categories,
             source=source,
             source_reference=source_reference,
-            image_type=image_type,
+            media_type=media_type,
             year=year,
             month=month,
             has_gps=has_gps,
@@ -4152,7 +4418,7 @@ async def search_images(
         images = image_service.search_images(filters)
         
         # Convert to response models
-        return [ImageMetadataResponse(**image_service.to_response_model(img)) for img in images]
+        return [MediaMetadataResponse(**image_service.to_response_model(img)) for img in images]
     except ServiceException as e:
         raise HTTPException(status_code=e.status_code, detail=str(e))
     except Exception as e:
@@ -4165,7 +4431,7 @@ async def search_images(
 @app.get("/images/{image_id}")
 async def get_image_content(
     image_id: int,
-    type: str = Query("blob", regex="^(blob|metadata)$", description="Type of ID: 'blob' for image_blob.id or 'metadata' for image_information.id"),
+    type: str = Query("blob", regex="^(blob|metadata)$", description="Type of ID: 'blob' for media_blob.id or 'metadata' for media_items.id"),
     preview: bool = Query(False, description="If True, return thumbnail instead of full image"),
     convert_heic_to_jpg: bool = Query(True, description="If True, convert HEIC images to JPG format before returning")
 ):
@@ -4173,7 +4439,7 @@ async def get_image_content(
     
     Args:
         image_id: The ID of the image (blob ID or metadata ID depending on type parameter)
-        type: Type of ID - 'blob' for image_blob.id or 'metadata' for image_information.id (default: 'blob')
+        type: Type of ID - 'blob' for media_blob.id or 'metadata' for media_items.id (default: 'blob')
         preview: If True, return thumbnail instead of full image
         convert_heic_to_jpg: If True, convert HEIC images to JPG format before returning (default: True)
         
@@ -4348,7 +4614,7 @@ async def update_image_metadata(image_id: int, update_data: Dict[str, Any]):
     image_service = ImageService(db=db)
     try:
         # Extract allowed fields
-        updates = ImageMetadataUpdate(
+        updates = MediaMetadataUpdate(
             description=update_data.get("description"),
             tags=update_data.get("tags"),
             rating=update_data.get("rating")
@@ -4482,7 +4748,7 @@ async def delete_images(
             )
         
         # Build query
-        query = session.query(ImageMetadata)
+        query = session.query(MediaMetadata)
         
         if all:
             # Delete all images
@@ -4511,14 +4777,14 @@ async def delete_images(
                     )
                 query = query.filter(
                     and_(
-                        ImageMetadata.id >= start_id,
-                        ImageMetadata.id <= end_id
+                        MediaMetadata.id >= start_id,
+                        MediaMetadata.id <= end_id
                     )
                 )
             elif start_id is not None:
-                query = query.filter(ImageMetadata.id >= start_id)
+                query = query.filter(MediaMetadata.id >= start_id)
             elif end_id is not None:
-                query = query.filter(ImageMetadata.id <= end_id)
+                query = query.filter(MediaMetadata.id <= end_id)
             
             # Count before deletion
             count = query.count()
@@ -4895,5 +5161,61 @@ async def delete_reference_document(document_id: int):
     except Exception as e:
         session.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting document: {str(e)}")
+    finally:
+        session.close()
+
+
+@app.delete("/admin/empty-media-tables")
+async def empty_media_tables():
+    """Empty the attachments, media_blob, media_items, messages, and message_attachments tables.
+    
+    WARNING: This permanently deletes all data from these tables.
+    
+    Returns:
+        Dictionary with deletion counts for each table
+    """
+    session = db.get_session()
+    try:
+        # Delete in order to respect foreign key constraints
+        # 1. Delete message_attachments first (references messages and media_items)
+        message_attachment_count = session.query(MessageAttachment).count()
+        session.query(MessageAttachment).delete()
+        
+        # 2. Delete messages
+        message_count = session.query(IMessage).count()
+        session.query(IMessage).delete()
+        
+        # 3. Delete media_items (references media_blob)
+        media_item_count = session.query(MediaMetadata).count()
+        session.query(MediaMetadata).delete()
+        
+        # 4. Delete media_blob
+        media_blob_count = session.query(MediaBlob).count()
+        session.query(MediaBlob).delete()
+        
+        # 5. Delete attachments (old table, may not exist)
+        attachment_count = 0
+        try:
+            attachment_count = session.query(Attachment).count()
+            session.query(Attachment).delete()
+        except Exception:
+            # Table might not exist, ignore
+            pass
+        
+        session.commit()
+        
+        return {
+            "message": "Tables emptied successfully",
+            "deleted_counts": {
+                "message_attachments": message_attachment_count,
+                "messages": message_count,
+                "media_items": media_item_count,
+                "media_blob": media_blob_count,
+                "attachments": attachment_count
+            }
+        }
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"Error emptying tables: {str(e)}")
     finally:
         session.close()

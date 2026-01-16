@@ -14,7 +14,7 @@ class ImageSearchFilters:
     categories: Optional[str] = None
     source: Optional[str] = None
     source_reference: Optional[str] = None
-    image_type: Optional[str] = None
+    media_type: Optional[str] = None
     year: Optional[int] = None
     month: Optional[int] = None
     has_gps: Optional[bool] = None
@@ -29,8 +29,8 @@ class ImageSearchFilters:
 
 
 @dataclass
-class ImageMetadataUpdate:
-    """Update parameters for image metadata."""
+class MediaMetadataUpdate:
+    """Update parameters for media metadata."""
     description: Optional[str] = None
     tags: Optional[str] = None
     rating: Optional[int] = None

@@ -507,6 +507,25 @@
                             </label>
                         </div>
                     </section>
+                    <section class="config-section">
+                        <h3>Database Maintenance</h3>
+                        <div class="setting-group">
+                            <p style="color: #dc3545; margin-bottom: 10px;">
+                                <strong>Warning:</strong> This will permanently delete all data from the following tables:
+                            </p>
+                            <ul style="margin-left: 20px; margin-bottom: 15px; color: #666;">
+                                <li>attachments</li>
+                                <li>media_blob</li>
+                                <li>media_items</li>
+                                <li>messages</li>
+                                <li>message_attachments</li>
+                            </ul>
+                            <button type="button" id="empty-media-tables-btn" class="modal-btn" style="background-color: #dc3545; color: white;">
+                                <i class="fas fa-trash-alt"></i> Empty Media and Message Tables
+                            </button>
+                            <div id="empty-tables-status" style="margin-top: 10px; padding: 10px; border-radius: 4px; display: none;"></div>
+                        </div>
+                    </section>
                 </div>
                 <div class="config-tab-content" id="api-docs-tab">
                     <iframe id="api-docs-iframe" src="/docs"></iframe>
@@ -1408,6 +1427,11 @@
                                         <th class="email-editor-col-from">From</th>
                                         <th class="email-editor-col-to">To</th>
                                         <th class="email-editor-col-date">Date</th>
+                                        <th class="email-editor-col-personal">Personal</th>
+                                        <th class="email-editor-col-business">Business</th>
+                                        <th class="email-editor-col-important">Important</th>
+                                        <th class="email-editor-col-use-by-ai">Use by AI</th>
+                                        <th class="email-editor-col-delete">Delete</th>
                                     </tr>
                                 </thead>
                                 <tbody id="email-editor-table-body">

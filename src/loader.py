@@ -9,7 +9,7 @@ from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional
 from PIL import Image, ImageDraw, ImageFont
 
-from .database import Attachment, Email
+from .database import  Email
 from .config import Config, get_config
 from .database.storage import EmailStorage
 from .email_client import GmailClient

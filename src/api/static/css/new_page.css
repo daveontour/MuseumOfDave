@@ -2861,19 +2861,57 @@ body {
 }
 
 .email-editor-col-subject {
-    width: 40%;
+    width: 25%;
 }
 
 .email-editor-col-from {
-    width: 25%;
+    width: 15%;
 }
 
 .email-editor-col-to {
-    width: 25%;
+    width: 15%;
 }
 
 .email-editor-col-date {
     width: 10%;
+}
+
+.email-editor-col-personal,
+.email-editor-col-business,
+.email-editor-col-important,
+.email-editor-col-use-by-ai {
+    width: 7%;
+    text-align: center;
+}
+
+.email-editor-col-delete {
+    width: 4%;
+    text-align: center;
+}
+
+.email-editor-table td.email-editor-col-personal,
+.email-editor-table td.email-editor-col-business,
+.email-editor-table td.email-editor-col-important,
+.email-editor-table td.email-editor-col-use-by-ai {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s ease;
+}
+
+.email-editor-table td.email-editor-col-personal:hover,
+.email-editor-table td.email-editor-col-business:hover,
+.email-editor-table td.email-editor-col-important:hover,
+.email-editor-table td.email-editor-col-use-by-ai:hover {
+    background-color: #f0f0f0;
+}
+
+.email-editor-table td.email-editor-col-delete {
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.email-editor-table td.email-editor-col-delete:hover {
+    color: #c82333 !important;
 }
 
 .email-editor-table tbody tr {

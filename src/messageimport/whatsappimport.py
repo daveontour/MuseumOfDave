@@ -1,6 +1,7 @@
 """WhatsApp import functionality."""
 
 import csv
+import mimetypes
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable
@@ -143,6 +144,21 @@ def import_whatsapp_from_directory(
                                     try:
                                         with open(attachment_path, 'rb') as att_file:
                                             attachment_data = att_file.read()
+                                        
+                                        # If attachment_type is not set, guess it from the filename
+                                        if not attachment_type or attachment_type == "Image" or attachment_type == "Video" or attachment_type == "Audio" or attachment_type == "Attachment":
+                                            guessed_type, _ = mimetypes.guess_type(attachment_filename)
+                                            if guessed_type:
+                                                attachment_type = guessed_type
+                                            else:
+                                                # Fallback: try to determine from actual file path extension
+                                                guessed_type, _ = mimetypes.guess_type(str(attachment_path))
+                                                if guessed_type:
+                                                    attachment_type = guessed_type
+                                                else:
+                                                    # Default fallback
+                                                    attachment_type = "application/octet-stream"
+                                        
                                         stats["attachments_found"] += 1
                                     except Exception as e:
                                         missing_filename = f"{conversation_name}/{attachment_filename}"
@@ -158,6 +174,8 @@ def import_whatsapp_from_directory(
                                         stats["missing_attachment_filenames"].append(missing_filename)
                             
                             # Build message data dictionary
+                            # Note: attachment_filename and attachment_type are passed separately to save_imessage
+                            # and stored in media_items table, not in the message table
                             message_data = {
                                 "chat_session": row.get('Chat Session', '').strip() or None,
                                 "message_date": message_date,
@@ -172,12 +190,16 @@ def import_whatsapp_from_directory(
                                 "replying_to": row.get('Replying to', '').strip() or None,
                                 "subject": None,  # WhatsApp CSV doesn't have subject
                                 "text": row.get('Text', '').strip() or None,
-                                "attachment_filename": attachment_filename,
-                                "attachment_type": attachment_type,
                             }
                             
                             # Save message to database
-                            imessage, is_update = storage.save_imessage(message_data, attachment_data)
+                            imessage, is_update = storage.save_imessage(
+                                message_data, 
+                                attachment_data=attachment_data,
+                                attachment_filename=attachment_filename,
+                                attachment_type=attachment_type, 
+                                source="WhatsApp"
+                            )
                             
                             if is_update:
                                 stats["messages_updated"] += 1
@@ -208,9 +230,19 @@ def main():
     # Initialize database connection and create tables
     db = Database()
     db.create_tables()
+
+    #empty the messages table and the media_items table and the message_attachments table and the media_blob table
+    db.empty_tables()
+    db.commit()
+    db.close()
+    
+    #recreate the tables
+    db.create_tables()
+    db.commit()
+    db.close()
     
     # Test directory path - update this to your actual directory
-    test_directory = r"C:\NonOneDrive\iMazingBackup\David's iPhone (4729)\WhatsApp"
+    test_directory = r"C:\NonOneDrive\iMazingBackup\David's iPhone (4729)\WhatsAppTest"
     
     print(f"Starting WhatsApp import from: {test_directory}")
     print("-" * 60)
