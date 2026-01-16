@@ -45,6 +45,14 @@ class Email(Base):
     snippet = Column(Text)
     embedding = Column(Text, nullable=True)  # Will store vector as text/json, can be converted to pgvector later
     has_attachments = Column(Boolean, default=False, nullable=False)
+    user_deleted = Column(Boolean, default=False, nullable=False)
+    is_personal = Column(Boolean, default=False, nullable=False)
+    is_business = Column(Boolean, default=False, nullable=False)
+    is_social = Column(Boolean, default=False, nullable=False)
+    is_promotional = Column(Boolean, default=False, nullable=False)
+    is_spam = Column(Boolean, default=False, nullable=False)
+    is_important = Column(Boolean, default=False, nullable=False)
+    use_by_ai = Column(Boolean, default=False, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 

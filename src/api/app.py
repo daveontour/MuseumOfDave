@@ -3265,7 +3265,7 @@ async def get_email_html(email_id: int):
     """
     session = db.get_session()
     try:
-        email = session.query(Email).filter(Email.id == email_id).first()
+        email = session.query(Email).filter(Email.id == email_id).filter(Email.user_deleted == False).first()
     finally:
         session.close()
     
@@ -3331,7 +3331,7 @@ async def get_email_text(email_id: int):
     """
     session = db.get_session()
     try:
-        email = session.query(Email).filter(Email.id == email_id).first()
+        email = session.query(Email).filter(Email.id == email_id).filter(Email.user_deleted == False).first()
     finally:
         session.close()
     
@@ -3369,7 +3369,7 @@ async def get_email_snippet(email_id: int):
     """
     session = db.get_session()
     try:
-        email = session.query(Email).filter(Email.id == email_id).first()
+        email = session.query(Email).filter(Email.id == email_id).filter(Email.user_deleted == False).first()
     finally:
         session.close()
     
@@ -3408,7 +3408,7 @@ async def get_email_metadata(email_id: int):
     session = db.get_session()
     try:
         # Eagerly load attachments to avoid lazy loading issues
-        email = session.query(Email).options(joinedload(Email.attachments)).filter(Email.id == email_id).first()
+        email = session.query(Email).options(joinedload(Email.attachments)).filter(Email.id == email_id).filter(Email.user_deleted == False).first()
         
         if not email:
             raise HTTPException(
@@ -3443,6 +3443,9 @@ async def get_email_metadata(email_id: int):
 async def delete_email(email_id: int):
     """Delete an email by ID.
     
+    Deletes all attachments associated with the email and sets the user_deleted
+    field to True (soft delete) instead of actually deleting the email record.
+    
     Args:
         email_id: The ID of the email to delete
         
@@ -3462,8 +3465,22 @@ async def delete_email(email_id: int):
                 detail=f"Email with ID {email_id} not found"
             )
         
-        # Delete the email - attachments will be cascade deleted via SQLAlchemy relationship
-        session.delete(email)
+        # Delete all attachments associated with the email
+        attachments = session.query(Attachment).filter(Attachment.email_id == email_id).all()
+        for attachment in attachments:
+            session.delete(attachment)
+        
+        # Set user_deleted flag to True (soft delete) and clear other fields
+        # This is a soft delete, so we don't actually delete the email record,
+        # but we clear the fields so that the email is not returned in search results.
+        # This is to stop the email being re-processed by the background job which would otherwise
+        # cause the email to be re-processed and re-indexed.
+        email.raw_message = None
+        email.plain_text = None
+        email.snippet = None
+        email.embedding = None
+        email.has_attachments = False
+        email.user_deleted = True
         session.commit()
         
         return {"message": f"Email {email_id} deleted successfully", "email_id": email_id}
@@ -3546,8 +3563,12 @@ async def get_emails_by_label(labels: List[str] = Query(..., description="List o
         
         # Query emails where the folder field contains any of the labels
         # Eagerly load attachments to avoid lazy loading issues
+        # Exclude emails where user_deleted is True
         emails = session.query(Email).options(joinedload(Email.attachments)).filter(
-            or_(*label_filters)
+            and_(
+                or_(*label_filters),
+                Email.user_deleted == False
+            )
         ).all()
         
         # Convert to response models (access attachments while session is open)
@@ -3640,6 +3661,9 @@ async def search_emails(
         # Filter by has_attachments
         if has_attachments is not None:
             filters.append(Email.has_attachments == has_attachments)
+        
+        # Always exclude emails where user_deleted is True
+        filters.append(Email.user_deleted == False)
         
         # Apply all filters with AND logic
         if filters:

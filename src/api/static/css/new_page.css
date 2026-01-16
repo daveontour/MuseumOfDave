@@ -2454,7 +2454,7 @@ body {
 .sms-chat-session-count {
     font-size: 12px;
     color: #fff;
-    background-color: #25d366;
+    background-color: #2196F3;
     padding: 2px 6px;
     border-radius: 10px;
     min-width: 20px;
@@ -2464,7 +2464,7 @@ body {
 }
 
 .sms-chat-session-item.active .sms-chat-session-count {
-    background-color: #25d366;
+    background-color: #2196F3;
     color: #fff;
 }
 
@@ -2552,7 +2552,7 @@ body {
 }
 
 .sms-message.outgoing .sms-message-bubble {
-    background-color: #d9fdd3;
+    background-color: aliceblue;
     color: #111b21;
     border-bottom-right-radius: 0;
 }
@@ -2792,6 +2792,161 @@ body {
 
 .email-table-row:hover {
     background-color: #f8fbff;
+}
+
+/* Email Editor Modal Styles */
+.email-editor-modal-content {
+    width: 90vw;
+    max-width: 90vw;
+    max-height: 90vh;
+    height: 90vh;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+}
+
+.email-editor-modal-body {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Upper Pane: Search Criteria */
+.email-editor-search-pane {
+    flex-shrink: 0;
+    padding: 1em;
+    background-color: aliceblue;
+    border-bottom: 1px solid #e9ecef;
+}
+
+/* Lower Pane: Email Table */
+.email-editor-table-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: #fff;
+}
+
+.email-editor-table-container {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.email-editor-table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: #ffffff;
+    table-layout: fixed;
+}
+
+.email-editor-table thead {
+    background-color: #f8f9fa;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.email-editor-table th {
+    padding: 0.75em;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.85em;
+    color: #233366;
+    border-bottom: 2px solid #e9ecef;
+    white-space: nowrap;
+}
+
+.email-editor-col-subject {
+    width: 40%;
+}
+
+.email-editor-col-from {
+    width: 25%;
+}
+
+.email-editor-col-to {
+    width: 25%;
+}
+
+.email-editor-col-date {
+    width: 10%;
+}
+
+.email-editor-table tbody tr {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.email-editor-table tbody tr:hover {
+    background-color: #f8fbff;
+}
+
+.email-editor-table tbody tr.selected {
+    background-color: #e3f2fd;
+    border-left: 3px solid #2196F3;
+}
+
+.email-editor-table td {
+    padding: 3px;
+    padding-left: 3px;
+    font-size: 0.9em;
+    color: #333;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.email-editor-table td.email-editor-col-subject,
+.email-editor-table td.email-editor-col-from,
+.email-editor-table td.email-editor-col-to {
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Pagination Styles */
+.email-editor-pagination {
+    flex-shrink: 0;
+    padding: 1em;
+    background-color: #f8f9fa;
+    border-top: 1px solid #e9ecef;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5em;
+}
+
+.email-editor-pagination button {
+    padding: 0.5em 1em;
+    border: 1px solid #bfc9da;
+    background-color: #fff;
+    color: #233366;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: all 0.2s ease;
+}
+
+.email-editor-pagination button:hover:not(:disabled) {
+    background-color: #e3f2fd;
+    border-color: #2196F3;
+}
+
+.email-editor-pagination button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.email-editor-pagination .email-editor-page-info {
+    margin: 0 1em;
+    font-size: 0.9em;
+    color: #666;
 }
 
 .email-table-row.selected {

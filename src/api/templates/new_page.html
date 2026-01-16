@@ -107,6 +107,9 @@
                     <button type="button" class="more-options-btn" id="email-gallery-sidebar-btn">
                         <i class="fas fa-envelope"></i> Email Gallery
                     </button>
+                    <button type="button" class="more-options-btn" id="email-editor-sidebar-btn">
+                        <i class="fas fa-edit"></i> Email Editor
+                    </button>
                     <button type="button" class="more-options-btn" id="new-image-gallery-sidebar-btn">
                         <i class="fas fa-images"></i> New Image Gallery
                     </button>
@@ -1356,6 +1359,70 @@
            </div>
         </div>
         
+        <!-- Email Editor Modal -->
+        <div id="email-editor-modal" class="modal">
+            <div class="modal-content email-editor-modal-content">
+                <button id="close-email-editor-modal" class="modal-close-btn">&times;</button>
+                <div class="email-editor-modal-body">
+                    <!-- Upper Pane: Search Criteria -->
+                    <div class="email-editor-search-pane">
+                        <div class="email-metadata-filters">
+                            <div class="email-gallery-title">
+                                <h2>Email Editor</h2> 
+                            </div>
+                            <div class="email-gallery-search-row">
+                                <input type="text" id="email-editor-search" placeholder="Search emails..." class="email-gallery-input">
+                            </div>
+                            <div class="email-gallery-filter-row">
+                                <input type="text" id="email-editor-sender" placeholder="From..." class="email-gallery-input">
+                                <input type="text" id="email-editor-recipient" placeholder="To..." class="email-gallery-input">
+                            </div>
+                            <div class="email-gallery-filter-row-full">
+                                <input type="text" id="email-editor-to-from" placeholder="To or From..." class="email-gallery-input">
+                            </div> 
+                            <div class="email-gallery-filter-row">
+                                <select id="email-editor-year-filter" class="email-gallery-select"></select>                                         
+                                <select id="email-editor-month-filter" class="email-gallery-select"></select>
+                                <label class="email-gallery-checkbox-label">
+                                    <input type="checkbox" id="email-editor-attachments-filter">
+                                    Attachments
+                                </label>
+                            </div>
+                            <div class="email-gallery-button-row">
+                                <button id="email-editor-search-btn" class="modal-btn modal-btn-primary">
+                                    <i class="fas fa-search"></i>Search
+                                </button>
+                                <button id="email-editor-clear-btn" class="modal-btn modal-btn-secondary">
+                                    <i class="fas fa-times"></i>Clear
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Lower Pane: Email Table -->
+                    <div class="email-editor-table-pane">
+                        <div class="email-editor-table-container">
+                            <table class="email-editor-table">
+                                <thead>
+                                    <tr>
+                                        <th class="email-editor-col-subject">Subject</th>
+                                        <th class="email-editor-col-from">From</th>
+                                        <th class="email-editor-col-to">To</th>
+                                        <th class="email-editor-col-date">Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="email-editor-table-body">
+                                    <!-- Email rows will be inserted here -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="email-editor-pagination" id="email-editor-pagination">
+                            <!-- Pagination controls will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Attachment Image Modal -->
         <div id="email-attachment-image-modal" class="modal email-attachment-modal">
             <div class="email-attachment-modal-content">
@@ -1810,29 +1877,29 @@
                         </div>
                         <!-- Filter Buttons -->
                         <div id="sms-chat-filters" style="padding: 8px 16px; background-color: #fff; border-bottom: 1px solid #e9edef; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
-                            <label id="filter-imessage-label" style="display: flex; align-items: center; cursor: pointer; padding: 6px 10px; border-radius: 20px; background-color: #d1e7dd; border: 2px solid #0f5132; white-space: nowrap; transition: all 0.2s;" onmouseover="if(!this.querySelector('input').checked) this.style.backgroundColor='#e4e6eb'; this.style.borderColor='#e4e6eb';" onmouseout="if(!this.querySelector('input').checked) this.style.backgroundColor='#f0f2f5'; this.style.borderColor='#f0f2f5';">
+                            <label id="filter-imessage-label" style="display: flex; align-items: center; cursor: pointer; padding: 6px 10px; border-radius: 20px; background-color: #d1e7dd; border: 2px solid #0f3251; white-space: nowrap; transition: all 0.2s;" onmouseover="if(!this.querySelector('input').checked) this.style.backgroundColor='#e4e6eb'; this.style.borderColor='#e4e6eb';" onmouseout="if(!this.querySelector('input').checked) this.style.backgroundColor='#f0f2f5'; this.style.borderColor='#f0f2f5';">
                                 <input type="checkbox" id="filter-imessage" class="sms-filter-checkbox" checked style="margin-right: 6px; cursor: pointer; display: none;">
-                                <i class="fab fa-apple" style="color: #0f5132; margin-right: 4px; font-size: 12px;"></i><span style="font-size: 12px; color: #0f5132; font-weight: 600;">iMessage</span>
+                                <i class="fab fa-apple" style="color: #0f3251; margin-right: 4px; font-size: 12px;"></i><span style="font-size: 12px; color: #0f3251; font-weight: 600;">iMessage</span>
                             </label>
-                            <label id="filter-sms-label" style="display: flex; align-items: center; cursor: pointer; padding: 6px 10px; border-radius: 20px; background-color: #d1e7dd; border: 2px solid #0f5132; white-space: nowrap; transition: all 0.2s;" onmouseover="if(!this.querySelector('input').checked) this.style.backgroundColor='#e4e6eb'; this.style.borderColor='#e4e6eb';" onmouseout="if(!this.querySelector('input').checked) this.style.backgroundColor='#f0f2f5'; this.style.borderColor='#f0f2f5';">
+                            <label id="filter-sms-label" style="display: flex; align-items: center; cursor: pointer; padding: 6px 10px; border-radius: 20px; background-color: #d1e7dd; border: 2px solid #0f3251; white-space: nowrap; transition: all 0.2s;" onmouseover="if(!this.querySelector('input').checked) this.style.backgroundColor='#e4e6eb'; this.style.borderColor='#e4e6eb';" onmouseout="if(!this.querySelector('input').checked) this.style.backgroundColor='#f0f2f5'; this.style.borderColor='#f0f2f5';">
                                 <input type="checkbox" id="filter-sms" class="sms-filter-checkbox" checked style="margin-right: 6px; cursor: pointer; display: none;">
-                                <i class="fas fa-comment" style="color: #0f5132; margin-right: 4px; font-size: 12px;"></i><span style="font-size: 12px; color: #0f5132; font-weight: 600;">SMS</span>
+                                <i class="fas fa-comment" style="color: #0f3251; margin-right: 4px; font-size: 12px;"></i><span style="font-size: 12px; color: #0f3251; font-weight: 600;">SMS</span>
                             </label>
-                            <label id="filter-whatsapp-label" style="display: flex; align-items: center; cursor: pointer; padding: 6px 10px; border-radius: 20px; background-color: #d1e7dd; border: 2px solid #0f5132; white-space: nowrap; transition: all 0.2s;" onmouseover="if(!this.querySelector('input').checked) this.style.backgroundColor='#e4e6eb'; this.style.borderColor='#e4e6eb';" onmouseout="if(!this.querySelector('input').checked) this.style.backgroundColor='#f0f2f5'; this.style.borderColor='#f0f2f5';">
+                            <label id="filter-whatsapp-label" style="display: flex; align-items: center; cursor: pointer; padding: 6px 10px; border-radius: 20px; background-color: #d1e7dd; border: 2px solid #0f3251; white-space: nowrap; transition: all 0.2s;" onmouseover="if(!this.querySelector('input').checked) this.style.backgroundColor='#e4e6eb'; this.style.borderColor='#e4e6eb';" onmouseout="if(!this.querySelector('input').checked) this.style.backgroundColor='#f0f2f5'; this.style.borderColor='#f0f2f5';">
                                 <input type="checkbox" id="filter-whatsapp" class="sms-filter-checkbox" checked style="margin-right: 6px; cursor: pointer; display: none;">
-                                <i class="fab fa-whatsapp" style="color: #0f5132; margin-right: 4px; font-size: 12px;"></i><span style="font-size: 12px; color: #0f5132; font-weight: 600;">WhatsApp</span>
+                                <i class="fab fa-whatsapp" style="color: #0f3251; margin-right: 4px; font-size: 12px;"></i><span style="font-size: 12px; color: #0f3251; font-weight: 600;">WhatsApp</span>
                             </label>
-                            <label id="filter-facebook-label" style="display: flex; align-items: center; cursor: pointer; padding: 6px 10px; border-radius: 20px; background-color: #d1e7dd; border: 2px solid #0f5132; white-space: nowrap; transition: all 0.2s;" onmouseover="if(!this.querySelector('input').checked) this.style.backgroundColor='#e4e6eb'; this.style.borderColor='#e4e6eb';" onmouseout="if(!this.querySelector('input').checked) this.style.backgroundColor='#f0f2f5'; this.style.borderColor='#f0f2f5';">
+                            <label id="filter-facebook-label" style="display: flex; align-items: center; cursor: pointer; padding: 6px 10px; border-radius: 20px; background-color: #d1e7dd; border: 2px solid #0f3251; white-space: nowrap; transition: all 0.2s;" onmouseover="if(!this.querySelector('input').checked) this.style.backgroundColor='#e4e6eb'; this.style.borderColor='#e4e6eb';" onmouseout="if(!this.querySelector('input').checked) this.style.backgroundColor='#f0f2f5'; this.style.borderColor='#f0f2f5';">
                                 <input type="checkbox" id="filter-facebook" class="sms-filter-checkbox" checked style="margin-right: 6px; cursor: pointer; display: none;">
-                                <i class="fab fa-facebook-messenger" style="color: #0f5132; margin-right: 4px; font-size: 12px;"></i><span style="font-size: 12px; color: #0f5132; font-weight: 600;">Facebook</span>
+                                <i class="fab fa-facebook-messenger" style="color: #0f3251; margin-right: 4px; font-size: 12px;"></i><span style="font-size: 12px; color: #0f3251; font-weight: 600;">Facebook</span>
                             </label>
-                            <label id="filter-instagram-label" style="display: flex; align-items: center; cursor: pointer; padding: 6px 10px; border-radius: 20px; background-color: #d1e7dd; border: 2px solid #0f5132; white-space: nowrap; transition: all 0.2s;" onmouseover="if(!this.querySelector('input').checked) this.style.backgroundColor='#e4e6eb'; this.style.borderColor='#e4e6eb';" onmouseout="if(!this.querySelector('input').checked) this.style.backgroundColor='#f0f2f5'; this.style.borderColor='#f0f2f5';">
+                            <label id="filter-instagram-label" style="display: flex; align-items: center; cursor: pointer; padding: 6px 10px; border-radius: 20px; background-color: #d1e7dd; border: 2px solid #0f3251; white-space: nowrap; transition: all 0.2s;" onmouseover="if(!this.querySelector('input').checked) this.style.backgroundColor='#e4e6eb'; this.style.borderColor='#e4e6eb';" onmouseout="if(!this.querySelector('input').checked) this.style.backgroundColor='#f0f2f5'; this.style.borderColor='#f0f2f5';">
                                 <input type="checkbox" id="filter-instagram" class="sms-filter-checkbox" checked style="margin-right: 6px; cursor: pointer; display: none;">
-                                <i class="fab fa-instagram" style="color: #0f5132; margin-right: 4px; font-size: 12px;"></i><span style="font-size: 12px; color: #0f5132; font-weight: 600;">Instagram</span>
+                                <i class="fab fa-instagram" style="color: #0f3251; margin-right: 4px; font-size: 12px;"></i><span style="font-size: 12px; color: #0f3251; font-weight: 600;">Instagram</span>
                             </label>
-                            <label id="filter-mixed-label" style="display: flex; align-items: center; cursor: pointer; padding: 6px 10px; border-radius: 20px; background-color: #d1e7dd; border: 2px solid #0f5132; white-space: nowrap; transition: all 0.2s;" onmouseover="if(!this.querySelector('input').checked) this.style.backgroundColor='#e4e6eb'; this.style.borderColor='#e4e6eb';" onmouseout="if(!this.querySelector('input').checked) this.style.backgroundColor='#f0f2f5'; this.style.borderColor='#f0f2f5';">
+                            <label id="filter-mixed-label" style="display: flex; align-items: center; cursor: pointer; padding: 6px 10px; border-radius: 20px; background-color: #d1e7dd; border: 2px solid #0f3251; white-space: nowrap; transition: all 0.2s;" onmouseover="if(!this.querySelector('input').checked) this.style.backgroundColor='#e4e6eb'; this.style.borderColor='#e4e6eb';" onmouseout="if(!this.querySelector('input').checked) this.style.backgroundColor='#f0f2f5'; this.style.borderColor='#f0f2f5';">
                                 <input type="checkbox" id="filter-mixed" class="sms-filter-checkbox" checked style="margin-right: 6px; cursor: pointer; display: none;">
-                                <i class="fas fa-comments" style="color: #0f5132; margin-right: 4px; font-size: 12px;"></i><span style="font-size: 12px; color: #0f5132; font-weight: 600;">Mixed</span>
+                                <i class="fas fa-comments" style="color: #0f3251; margin-right: 4px; font-size: 12px;"></i><span style="font-size: 12px; color: #0f3251; font-weight: 600;">Mixed</span>
                             </label>
                         </div>
                         <div id="sms-chat-sessions-list" style="flex: 1; overflow-y: auto; background-color: #fff;">

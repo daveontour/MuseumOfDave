@@ -264,6 +264,21 @@ document.addEventListener('DOMContentLoaded', () => {
         emailAttachmentDocumentIframe: document.getElementById('email-attachment-document-iframe'),
         // Email Gallery Button
         emailGalleryBtn: document.getElementById('email-gallery-btn'),
+        // Email Editor Modal Elements
+        emailEditorModal: document.getElementById('email-editor-modal'),
+        closeEmailEditorModalBtn: document.getElementById('close-email-editor-modal'),
+        emailEditorSearch: document.getElementById('email-editor-search'),
+        emailEditorSender: document.getElementById('email-editor-sender'),
+        emailEditorRecipient: document.getElementById('email-editor-recipient'),
+        emailEditorToFrom: document.getElementById('email-editor-to-from'),
+        emailEditorYearFilter: document.getElementById('email-editor-year-filter'),
+        emailEditorMonthFilter: document.getElementById('email-editor-month-filter'),
+        emailEditorAttachmentsFilter: document.getElementById('email-editor-attachments-filter'),
+        emailEditorSearchBtn: document.getElementById('email-editor-search-btn'),
+        emailEditorClearBtn: document.getElementById('email-editor-clear-btn'),
+        emailEditorTableBody: document.getElementById('email-editor-table-body'),
+        emailEditorPagination: document.getElementById('email-editor-pagination'),
+        emailEditorSidebarBtn: document.getElementById('email-editor-sidebar-btn'),
         // New Image Gallery Elements
         newImageGalleryModal: document.getElementById('new-image-gallery-modal'),
         closeNewImageGalleryModalBtn: document.getElementById('close-new-image-gallery-modal'),
@@ -3740,6 +3755,329 @@ ${textContent}
             return { init, open, close, openContact, openAndSelectEmail };
         })(),
 
+        EmailEditor: (() => {
+            let emailData = [];
+            let currentPage = 1;
+            let pageSize = 50;
+            let selectedRowIndex = -1;
+
+            function formatDateAustralian(dateString) {
+                if (!dateString) return 'No Date';
+                try {
+                    const date = new Date(dateString);
+                    if (isNaN(date.getTime())) return 'Invalid Date';
+                    
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const year = date.getFullYear();
+                    const hours = String(date.getHours()).padStart(2, '0');
+                    const minutes = String(date.getMinutes()).padStart(2, '0');
+                    
+                    return `${day}/${month}/${year} ${hours}:${minutes}`;
+                } catch (error) {
+                    return 'Invalid Date';
+                }
+            }
+
+            function _truncateText(text, maxLength) {
+                if (!text) return '';
+                if (text.length <= maxLength) return text;
+                return text.substring(0, maxLength - 3) + '...';
+            }
+
+            function _setupFilters() {
+                // Setup year filter
+                const years = [
+                    { value: 0, text: 'All Years' },
+                    { value: 2032, text: '2032' },
+                    { value: 2031, text: '2031' },
+                    { value: 2030, text: '2030' },
+                    { value: 2029, text: '2029' },
+                    { value: 2028, text: '2028' },
+                    { value: 2027, text: '2027' },
+                    { value: 2026, text: '2026' },
+                    { value: 2025, text: '2025' },
+                    { value: 2024, text: '2024' },
+                    { value: 2023, text: '2023' },
+                    { value: 2022, text: '2022' },
+                    { value: 2021, text: '2021' },
+                    { value: 2020, text: '2020' },  
+                    { value: 2019, text: '2019' },
+                    { value: 2018, text: '2018' },
+                    { value: 2017, text: '2017' },
+                    { value: 2016, text: '2016' },
+                    { value: 2015, text: '2015' },
+                    { value: 2014, text: '2014' },
+                    { value: 2013, text: '2013' },  
+                    { value: 2012, text: '2012' },
+                    { value: 2011, text: '2011' },
+                    { value: 2010, text: '2010' },
+                    { value: 2009, text: '2009' },
+                    { value: 2008, text: '2008' },
+                    { value: 2007, text: '2007' },
+                    { value: 2006, text: '2006' },
+                    { value: 2005, text: '2005' },
+                    { value: 2004, text: '2004' },
+                    { value: 2003, text: '2003' },
+                    { value: 2002, text: '2002' },
+                    { value: 2001, text: '2001' },
+                    { value: 2000, text: '2000' },
+                    { value: 1999, text: '1999' },
+                    { value: 1998, text: '1998' },
+                    { value: 1997, text: '1997' },
+                    { value: 1996, text: '1996' },
+                    { value: 1995, text: '1995' },
+                    { value: 1994, text: '1994' },
+                    { value: 1993, text: '1993' },
+                    { value: 1992, text: '1992' }
+                ];
+                
+                if (DOM.emailEditorYearFilter) {
+                    DOM.emailEditorYearFilter.innerHTML = '';
+                    years.forEach(year => {
+                        const option = document.createElement('option');
+                        option.value = year.value;
+                        option.textContent = year.text;
+                        DOM.emailEditorYearFilter.appendChild(option);
+                    });
+                }
+
+                // Setup month filter
+                const months = [
+                    { value: 0, text: 'All Months' },
+                    { value: 1, text: 'January' },
+                    { value: 2, text: 'February' },
+                    { value: 3, text: 'March' },
+                    { value: 4, text: 'April' },
+                    { value: 5, text: 'May' },
+                    { value: 6, text: 'June' },
+                    { value: 7, text: 'July' },
+                    { value: 8, text: 'August' },
+                    { value: 9, text: 'September' },
+                    { value: 10, text: 'October' },
+                    { value: 11, text: 'November' },
+                    { value: 12, text: 'December' }
+                ];
+                
+                if (DOM.emailEditorMonthFilter) {
+                    DOM.emailEditorMonthFilter.innerHTML = '';
+                    months.forEach(month => {
+                        const option = document.createElement('option');
+                        option.value = month.value;
+                        option.textContent = month.text;
+                        DOM.emailEditorMonthFilter.appendChild(option);
+                    });
+                }
+            }
+
+            function init() {
+                DOM.closeEmailEditorModalBtn.addEventListener('click', close);
+                DOM.emailEditorSearchBtn.addEventListener('click', _handleSearch);
+                DOM.emailEditorClearBtn.addEventListener('click', _handleClear);
+                _setupFilters();
+            }
+
+            function _handleSearch() {
+                currentPage = 1;
+                _loadEmails();
+            }
+
+            function _handleClear() {
+                DOM.emailEditorSearch.value = '';
+                DOM.emailEditorSender.value = '';
+                DOM.emailEditorRecipient.value = '';
+                DOM.emailEditorToFrom.value = '';
+                DOM.emailEditorYearFilter.value = '0';
+                DOM.emailEditorMonthFilter.value = '0';
+                DOM.emailEditorAttachmentsFilter.checked = false;
+                currentPage = 1;
+                _loadEmails();
+            }
+
+            function _loadEmails() {
+                const params = new URLSearchParams();
+                const searchTerm = DOM.emailEditorSearch.value.trim();
+                const senderFilter = DOM.emailEditorSender.value.trim();
+                const recipientFilter = DOM.emailEditorRecipient.value.trim();
+                const toFromFilter = DOM.emailEditorToFrom.value.trim();
+                const yearFilter = DOM.emailEditorYearFilter.value;
+                const monthFilter = DOM.emailEditorMonthFilter.value;
+                const attachmentsFilter = DOM.emailEditorAttachmentsFilter.checked;
+
+                if (searchTerm) {
+                    params.append('subject', searchTerm);
+                }
+                if (senderFilter) {
+                    params.append('from_address', senderFilter);
+                }
+                if (recipientFilter) {
+                    params.append('to_address', recipientFilter);
+                }
+                if (toFromFilter) {
+                    params.append('to_from', toFromFilter);
+                }
+                if (yearFilter && yearFilter !== '0' && yearFilter !== '') {
+                    params.append('year', yearFilter);
+                }
+                if (monthFilter && monthFilter !== '0' && monthFilter !== '') {
+                    params.append('month', monthFilter);
+                }
+                if (attachmentsFilter) {
+                    params.append('has_attachments', 'true');
+                }
+
+                fetch('/emails/search?' + params.toString())
+                    .then(r => r.json())
+                    .then(data => {
+                        emailData = data.map(email => ({
+                            id: email.id,
+                            subject: email.subject || 'No Subject',
+                            sender: email.from_address || 'Unknown Sender',
+                            recipient: email.to_addresses || 'Unknown Recipient',
+                            date: email.date ? formatDateAustralian(email.date) : 'No Date',
+                            emailId: email.id
+                        }));
+                        _renderTable();
+                        _renderPagination();
+                    })
+                    .catch(error => {
+                        console.error('Error loading emails:', error);
+                        emailData = [];
+                        _renderTable();
+                        _renderPagination();
+                    });
+            }
+
+            function _renderTable() {
+                if (!DOM.emailEditorTableBody) return;
+
+                const startIndex = (currentPage - 1) * pageSize;
+                const endIndex = startIndex + pageSize;
+                const emailsToShow = emailData.slice(startIndex, endIndex);
+
+                DOM.emailEditorTableBody.innerHTML = '';
+
+                if (emailsToShow.length === 0) {
+                    const row = document.createElement('tr');
+                    const cell = document.createElement('td');
+                    cell.colSpan = 4;
+                    cell.textContent = 'No emails found';
+                    cell.style.textAlign = 'center';
+                    cell.style.padding = '2em';
+                    cell.style.color = '#666';
+                    row.appendChild(cell);
+                    DOM.emailEditorTableBody.appendChild(row);
+                    return;
+                }
+
+                emailsToShow.forEach((email, index) => {
+                    const row = document.createElement('tr');
+                    row.className = 'email-editor-table-row';
+                    if (selectedRowIndex === startIndex + index) {
+                        row.classList.add('selected');
+                    }
+                    row.dataset.index = startIndex + index;
+                    row.addEventListener('click', () => _selectRow(startIndex + index));
+
+                    // Subject column
+                    const subjectCell = document.createElement('td');
+                    subjectCell.className = 'email-editor-col-subject';
+                    subjectCell.textContent = _truncateText(email.subject, 60);
+                    subjectCell.title = email.subject;
+                    row.appendChild(subjectCell);
+
+                    // From column
+                    const fromCell = document.createElement('td');
+                    fromCell.className = 'email-editor-col-from';
+                    fromCell.textContent = _truncateText(email.sender, 40);
+                    fromCell.title = email.sender;
+                    row.appendChild(fromCell);
+
+                    // To column
+                    const toCell = document.createElement('td');
+                    toCell.className = 'email-editor-col-to';
+                    toCell.textContent = _truncateText(email.recipient, 40);
+                    toCell.title = email.recipient;
+                    row.appendChild(toCell);
+
+                    // Date column
+                    const dateCell = document.createElement('td');
+                    dateCell.className = 'email-editor-col-date';
+                    dateCell.textContent = email.date;
+                    row.appendChild(dateCell);
+
+                    DOM.emailEditorTableBody.appendChild(row);
+                });
+            }
+
+            function _selectRow(index) {
+                selectedRowIndex = index;
+                _renderTable();
+            }
+
+            function _renderPagination() {
+                if (!DOM.emailEditorPagination) return;
+
+                const totalPages = Math.ceil(emailData.length / pageSize);
+                
+                if (totalPages <= 1) {
+                    DOM.emailEditorPagination.innerHTML = '';
+                    return;
+                }
+
+                let paginationHTML = '';
+
+                // Previous button
+                paginationHTML += `<button ${currentPage === 1 ? 'disabled' : ''} class="email-editor-prev-btn">Previous</button>`;
+
+                // Page info
+                paginationHTML += `<span class="email-editor-page-info">Page ${currentPage} of ${totalPages}</span>`;
+
+                // Next button
+                paginationHTML += `<button ${currentPage === totalPages ? 'disabled' : ''} class="email-editor-next-btn">Next</button>`;
+
+                DOM.emailEditorPagination.innerHTML = paginationHTML;
+
+                // Add event listeners
+                const prevBtn = DOM.emailEditorPagination.querySelector('.email-editor-prev-btn');
+                const nextBtn = DOM.emailEditorPagination.querySelector('.email-editor-next-btn');
+
+                if (prevBtn) {
+                    prevBtn.addEventListener('click', () => {
+                        if (currentPage > 1) {
+                            currentPage--;
+                            _renderTable();
+                            _renderPagination();
+                        }
+                    });
+                }
+
+                if (nextBtn) {
+                    nextBtn.addEventListener('click', () => {
+                        if (currentPage < totalPages) {
+                            currentPage++;
+                            _renderTable();
+                            _renderPagination();
+                        }
+                    });
+                }
+            }
+
+            function open() {
+                DOM.emailEditorModal.style.display = 'flex';
+                currentPage = 1;
+                selectedRowIndex = -1;
+                _loadEmails();
+            }
+
+            function close() {
+                DOM.emailEditorModal.style.display = 'none';
+                selectedRowIndex = -1;
+            }
+
+            return { init, open, close };
+        })(),
+
         NewImageGallery: (() => {
             let imageData = [];
             let selectedImageIndex = -1;
@@ -6751,6 +7089,7 @@ ${textContent}
             Modals.Locations.init();
             // Modals.ImageGallery.init();
             Modals.EmailGallery.init();
+            Modals.EmailEditor.init();
             Modals.NewImageGallery.init();
             Modals.SMSMessages.init();
             Modals.SingleImageDisplay.init();
@@ -10566,6 +10905,12 @@ ${textContent}
             if (DOM.emailGallerySidebarBtn) {
                 DOM.emailGallerySidebarBtn.addEventListener('click', () => {
                     Modals.EmailGallery.open();
+                });
+            }
+
+            if (DOM.emailEditorSidebarBtn) {
+                DOM.emailEditorSidebarBtn.addEventListener('click', () => {
+                    Modals.EmailEditor.open();
                 });
             }
 
