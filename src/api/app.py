@@ -25,8 +25,8 @@ try:
 except ImportError:
     HEIF_SUPPORT = False
 
-from ..database import Database,  Email, IMessage, FacebookAlbum, FacebookAlbumImage, ReferenceDocument
-from ..database.models import MediaMetadata, MediaBlob, MessageAttachment, Attachment
+from ..database import Database,  Email, IMessage, FacebookAlbum, ReferenceDocument
+from ..database.models import MediaMetadata, MediaBlob, MessageAttachment, Attachment, AlbumMedia
 from ..database.storage import EmailStorage, ImageStorage
 from ..services import ImageService, EmailService, ReferenceDocumentService, MessageService, ImportService
 from ..services.exceptions import ServiceException, ValidationError, NotFoundError, ConflictError
@@ -628,7 +628,6 @@ class ImportWhatsAppResponse(BaseModel):
 class ImportFacebookRequest(BaseModel):
     """Request model for Facebook Messenger import."""
     directory_path: str
-    export_root: Optional[str] = None
     user_name: Optional[str] = None
 
 
@@ -650,7 +649,6 @@ class ImportFacebookResponse(BaseModel):
 class ImportInstagramRequest(BaseModel):
     """Request model for Instagram import."""
     directory_path: str
-    export_root: Optional[str] = None
     user_name: Optional[str] = None
 
 
@@ -669,7 +667,6 @@ class ImportInstagramResponse(BaseModel):
 class ImportFacebookAlbumsRequest(BaseModel):
     """Request model for Facebook Albums import."""
     directory_path: str
-    export_root: Optional[str] = None
 
 
 class ImportFacebookAlbumsResponse(BaseModel):
@@ -1955,7 +1952,7 @@ async def get_whatsapp_import_status():
         }
 
 
-def import_facebook_background(directory_path: str, export_root: Optional[str], user_name: Optional[str], result_dict: dict):
+def import_facebook_background(directory_path: str, user_name: Optional[str], result_dict: dict):
     """Background function to import Facebook Messenger messages from directory."""
     global facebook_import_in_progress
     
@@ -2017,7 +2014,6 @@ def import_facebook_background(directory_path: str, export_root: Optional[str], 
             directory_path,
             progress_callback=progress_callback,
             cancelled_check=cancelled_check,
-            export_root=export_root,
             user_name=user_name
         )
         
@@ -2058,6 +2054,9 @@ async def import_facebook(
     
     The directory should contain subdirectories, each representing a conversation.
     Each subdirectory should contain JSON files (message_1.json, message_2.json, etc.) with the messages.
+    
+    The export_root parameter is optional. If not provided, the system will attempt to auto-detect
+    the export root directory by searching upward from the directory_path for 'your_facebook_activity'.
     
     Args:
         request: ImportFacebookRequest with directory_path, optional export_root and user_name
@@ -2103,7 +2102,6 @@ async def import_facebook(
     background_tasks.add_task(
         import_facebook_background,
         request.directory_path,
-        request.export_root,
         request.user_name,
         result_dict
     )
@@ -2251,7 +2249,6 @@ async def get_facebook_import_status():
 
 def import_instagram_background(
     directory_path: str,
-    export_root: Optional[str],
     user_name: Optional[str],
     result_dict: Dict[str, Any]
 ):
@@ -2310,7 +2307,6 @@ def import_instagram_background(
             directory_path,
             progress_callback=progress_callback,
             cancelled_check=cancelled_check,
-            export_root=export_root,
             user_name=user_name
         )
         
@@ -2352,8 +2348,11 @@ async def import_instagram(
     The directory should contain subdirectories, each representing a conversation.
     Each subdirectory should contain JSON files (message_1.json, message_2.json, etc.) with the messages.
     
+    The system will automatically detect the export root directory by searching upward
+    from the directory_path for 'your_instagram_activity'.
+    
     Args:
-        request: ImportInstagramRequest with directory_path, optional export_root and user_name
+        request: ImportInstagramRequest with directory_path and optional user_name
         background_tasks: FastAPI background tasks
         
     Returns:
@@ -2393,7 +2392,6 @@ async def import_instagram(
     background_tasks.add_task(
         import_instagram_background,
         request.directory_path,
-        request.export_root,
         request.user_name,
         result_dict
     )
@@ -2535,7 +2533,7 @@ async def get_instagram_import_status():
         }
 
 
-def import_facebook_albums_background(directory_path: str, export_root: Optional[str], result_dict: dict):
+def import_facebook_albums_background(directory_path: str, result_dict: dict):
     """Background function to import Facebook Albums from directory."""
     global facebook_albums_import_in_progress
     
@@ -2594,8 +2592,7 @@ def import_facebook_albums_background(directory_path: str, export_root: Optional
         stats = import_facebook_albums_from_directory(
             directory_path,
             progress_callback=progress_callback,
-            cancelled_check=cancelled_check,
-            export_root=export_root
+            cancelled_check=cancelled_check
         )
         
         result_dict.update(stats)
@@ -2730,8 +2727,11 @@ async def import_facebook_albums(
 ):
     """Import Facebook Albums from a directory structure.
     
+    The system will automatically detect the export root directory by searching upward
+    from the directory_path for 'your_facebook_activity'.
+    
     Args:
-        request: Import request containing directory_path and optional export_root
+        request: Import request containing directory_path
         
     Returns:
         Response indicating import has started
@@ -2763,7 +2763,6 @@ async def import_facebook_albums(
     background_tasks.add_task(
         import_facebook_albums_background,
         str(directory_path),
-        request.export_root,
         result_dict
     )
     
@@ -3033,9 +3032,9 @@ async def get_facebook_albums():
             FacebookAlbum.name,
             FacebookAlbum.description,
             FacebookAlbum.cover_photo_uri,
-            func.count(FacebookAlbumImage.id).label('image_count')
+            func.count(func.distinct(AlbumMedia.id)).label('image_count')
         ).outerjoin(
-            FacebookAlbumImage, FacebookAlbum.id == FacebookAlbumImage.album_id
+            AlbumMedia, FacebookAlbum.id == AlbumMedia.album_id
         ).group_by(
             FacebookAlbum.id
         ).order_by(
@@ -3065,26 +3064,27 @@ async def get_facebook_album_images(album_id: int):
         album_id: The ID of the album
         
     Returns:
-        List of images with id, uri, filename, title, description, creation_timestamp, image_type
+        List of images with id, title, description, media_type, created_at
     """
     session = db.get_session()
     try:
-        images = session.query(FacebookAlbumImage).filter(
-            FacebookAlbumImage.album_id == album_id
+        # Query MediaMetadata via AlbumMedia junction table
+        media_items = session.query(MediaMetadata).join(
+            AlbumMedia, MediaMetadata.id == AlbumMedia.media_item_id
+        ).filter(
+            AlbumMedia.album_id == album_id
         ).order_by(
-            FacebookAlbumImage.creation_timestamp.asc()
+            MediaMetadata.created_at.asc()
         ).all()
         
         result = []
-        for image in images:
+        for media_item in media_items:
             result.append({
-                "id": image.id,
-                "uri": image.uri,
-                "filename": image.filename,
-                "title": image.title,
-                "description": image.description,
-                "creation_timestamp": image.creation_timestamp.isoformat() if image.creation_timestamp else None,
-                "image_type": image.image_type
+                "id": media_item.id,
+                "title": media_item.title,
+                "description": media_item.description,
+                "media_type": media_item.media_type,
+                "created_at": media_item.created_at.isoformat() if media_item.created_at else None
             })
         
         return result
@@ -3097,46 +3097,50 @@ async def get_facebook_album_image(image_id: int):
     """Get image data for a specific Facebook album image.
     
     Args:
-        image_id: The ID of the image
+        image_id: The ID of the media item
         
     Returns:
         Image file content with appropriate MIME type
         
     Raises:
-        HTTPException: 404 if image not found
+        HTTPException: 404 if image not found or not linked to an album
     """
     session = db.get_session()
     try:
-        image = session.query(FacebookAlbumImage).filter(
-            FacebookAlbumImage.id == image_id
+        # Query MediaMetadata and verify it's linked to an album via AlbumMedia
+        media_item = session.query(MediaMetadata).join(
+            AlbumMedia, MediaMetadata.id == AlbumMedia.media_item_id
+        ).filter(
+            MediaMetadata.id == image_id
         ).first()
+        
+        if not media_item:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Image with ID {image_id} not found or not linked to an album"
+            )
+        
+        # Get MediaBlob
+        if not media_item.media_blob or not media_item.media_blob.image_data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Image with ID {image_id} has no image data"
+            )
+        
+        # Determine content type from media_type
+        content_type = media_item.media_type or "image/jpeg"
+        if media_item.title:
+            import mimetypes
+            guessed_type, _ = mimetypes.guess_type(media_item.title)
+            if guessed_type:
+                content_type = guessed_type
+        
+        return Response(
+            content=media_item.media_blob.image_data,
+            media_type=content_type
+        )
     finally:
         session.close()
-    
-    if not image:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Image with ID {image_id} not found"
-        )
-    
-    if not image.image_data:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Image with ID {image_id} has no image data"
-        )
-    
-    # Determine content type from image_type or filename
-    content_type = image.image_type or "image/jpeg"
-    if image.filename:
-        import mimetypes
-        guessed_type, _ = mimetypes.guess_type(image.filename)
-        if guessed_type:
-            content_type = guessed_type
-    
-    return Response(
-        content=image.image_data,
-        media_type=content_type
-    )
 
 
 @app.get("/imessages/{message_id}/attachment")
@@ -4428,6 +4432,74 @@ async def search_images(
         )
 
 
+@app.get("/images/years")
+async def get_distinct_years():
+    """Get list of distinct years from media_items table.
+    
+    Returns:
+        List of distinct years (integers) sorted in descending order
+    """
+    session = db.get_session()
+    try:
+        # Query distinct years from MediaMetadata where year is not null
+        years = session.query(func.distinct(MediaMetadata.year)).filter(
+            MediaMetadata.year.isnot(None)
+        ).order_by(
+            MediaMetadata.year.desc()
+        ).all()
+        
+        # Extract year values from tuples and return as list
+        year_list = [year[0] for year in years]
+        
+        return {"years": year_list}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving distinct years: {str(e)}"
+        )
+    finally:
+        session.close()
+
+
+@app.get("/images/tags")
+async def get_distinct_tags():
+    """Get list of distinct tags from media_items table.
+    
+    Tags are stored as comma-separated strings, so this endpoint extracts
+    all unique individual tags from all tag fields.
+    
+    Returns:
+        List of distinct tags (strings) sorted alphabetically
+    """
+    session = db.get_session()
+    try:
+        # Query all tags from MediaMetadata where tags is not null
+        tag_records = session.query(MediaMetadata.tags).filter(
+            MediaMetadata.tags.isnot(None),
+            MediaMetadata.tags != ''
+        ).all()
+        
+        # Extract and split comma-separated tags
+        all_tags = set()
+        for record in tag_records:
+            if record[0]:
+                # Split by comma and clean up whitespace
+                tags = [tag.strip() for tag in record[0].split(',') if tag.strip()]
+                all_tags.update(tags)
+        
+        # Convert to sorted list
+        tag_list = sorted(list(all_tags))
+        
+        return {"tags": tag_list}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving distinct tags: {str(e)}"
+        )
+    finally:
+        session.close()
+
+
 @app.get("/images/{image_id}")
 async def get_image_content(
     image_id: int,
@@ -4517,83 +4589,6 @@ async def bulk_update_images(update_data: Dict[str, Any]):
         raise HTTPException(
             status_code=500,
             detail=f"Error bulk updating images: {str(e)}"
-        )
-
-
-@app.post("/images/copy-facebook-albums")
-async def copy_facebook_album_images(
-    album_id: Optional[int] = Query(None, description="Optional album ID to filter by. If not provided, copies from all albums.")
-):
-    """Copy Facebook album images into the main image table.
-    
-    Args:
-        album_id: Optional album ID to filter by. If None, copies from all albums.
-        
-    Returns:
-        Dictionary with statistics about the copy operation
-        
-    Raises:
-        HTTPException: 500 if an error occurs during processing
-    """
-    image_service = ImageService(db=db)
-    try:
-        result = image_service.copy_facebook_album_images(album_id=album_id)
-        
-        message = f"Successfully copied {result['images_copied']} image(s)"
-        if result['images_skipped'] > 0:
-            message += f", skipped {result['images_skipped']} image(s) without data"
-        if result['errors'] > 0:
-            message += f", encountered {result['errors']} error(s)"
-        
-        return {
-            "message": message,
-            "images_copied": result['images_copied'],
-            "images_skipped": result['images_skipped'],
-            "errors": result['errors'],
-            "error_messages": result.get('error_messages')
-        }
-    except ServiceException as e:
-        raise HTTPException(status_code=e.status_code, detail=str(e))
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error copying Facebook album images: {str(e)}"
-        )
-
-
-@app.post("/images/copy-email-attachments")
-async def copy_email_attachment_images():
-    """Copy email attachment images into the main image table.
-    
-    Returns:
-        Dictionary with statistics about the copy operation
-        
-    Raises:
-        HTTPException: 500 if an error occurs during processing
-    """
-    image_service = ImageService(db=db)
-    try:
-        result = image_service.copy_email_attachment_images()
-        
-        message = f"Successfully copied {result['images_copied']} image(s)"
-        if result['images_skipped'] > 0:
-            message += f", skipped {result['images_skipped']} attachment(s) without data or not images"
-        if result['errors'] > 0:
-            message += f", encountered {result['errors']} error(s)"
-        
-        return {
-            "message": message,
-            "images_copied": result['images_copied'],
-            "images_skipped": result['images_skipped'],
-            "errors": result['errors'],
-            "error_messages": result.get('error_messages')
-        }
-    except ServiceException as e:
-        raise HTTPException(status_code=e.status_code, detail=str(e))
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error copying email attachment images: {str(e)}"
         )
 
 
@@ -5201,6 +5196,14 @@ async def empty_media_tables():
         except Exception:
             # Table might not exist, ignore
             pass
+
+        #6. Delete album_media (Facebook album images are now in unified media system)
+        album_media_count = session.query(AlbumMedia).count()
+        session.query(AlbumMedia).delete()
+
+        #7. Delete facebook_albums
+        facebook_album_count = session.query(FacebookAlbum).count()
+        session.query(FacebookAlbum).delete()
         
         session.commit()
         
@@ -5211,7 +5214,9 @@ async def empty_media_tables():
                 "messages": message_count,
                 "media_items": media_item_count,
                 "media_blob": media_blob_count,
-                "attachments": attachment_count
+                "attachments": attachment_count,
+                "album_media": album_media_count,
+                "facebook_albums": facebook_album_count
             }
         }
     except Exception as e:

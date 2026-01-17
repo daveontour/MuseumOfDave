@@ -4488,7 +4488,7 @@ ${textContent}
 
             async function open() {
                 DOM.newImageGalleryModal.style.display = 'flex';
-                _setupFilters();
+                await _setupFilters();
                 // Don't load images automatically - wait for user to enter search criteria
                 imageData = [];
                 selectedImageIndex = -1;
@@ -4509,61 +4509,65 @@ ${textContent}
                 selectedImageIndex = -1;
             }
 
-            function _setupFilters() {
-                // Setup year filter
-                const years = [
-                    { value: 0, text: 'All Years' },
-                    { value: 2032, text: '2032' },
-                    { value: 2031, text: '2031' },
-                    { value: 2030, text: '2030' },
-                    { value: 2029, text: '2029' },
-                    { value: 2028, text: '2028' },
-                    { value: 2027, text: '2027' },
-                    { value: 2026, text: '2026' },
-                    { value: 2025, text: '2025' },
-                    { value: 2024, text: '2024' },
-                    { value: 2023, text: '2023' },
-                    { value: 2022, text: '2022' },
-                    { value: 2021, text: '2021' },
-                    { value: 2020, text: '2020' },  
-                    { value: 2019, text: '2019' },
-                    { value: 2018, text: '2018' },
-                    { value: 2017, text: '2017' },
-                    { value: 2016, text: '2016' },
-                    { value: 2015, text: '2015' },
-                    { value: 2014, text: '2014' },
-                    { value: 2013, text: '2013' },  
-                    { value: 2012, text: '2012' },
-                    { value: 2011, text: '2011' },
-                    { value: 2010, text: '2010' },
-                    { value: 2009, text: '2009' },
-                    { value: 2008, text: '2008' },
-                    { value: 2007, text: '2007' },
-                    { value: 2006, text: '2006' },
-                    { value: 2005, text: '2005' },
-                    { value: 2004, text: '2004' },
-                    { value: 2003, text: '2003' },
-                    { value: 2002, text: '2002' },
-                    { value: 2001, text: '2001' },
-                    { value: 2000, text: '2000' },
-                    { value: 1999, text: '1999' },
-                    { value: 1998, text: '1998' },
-                    { value: 1997, text: '1997' },
-                    { value: 1996, text: '1996' },
-                    { value: 1995, text: '1995' },
-                    { value: 1994, text: '1994' },
-                    { value: 1993, text: '1993' },
-                    { value: 1992, text: '1992' }
-                ];
-                
-                if (DOM.newImageGalleryYearFilter) {
-                    DOM.newImageGalleryYearFilter.innerHTML = '';
-                    years.forEach(year => {
-                        const option = document.createElement('option');
-                        option.value = year.value;
-                        option.textContent = year.text;
-                        DOM.newImageGalleryYearFilter.appendChild(option);
+            async function _setupFilters() {
+                // Setup year filter - fetch distinct years from API
+                try {
+                    const response = await fetch('/images/years');
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch years: ${response.statusText}`);
+                    }
+                    const data = await response.json();
+                    const distinctYears = data.years || [];
+                    
+                    // Build years array with "All Years" option first, then distinct years
+                    const years = [
+                        { value: 0, text: 'All Years' }
+                    ];
+                    
+                    // Add distinct years from database
+                    distinctYears.forEach(year => {
+                        years.push({ value: year, text: year.toString() });
                     });
+                    
+                    if (DOM.newImageGalleryYearFilter) {
+                        DOM.newImageGalleryYearFilter.innerHTML = '';
+                        years.forEach(year => {
+                            const option = document.createElement('option');
+                            option.value = year.value;
+                            option.textContent = year.text;
+                            DOM.newImageGalleryYearFilter.appendChild(option);
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error loading years:', error);
+                    // Fallback to "All Years" option if API call fails
+                    if (DOM.newImageGalleryYearFilter) {
+                        DOM.newImageGalleryYearFilter.innerHTML = '<option value="0" selected>All Years</option>';
+                    }
+                }
+
+                // Setup tags datalist - fetch distinct tags from API
+                try {
+                    const tagsResponse = await fetch('/images/tags');
+                    if (!tagsResponse.ok) {
+                        throw new Error(`Failed to fetch tags: ${tagsResponse.statusText}`);
+                    }
+                    const tagsData = await tagsResponse.json();
+                    const distinctTags = tagsData.tags || [];
+                    
+                    // Populate datalist with distinct tags
+                    const tagsDatalist = document.getElementById('new-image-gallery-tags-list');
+                    if (tagsDatalist) {
+                        tagsDatalist.innerHTML = '';
+                        distinctTags.forEach(tag => {
+                            const option = document.createElement('option');
+                            option.value = tag;
+                            tagsDatalist.appendChild(option);
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error loading tags:', error);
+                    // Continue without tags datalist if API call fails
                 }
 
                 // Setup month filter
@@ -8439,18 +8443,11 @@ ${textContent}
 
                 // Facebook Messenger Import
                 const facebookImportDirectory = document.getElementById('facebook-import-directory');
-                const facebookExportRoot = document.getElementById('facebook-export-root');
                 const facebookUserName = document.getElementById('facebook-user-name');
                 if (facebookImportDirectory) {
                     const value = getControlValue('facebook_import_directory', controlDefaults.facebook_import_directory);
                     if (value) {
                         facebookImportDirectory.value = value;
-                    }
-                }
-                if (facebookExportRoot) {
-                    const value = getControlValue('facebook_export_root', controlDefaults.facebook_export_root);
-                    if (value) {
-                        facebookExportRoot.value = value;
                     }
                 }
                 if (facebookUserName) {
@@ -8462,18 +8459,11 @@ ${textContent}
 
                 // Instagram Import
                 const instagramImportDirectory = document.getElementById('instagram-import-directory');
-                const instagramExportRoot = document.getElementById('instagram-export-root');
                 const instagramUserName = document.getElementById('instagram-user-name');
                 if (instagramImportDirectory) {
                     const value = getControlValue('instagram_import_directory', controlDefaults.instagram_import_directory);
                     if (value) {
                         instagramImportDirectory.value = value;
-                    }
-                }
-                if (instagramExportRoot) {
-                    const value = getControlValue('instagram_export_root', controlDefaults.instagram_export_root);
-                    if (value) {
-                        instagramExportRoot.value = value;
                     }
                 }
                 if (instagramUserName) {
@@ -8494,17 +8484,10 @@ ${textContent}
 
                 // Facebook Albums Import
                 const facebookAlbumsImportDirectory = document.getElementById('facebook-albums-import-directory');
-                const facebookAlbumsExportRoot = document.getElementById('facebook-albums-export-root');
                 if (facebookAlbumsImportDirectory) {
                     const value = getControlValue('facebook_albums_import_directory', controlDefaults.facebook_albums_import_directory);
                     if (value) {
                         facebookAlbumsImportDirectory.value = value;
-                    }
-                }
-                if (facebookAlbumsExportRoot) {
-                    const value = getControlValue('facebook_albums_export_root', controlDefaults.facebook_albums_export_root);
-                    if (value) {
-                        facebookAlbumsExportRoot.value = value;
                     }
                 }
 
@@ -8561,7 +8544,6 @@ ${textContent}
 
                 // Facebook Messenger Import
                 const facebookImportDirectory = document.getElementById('facebook-import-directory');
-                const facebookExportRoot = document.getElementById('facebook-export-root');
                 const facebookUserName = document.getElementById('facebook-user-name');
                 if (facebookImportDirectory) {
                     facebookImportDirectory.addEventListener('change', (e) => {
@@ -8569,14 +8551,6 @@ ${textContent}
                     });
                     facebookImportDirectory.addEventListener('blur', (e) => {
                         saveControlValue('facebook_import_directory', e.target.value);
-                    });
-                }
-                if (facebookExportRoot) {
-                    facebookExportRoot.addEventListener('change', (e) => {
-                        saveControlValue('facebook_export_root', e.target.value);
-                    });
-                    facebookExportRoot.addEventListener('blur', (e) => {
-                        saveControlValue('facebook_export_root', e.target.value);
                     });
                 }
                 if (facebookUserName) {
@@ -8590,7 +8564,6 @@ ${textContent}
 
                 // Instagram Import
                 const instagramImportDirectory = document.getElementById('instagram-import-directory');
-                const instagramExportRoot = document.getElementById('instagram-export-root');
                 const instagramUserName = document.getElementById('instagram-user-name');
                 if (instagramImportDirectory) {
                     instagramImportDirectory.addEventListener('change', (e) => {
@@ -8598,14 +8571,6 @@ ${textContent}
                     });
                     instagramImportDirectory.addEventListener('blur', (e) => {
                         saveControlValue('instagram_import_directory', e.target.value);
-                    });
-                }
-                if (instagramExportRoot) {
-                    instagramExportRoot.addEventListener('change', (e) => {
-                        saveControlValue('instagram_export_root', e.target.value);
-                    });
-                    instagramExportRoot.addEventListener('blur', (e) => {
-                        saveControlValue('instagram_export_root', e.target.value);
                     });
                 }
                 if (instagramUserName) {
@@ -8630,21 +8595,12 @@ ${textContent}
 
                 // Facebook Albums Import
                 const facebookAlbumsImportDirectory = document.getElementById('facebook-albums-import-directory');
-                const facebookAlbumsExportRoot = document.getElementById('facebook-albums-export-root');
                 if (facebookAlbumsImportDirectory) {
                     facebookAlbumsImportDirectory.addEventListener('change', (e) => {
                         saveControlValue('facebook_albums_import_directory', e.target.value);
                     });
                     facebookAlbumsImportDirectory.addEventListener('blur', (e) => {
                         saveControlValue('facebook_albums_import_directory', e.target.value);
-                    });
-                }
-                if (facebookAlbumsExportRoot) {
-                    facebookAlbumsExportRoot.addEventListener('change', (e) => {
-                        saveControlValue('facebook_albums_export_root', e.target.value);
-                    });
-                    facebookAlbumsExportRoot.addEventListener('blur', (e) => {
-                        saveControlValue('facebook_albums_export_root', e.target.value);
                     });
                 }
 
@@ -8754,17 +8710,16 @@ ${textContent}
                         return;
                     }
                     
-                    // Double confirmation
+                    //Double confirmation
                     const doubleConfirmed = confirm(
-                        'FINAL WARNING: This will DELETE ALL messages and media data.\n\n' +
-                        'Type "DELETE" in the next prompt to confirm.'
+                        'FINAL WARNING: This will DELETE ALL messages and media data.\n\n' 
                     );
                     
                     if (!doubleConfirmed) {
                         return;
                     }
-                    
-                    const userInput = prompt('Type "DELETE" to confirm:');
+                    const userInput = "DELETE";
+                   // const userInput = prompt('Type "DELETE" to confirm:');
                     if (userInput !== 'DELETE') {
                         if (emptyTablesStatus) {
                             emptyTablesStatus.style.display = 'block';
@@ -8814,7 +8769,9 @@ ${textContent}
                                 • Message Attachments: ${counts.message_attachments || 0}<br>
                                 • Media Items: ${counts.media_items || 0}<br>
                                 • Media Blobs: ${counts.media_blob || 0}<br>
-                                • Attachments: ${counts.attachments || 0}
+                                • Attachments: ${counts.attachments || 0}<br>
+                                • Facebook Album Images: ${counts.facebook_album_images || 0}<br>
+                                • Facebook Albums: ${counts.facebook_albums || 0}<br>
                             `;
                         }
                         
@@ -9866,7 +9823,6 @@ ${textContent}
             const facebookImportStatusDetails = document.getElementById('facebook-import-status-details');
             const facebookImportProgressContainer = document.getElementById('facebook-import-progress-container');
             const facebookDirectoryPath = document.getElementById('facebook-import-directory');
-            const facebookExportRoot = document.getElementById('facebook-export-root');
             const facebookUserName = document.getElementById('facebook-user-name');
             const facebookMissingAttachmentsList = document.getElementById('facebook-missing-attachments-list');
             const facebookMissingFilenames = document.getElementById('facebook-missing-filenames');
@@ -10146,11 +10102,6 @@ ${textContent}
                         };
                         
                         // Add optional fields if provided
-                        const exportRoot = facebookExportRoot?.value?.trim();
-                        if (exportRoot) {
-                            requestBody.export_root = exportRoot;
-                        }
-                        
                         const userName = facebookUserName?.value?.trim();
                         if (userName) {
                             requestBody.user_name = userName;
@@ -10227,7 +10178,6 @@ ${textContent}
             const instagramImportStatusDetails = document.getElementById('instagram-import-status-details');
             const instagramImportProgressContainer = document.getElementById('instagram-import-progress-container');
             const instagramDirectoryPath = document.getElementById('instagram-import-directory');
-            const instagramExportRoot = document.getElementById('instagram-export-root');
             const instagramUserName = document.getElementById('instagram-user-name');
             let instagramImportInProgress = false;
             let instagramEventSource = null;
@@ -10439,11 +10389,6 @@ ${textContent}
                         };
                         
                         // Add optional fields if provided
-                        const exportRoot = instagramExportRoot?.value?.trim();
-                        if (exportRoot) {
-                            requestBody.export_root = exportRoot;
-                        }
-                        
                         const userName = instagramUserName?.value?.trim();
                         if (userName) {
                             requestBody.user_name = userName;
@@ -10539,7 +10484,6 @@ ${textContent}
             const facebookAlbumsImportStatusDetails = document.getElementById('facebook-albums-import-status-details');
             const facebookAlbumsImportProgressContainer = document.getElementById('facebook-albums-import-progress-container');
             const facebookAlbumsDirectoryPath = document.getElementById('facebook-albums-import-directory');
-            const facebookAlbumsExportRoot = document.getElementById('facebook-albums-export-root');
             const facebookAlbumsMissingImagesList = document.getElementById('facebook-albums-missing-images-list');
             const facebookAlbumsMissingFilenames = document.getElementById('facebook-albums-missing-filenames');
             let facebookAlbumsImportInProgress = false;
@@ -10810,12 +10754,6 @@ ${textContent}
                         const requestBody = {
                             directory_path: directoryPath
                         };
-                        
-                        // Add optional fields if provided
-                        const exportRoot = facebookAlbumsExportRoot?.value?.trim();
-                        if (exportRoot) {
-                            requestBody.export_root = exportRoot;
-                        }
                         
                         const response = await fetch('/facebook/albums/import', {
                             method: 'POST',
@@ -11305,125 +11243,6 @@ ${textContent}
 
     App.init();
 
-    // Copy Facebook Album Images button handler
-    const copyFacebookAlbumsBtn = document.getElementById('copy-facebook-albums-btn');
-    if (copyFacebookAlbumsBtn) {
-        copyFacebookAlbumsBtn.addEventListener('click', async () => {
-            const btn = document.getElementById('copy-facebook-albums-btn');
-            const statusDiv = document.getElementById('copy-facebook-albums-status');
-            const messageDiv = document.getElementById('copy-facebook-albums-status-message');
-            const detailsDiv = document.getElementById('copy-facebook-albums-status-details');
-            
-            btn.disabled = true;
-            statusDiv.style.display = 'block';
-            messageDiv.textContent = 'Copying Facebook album images...';
-            messageDiv.style.color = '#333';
-            detailsDiv.textContent = '';
-            
-            try {
-                const response = await fetch('/images/copy-facebook-albums', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
-                const result = await response.json();
-                
-                if (response.ok) {
-                    messageDiv.textContent = `Success: ${result.message}`;
-                    messageDiv.style.color = '#28a745';
-                    
-                    let detailsHtml = `
-                        <strong>Images copied:</strong> ${result.images_copied}<br>
-                        <strong>Images skipped:</strong> ${result.images_skipped}<br>
-                    `;
-                    
-                    if (result.errors > 0) {
-                        detailsHtml += `<strong style="color: #dc3545;">Errors:</strong> ${result.errors}<br>`;
-                    }
-                    
-                    if (result.error_messages && result.error_messages.length > 0) {
-                        detailsHtml += '<div style="margin-top: 10px; color: #dc3545;"><strong>Error details:</strong><ul style="margin: 5px 0; padding-left: 20px;">';
-                        result.error_messages.forEach(msg => {
-                            detailsHtml += `<li>${msg}</li>`;
-                        });
-                        detailsHtml += '</ul></div>';
-                    }
-                    
-                    detailsDiv.innerHTML = detailsHtml;
-                } else {
-                    messageDiv.textContent = `Error: ${result.detail || 'Unknown error'}`;
-                    messageDiv.style.color = '#dc3545';
-                    detailsDiv.textContent = '';
-                }
-            } catch (error) {
-                messageDiv.textContent = `Error: ${error.message}`;
-                messageDiv.style.color = '#dc3545';
-                detailsDiv.textContent = '';
-            } finally {
-                btn.disabled = false;
-            }
-        });
-    }
-
-    // Copy Email Attachment Images button handler
-    const copyEmailAttachmentsBtn = document.getElementById('copy-email-attachments-btn');
-    if (copyEmailAttachmentsBtn) {
-        copyEmailAttachmentsBtn.addEventListener('click', async () => {
-            const btn = document.getElementById('copy-email-attachments-btn');
-            const statusDiv = document.getElementById('copy-email-attachments-status');
-            const messageDiv = document.getElementById('copy-email-attachments-status-message');
-            const detailsDiv = document.getElementById('copy-email-attachments-status-details');
-            
-            btn.disabled = true;
-            statusDiv.style.display = 'block';
-            messageDiv.textContent = 'Copying email attachment images...';
-            messageDiv.style.color = '#333';
-            detailsDiv.textContent = '';
-            
-            try {
-                const response = await fetch('/images/copy-email-attachments', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
-                const result = await response.json();
-                
-                if (response.ok) {
-                    messageDiv.textContent = `Success: ${result.message}`;
-                    messageDiv.style.color = '#28a745';
-                    
-                    let detailsHtml = `
-                        <strong>Images copied:</strong> ${result.images_copied}<br>
-                        <strong>Attachments skipped:</strong> ${result.images_skipped}<br>
-                    `;
-                    
-                    if (result.errors > 0) {
-                        detailsHtml += `<strong style="color: #dc3545;">Errors:</strong> ${result.errors}<br>`;
-                    }
-                    
-                    if (result.error_messages && result.error_messages.length > 0) {
-                        detailsHtml += '<div style="margin-top: 10px; color: #dc3545;"><strong>Error details:</strong><ul style="margin: 5px 0; padding-left: 20px;">';
-                        result.error_messages.forEach(msg => {
-                            detailsHtml += `<li>${msg}</li>`;
-                        });
-                        detailsHtml += '</ul></div>';
-                    }
-                    
-                    detailsDiv.innerHTML = detailsHtml;
-                } else {
-                    messageDiv.textContent = `Error: ${result.detail || 'Unknown error'}`;
-                    messageDiv.style.color = '#dc3545';
-                    detailsDiv.textContent = '';
-                }
-            } catch (error) {
-                messageDiv.textContent = `Error: ${error.message}`;
-                messageDiv.style.color = '#dc3545';
-                detailsDiv.textContent = '';
-            } finally {
-                btn.disabled = false;
-            }
-        });
-    }
 
 });
 

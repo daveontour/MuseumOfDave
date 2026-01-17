@@ -1,12 +1,14 @@
 """Instagram Messages import functionality."""
 
 import json
+import mimetypes
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable
 
 from ..database.connection import Database
 from ..database.storage import IMessageStorage
+from .export_root_detector import detect_instagram_export_root
 
 
 def parse_timestamp_ms(timestamp_ms: Optional[int]) -> Optional[datetime]:
@@ -73,6 +75,16 @@ def import_instagram_from_directory(
     if not directory.exists() or not directory.is_dir():
         raise ValueError(f"Directory does not exist or is not a directory: {directory_path}")
     
+    # Auto-detect export root if not provided
+    detected_export_root = None
+    if export_root:
+        detected_export_root = Path(export_root)
+    else:
+        # Try to auto-detect export root from directory structure
+        detected_export_root = detect_instagram_export_root(directory)
+        if detected_export_root:
+            print(f"Auto-detected Instagram export root: {detected_export_root}")
+    
     storage = IMessageStorage()
     
     # Count total conversations first
@@ -126,11 +138,12 @@ def import_instagram_from_directory(
                     # Process each message
                     for msg in messages:
                         try:
-                            # Skip messages with only reactions or shares (no content)
-                            # But process messages that have content even if they also have reactions/shares
+                            # Check for photos first
+                            photos = msg.get('photos', [])
                             content = msg.get('content', '')
-                            if not content:
-                                # Skip messages with no content (reactions and shares are ignored)
+                            
+                            # Skip messages with no content and no photos (reactions and shares are ignored)
+                            if not content and not photos:
                                 continue
                             
                             # Parse timestamp
@@ -165,19 +178,91 @@ def import_instagram_from_directory(
                                 "replying_to": None,  # Instagram doesn't provide reply threading
                                 "subject": None,  # Instagram doesn't have subject field
                                 "text": text_content,
-                                "attachment_filename": None,  # Instagram messages don't have attachments
-                                "attachment_type": None,
                             }
                             
-                            # Save message to database (no attachment data)
-                            _, is_update = storage.save_imessage(message_data)
-                            
-                            if is_update:
-                                stats["messages_updated"] += 1
+                            # Handle photos if present
+                            if photos:
+                                # Process each photo as a separate attachment
+                                for photo in photos:
+                                    photo_uri = photo.get('uri', '')
+                                    if not photo_uri:
+                                        continue
+                                    
+                                    # Resolve photo path
+                                    # The URI is relative to the export root
+                                    # Use detected export root if available
+                                    photo_path = None
+                                    if detected_export_root:
+                                        # Resolve relative to detected export root
+                                        photo_path = detected_export_root / photo_uri
+                                        
+                                        # If path doesn't exist, try replacing "inbox" with "inboxtest" or vice versa
+                                        if not photo_path.exists():
+                                            uri_str = str(photo_uri)
+                                            if '/inbox/' in uri_str:
+                                                uri_str = uri_str.replace('/inbox/', '/inboxtest/')
+                                                photo_path = detected_export_root / uri_str
+                                            elif '/inboxtest/' in uri_str:
+                                                uri_str = uri_str.replace('/inboxtest/', '/inbox/')
+                                                photo_path = detected_export_root / uri_str
+                                    else:
+                                        # Fallback: try to detect export root for this specific URI
+                                        detected_root = detect_instagram_export_root(directory, photo_uri)
+                                        if detected_root:
+                                            photo_path = detected_root / photo_uri
+                                        
+                                        # If still not found, try relative to JSON file's photos directory
+                                        if not photo_path or not photo_path.exists():
+                                            photos_dir = json_file.parent / 'photos'
+                                            photo_filename = Path(photo_uri).name if '/' in photo_uri else photo_uri
+                                            photo_path = photos_dir / photo_filename
+                                    
+                                    # Read photo file
+                                    attachment_data = None
+                                    attachment_filename = None
+                                    attachment_type = None
+                                    
+                                    try:
+                                        if photo_path and photo_path.exists() and photo_path.is_file():
+                                            with open(photo_path, 'rb') as f:
+                                                attachment_data = f.read()
+                                            attachment_filename = photo_path.name
+                                            
+                                            # Guess MIME type from filename
+                                            guessed_type, _ = mimetypes.guess_type(str(photo_path))
+                                            attachment_type = guessed_type or 'image/jpeg'  # Default to JPEG if can't guess
+                                        else:
+                                            print(f"Warning: Photo file not found: {photo_path}")
+                                            continue
+                                    except Exception as e:
+                                        print(f"Warning: Could not read photo file {photo_path}: {e}")
+                                        continue
+                                    
+                                    # Save message with photo attachment
+                                    _, is_update = storage.save_imessage(
+                                        message_data,
+                                        attachment_data=attachment_data,
+                                        attachment_filename=attachment_filename,
+                                        attachment_type=attachment_type,
+                                        source="Instagram"
+                                    )
+                                    
+                                    if is_update:
+                                        stats["messages_updated"] += 1
+                                    else:
+                                        stats["messages_created"] += 1
+                                    
+                                    stats["messages_imported"] += 1
                             else:
-                                stats["messages_created"] += 1
-                            
-                            stats["messages_imported"] += 1
+                                # Save message without attachment
+                                _, is_update = storage.save_imessage(message_data, source="Instagram")
+                                
+                                if is_update:
+                                    stats["messages_updated"] += 1
+                                else:
+                                    stats["messages_created"] += 1
+                                
+                                stats["messages_imported"] += 1
                             
                         except Exception as e:
                             print(f"Error processing message: {e}")

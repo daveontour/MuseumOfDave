@@ -97,6 +97,20 @@ class MessageAttachment(Base):
     media_item = relationship("MediaMetadata", foreign_keys=[media_item_id])
 
 
+class AlbumMedia(Base):
+    """Junction table linking Facebook albums to media items."""
+
+    __tablename__ = "album_media"
+
+    id = Column(Integer, primary_key=True)
+    album_id = Column(Integer, ForeignKey("facebook_albums.id", ondelete="CASCADE"), nullable=False)
+    media_item_id = Column(Integer, ForeignKey("media_items.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
+    album = relationship("FacebookAlbum", back_populates="media_items")
+    media_item = relationship("MediaMetadata", foreign_keys=[media_item_id])
+
+
 class IMessage(Base):
     """Message model (supports iMessage, SMS, and WhatsApp)."""
 
@@ -138,30 +152,7 @@ class FacebookAlbum(Base):
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
-    images = relationship("FacebookAlbumImage", back_populates="album", cascade="all, delete-orphan")
-
-
-class FacebookAlbumImage(Base):
-    """Facebook Album Image model."""
-
-    __tablename__ = "facebook_album_images"
-
-    id = Column(Integer, primary_key=True)
-    album_id = Column(Integer, ForeignKey("facebook_albums.id", ondelete="CASCADE"), nullable=False)
-    uri = Column(String(500), nullable=False)
-    filename = Column(String(500), nullable=True)
-    creation_timestamp = Column(DateTime, nullable=True)
-    title = Column(String(1000), nullable=True)
-    description = Column(Text, nullable=True)
-    image_data = Column(LargeBinary, nullable=True)
-    media_type = Column(String(255), nullable=True)
-    processed = Column(Boolean, default=False, nullable=False)
-    location_processed = Column(Boolean, default=False, nullable=False)
-    image_processed = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=utcnow)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
-
-    album = relationship("FacebookAlbum", back_populates="images")
+    media_items = relationship("AlbumMedia", back_populates="album", cascade="all, delete-orphan")
 
 
 class ReferenceDocument(Base):
@@ -230,6 +221,9 @@ class MediaMetadata(Base):
     
     # Relationship to messages via MessageAttachment junction table
     message_attachments = relationship("MessageAttachment", foreign_keys="MessageAttachment.media_item_id", back_populates="media_item")
+    
+    # Relationship to albums via AlbumMedia junction table
+    album_media = relationship("AlbumMedia", foreign_keys="AlbumMedia.media_item_id")
 
 class MediaBlob(Base):
     """Media Blob model."""

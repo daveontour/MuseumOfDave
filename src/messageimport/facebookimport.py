@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, Callable
 
 from ..database.connection import Database
 from ..database.storage import IMessageStorage
+from .export_root_detector import detect_facebook_export_root
 
 
 def parse_timestamp_ms(timestamp_ms: Optional[int]) -> Optional[datetime]:
@@ -21,13 +22,14 @@ def parse_timestamp_ms(timestamp_ms: Optional[int]) -> Optional[datetime]:
         return None
 
 
-def find_attachment_file(base_dir: Path, uri: str, export_root: Optional[Path] = None) -> Optional[Path]:
+def find_attachment_file(base_dir: Path, uri: str, export_root: Optional[Path] = None, auto_detect_root: bool = True) -> Optional[Path]:
     """Find attachment file by URI. URIs are relative to export root or conversation directory.
     
     Args:
         base_dir: Base directory (conversation directory)
         uri: URI from Facebook export (relative path)
         export_root: Optional export root directory for absolute URIs
+        auto_detect_root: If True and export_root is None, attempt to auto-detect export root
         
     Returns:
         Path to attachment file if found, None otherwise
@@ -49,9 +51,16 @@ def find_attachment_file(base_dir: Path, uri: str, export_root: Optional[Path] =
         if subdir_path.exists() and subdir_path.is_file():
             return subdir_path
     
-    # Try relative to export root if provided
-    if export_root:
-        export_path = export_root / uri
+    # Auto-detect export root if not provided
+    detected_root = export_root
+    if not detected_root and auto_detect_root:
+        detected_root = detect_facebook_export_root(base_dir, uri)
+        if detected_root:
+            print(f"Auto-detected Facebook export root: {detected_root}")
+    
+    # Try relative to export root if provided or detected
+    if detected_root:
+        export_path = detected_root / uri
         if export_path.exists() and export_path.is_file():
             return export_path
     
@@ -359,7 +368,15 @@ def import_facebook_from_directory(
     if not directory.exists() or not directory.is_dir():
         raise ValueError(f"Directory does not exist or is not a directory: {directory_path}")
     
-    export_root_path = Path(export_root) if export_root else None
+    # Auto-detect export root if not provided
+    export_root_path = None
+    if export_root:
+        export_root_path = Path(export_root)
+    else:
+        # Try to auto-detect export root from directory structure
+        export_root_path = detect_facebook_export_root(directory)
+        if export_root_path:
+            print(f"Auto-detected Facebook export root: {export_root_path}")
     
     storage = IMessageStorage()
     
@@ -490,7 +507,8 @@ def import_facebook_from_directory(
                                 message_data,
                                 attachment_data=attachment_data,
                                 attachment_filename=attachment_filename,
-                                attachment_type=attachment_type
+                                attachment_type=attachment_type,
+                                source="Facebook"
                             )
                             
                             if is_update:
@@ -530,7 +548,8 @@ def import_facebook_from_directory(
                                     additional_message_data,
                                     attachment_data=additional_att.get('data'),
                                     attachment_filename=additional_att.get('filename'),
-                                    attachment_type=additional_att.get('type')
+                                    attachment_type=additional_att.get('type'),
+                                    source="Facebook"
                                 )
                                 
                                 if is_update_att:

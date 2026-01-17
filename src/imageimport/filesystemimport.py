@@ -414,7 +414,7 @@ def import_images_from_filesystem(
                 source_reference=str(file_path.absolute()),
                 image_data=image_data,
                 thumbnail_data=thumbnail_data,
-                image_type=mime_type,
+                media_type=mime_type,
                 title=file_path.stem,
                 description=exif_data.get('description'),
                 tags=tags,

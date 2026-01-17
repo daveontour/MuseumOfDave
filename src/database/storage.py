@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from .connection import Database
-from .models import Email, IMessage, FacebookAlbum, FacebookAlbumImage, MediaMetadata, MediaBlob, MessageAttachment
+from .models import Email, IMessage, FacebookAlbum, MediaMetadata, MediaBlob, MessageAttachment, AlbumMedia, utcnow
 
 
 class EmailStorage:
@@ -276,6 +276,7 @@ class IMessageStorage:
                     # Create MediaMetadata entry
                     media_item = MediaMetadata(
                         media_blob_id=media_blob.id,
+                        tags=message_data.get("chat_session"),
                         source=source,
                         source_reference=str(imessage.id),
                         title=attachment_filename,
@@ -359,11 +360,13 @@ class FacebookAlbumStorage:
         description: Optional[str] = None,
         image_data: Optional[bytes] = None,
         image_type: Optional[str] = None,
-    ) -> Tuple[FacebookAlbumImage, bool]:
-        """Save Facebook album image to database. Always creates new entry (no deduplication).
+    ) -> Tuple[MediaMetadata, bool]:
+        """Save Facebook album image to database using unified media system.
+        
+        Creates MediaBlob, MediaMetadata, and AlbumMedia entries.
         
         Returns:
-            tuple: (FacebookAlbumImage instance, is_update: bool) where is_update is always False
+            tuple: (MediaMetadata instance, is_update: bool) where is_update is always False
         """
         session = self.db.get_session()
         try:
@@ -375,32 +378,60 @@ class FacebookAlbumStorage:
                 else:
                     image_data = bytes(image_data)
             
-            # Always create new image (no deduplication)
-            image = FacebookAlbumImage(
-                album_id=album_id,
-                uri=uri,
-                filename=filename,
-                creation_timestamp=creation_timestamp,
-                title=title,
-                description=description,
-                image_data=image_data,
-                media_type=image_type,
-            )
-            session.add(image)
-            session.flush()  # Flush to ensure data is written
+            # Create thumbnail if it's an image
+            thumbnail_data = None
+            if image_data is not None and image_type and image_type.startswith('image/'):
+                try:
+                    from ..imageimport.filesystemimport import create_thumbnail
+                    thumbnail_data = create_thumbnail(image_data)
+                except Exception as e:
+                    print(f"Warning: Could not create thumbnail for album image: {e}")
             
-            # Debug: Log what we're trying to save
-            if image_data is not None:
-                print(f"Debug: Saving image with data length {len(image_data)} bytes, type: {image_type}, URI: {uri}")
-                # Verify the data is set on the object
-                if image.image_data is None:
-                    print(f"ERROR: image.image_data is None after flush! Expected {len(image_data)} bytes")
-            else:
-                print(f"Debug: Saving image WITHOUT data (image_data is None), URI: {uri}")
+            # Create MediaBlob
+            media_blob = MediaBlob(
+                image_data=image_data,
+                thumbnail_data=thumbnail_data
+            )
+            session.add(media_blob)
+            session.flush()  # Get blob ID
+            
+            # Extract year and month from creation_timestamp if available
+            year = None
+            month = None
+            if creation_timestamp:
+                if isinstance(creation_timestamp, datetime):
+                    year = creation_timestamp.year
+                    month = creation_timestamp.month
+            
+            # Get album name for tags
+            album = session.query(FacebookAlbum).filter(FacebookAlbum.id == album_id).first()
+            album_name = album.name if album else None
+            
+            # Create MediaMetadata entry
+            media_item = MediaMetadata(
+                media_blob_id=media_blob.id,
+                source="facebook_album",
+                source_reference=str(album_id),
+                title=title or filename,
+                description=description,
+                tags=album_name,  # Include album name in tags
+                media_type=image_type,
+                year=year,
+                month=month
+            )
+            session.add(media_item)
+            session.flush()  # Get media_item ID
+            
+            # Create AlbumMedia junction entry
+            album_media = AlbumMedia(
+                album_id=album_id,
+                media_item_id=media_item.id
+            )
+            session.add(album_media)
             
             session.commit()
             
-            return (image, False)
+            return (media_item, False)
         except Exception:
             session.rollback()
             raise
@@ -476,7 +507,7 @@ class ImageStorage:
                     existing_blob.image_data = image_data
                     if thumbnail_data is not None:
                         existing_blob.thumbnail_data = thumbnail_data
-                    existing_blob.updated_at = datetime.utcnow()
+                    existing_blob.updated_at = utcnow()
                 
                 # Update MediaMetadata
                 existing_metadata.title = title
@@ -491,7 +522,7 @@ class ImageStorage:
                 existing_metadata.has_gps = has_gps
                 existing_metadata.source = source
                 existing_metadata.source_reference = source_reference
-                existing_metadata.updated_at = datetime.utcnow()
+                existing_metadata.updated_at = utcnow()
                 
                 # Update any additional fields from kwargs
                 for key, value in kwargs.items():
@@ -621,7 +652,7 @@ class ImageStorage:
                 if hasattr(metadata, key):
                     setattr(metadata, key, value)
             
-            metadata.updated_at = datetime.utcnow()
+            metadata.updated_at = utcnow()
             session.commit()
             
             # Detach object from session

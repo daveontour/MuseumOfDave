@@ -726,11 +726,6 @@
                             <small style="color: #666; display: block; margin-top: 5px;">Path to directory containing Facebook Messenger conversation subdirectories</small>
                         </div>
                         <div class="setting-group" style="margin-top: 10px;">
-                            <label for="facebook-export-root">Export Root Directory (Optional):</label>
-                            <input type="text" id="facebook-export-root" placeholder="e.g., G:\My Drive\meta-2026-Jan-11\facebook-daveontour-2026-01-11" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
-                            <small style="color: #666; display: block; margin-top: 5px;">Root directory of Facebook export (for resolving attachment paths)</small>
-                        </div>
-                        <div class="setting-group" style="margin-top: 10px;">
                             <label for="facebook-user-name">Your Name (Optional):</label>
                             <input type="text" id="facebook-user-name" placeholder="e.g., Dave Burton" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
                             <small style="color: #666; display: block; margin-top: 5px;">Your name to determine incoming vs outgoing messages</small>
@@ -782,11 +777,6 @@
                             <label for="instagram-import-directory">Instagram Export Directory:</label>
                             <input type="text" id="instagram-import-directory" placeholder="e.g., G:\My Drive\meta-2026-Jan-11\your_instagram_activity\messages\inbox" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
                             <small style="color: #666; display: block; margin-top: 5px;">Path to directory containing conversation subdirectories</small>
-                        </div>
-                        <div class="setting-group" style="margin-top: 10px;">
-                            <label for="instagram-export-root">Export Root Directory (Optional):</label>
-                            <input type="text" id="instagram-export-root" placeholder="e.g., G:\My Drive\meta-2026-Jan-11\instagram-dave.on.tour-2026-01-11" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
-                            <small style="color: #666; display: block; margin-top: 5px;">Root directory of Instagram export (for consistency)</small>
                         </div>
                         <div class="setting-group" style="margin-top: 10px;">
                             <label for="instagram-user-name">Your Name (Optional):</label>
@@ -881,11 +871,6 @@
                             <input type="text" id="facebook-albums-import-directory" placeholder="e.g., G:\My Drive\meta-2026-Jan-11\your_facebook_activity\posts" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
                             <small style="color: #666; display: block; margin-top: 5px;">Path to directory containing album JSON files (or the album subdirectory)</small>
                         </div>
-                        <div class="setting-group" style="margin-top: 10px;">
-                            <label for="facebook-albums-export-root">Export Root Directory (Optional):</label>
-                            <input type="text" id="facebook-albums-export-root" placeholder="e.g., G:\My Drive\meta-2026-Jan-11\facebook-daveontour-2026-01-11" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
-                            <small style="color: #666; display: block; margin-top: 5px;">Root directory of Facebook export (for resolving image paths)</small>
-                        </div>
                         <div class="setting-group" style="margin-top: 20px;">
                             <button type="button" id="start-facebook-albums-import-btn" class="modal-btn modal-btn-primary" style="margin-right: 10px;">
                                 <i class="fas fa-play"></i> Start Facebook Albums Import
@@ -978,30 +963,6 @@
                                 </div>
                             </div>
                             <div id="filesystem-import-status-details" style="color: #666; font-size: 0.9em; margin-top: 10px;"></div>
-                        </div>
-                    </section>
-                    <section class="config-section" style="margin-top: 30px;">
-                        <h3>Facebook Album Images</h3>
-                        <div class="setting-group" style="margin-top: 20px;">
-                            <button type="button" id="copy-facebook-albums-btn" class="modal-btn modal-btn-primary">
-                                <i class="fab fa-facebook"></i> Copy Facebook Album Images
-                            </button>
-                        </div>
-                        <div id="copy-facebook-albums-status" style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6; display: none;">
-                            <div id="copy-facebook-albums-status-message" style="color: #333; font-weight: bold; margin-bottom: 10px;"></div>
-                            <div id="copy-facebook-albums-status-details" style="color: #666; font-size: 0.9em; margin-top: 10px;"></div>
-                        </div>
-                    </section>
-                    <section class="config-section" style="margin-top: 30px;">
-                        <h3>Email Attachment Images</h3>
-                        <div class="setting-group" style="margin-top: 20px;">
-                            <button type="button" id="copy-email-attachments-btn" class="modal-btn modal-btn-primary">
-                                <i class="fas fa-envelope"></i> Copy Email Attachment Images
-                            </button>
-                        </div>
-                        <div id="copy-email-attachments-status" style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6; display: none;">
-                            <div id="copy-email-attachments-status-message" style="color: #333; font-weight: bold; margin-bottom: 10px;"></div>
-                            <div id="copy-email-attachments-status-details" style="color: #666; font-size: 0.9em; margin-top: 10px;"></div>
                         </div>
                     </section>
                 </div>
@@ -1500,7 +1461,8 @@
                                     <input type="text" id="new-image-gallery-description" placeholder="Description..." class="new-image-gallery-input">
                                 </div>
                                 <div class="new-image-gallery-search-row">
-                                    <input type="text" id="new-image-gallery-tags" placeholder="Tags..." class="new-image-gallery-input">
+                                    <input type="text" id="new-image-gallery-tags" placeholder="Tags..." class="new-image-gallery-input" list="new-image-gallery-tags-list">
+                                    <datalist id="new-image-gallery-tags-list"></datalist>
                                 </div>
                                 <div class="new-image-gallery-filter-row">
                                     <input type="text" id="new-image-gallery-author" placeholder="Author..." class="new-image-gallery-input">
