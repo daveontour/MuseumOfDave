@@ -664,6 +664,7 @@ class ImageStorage:
         try:
             # Check for existing image by source_reference
             existing_metadata = session.query(MediaMetadata).filter(
+                MediaMetadata.source == source).filter(
                 MediaMetadata.source_reference == source_reference
             ).first()
             

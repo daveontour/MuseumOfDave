@@ -29,6 +29,7 @@ from ..database import Database,  Email, IMessage, FacebookAlbum, ReferenceDocum
 from ..database.models import MediaMetadata, MediaBlob, MessageAttachment, Attachment, AlbumMedia
 from ..database.storage import EmailStorage, ImageStorage
 from ..services import ImageService, EmailService, ReferenceDocumentService, MessageService, ImportService
+from ..services.gemini_service import GeminiService
 from ..services.exceptions import ServiceException, ValidationError, NotFoundError, ConflictError
 from ..services.dto import (
     ImageSearchFilters,
@@ -111,6 +112,21 @@ imessage_import_progress: Dict[str, Any] = {
 # SSE event queue for iMessage import progress updates
 imessage_sse_clients: List[asyncio.Queue] = []
 imessage_sse_clients_lock = threading.Lock()
+
+# Conversation summary state management
+conversation_summary_lock = threading.Lock()
+conversation_summary_in_progress = False
+conversation_summary_progress: Dict[str, Any] = {
+    "status": "idle",  # idle, processing, completed, error
+    "chat_session": None,
+    "stage": None,
+    "summary": None,
+    "error": None
+}
+
+# SSE event queue for conversation summary progress updates
+conversation_summary_sse_clients: List[asyncio.Queue] = []
+conversation_summary_sse_clients_lock = threading.Lock()
 
 # WhatsApp import state management
 whatsapp_import_lock = threading.Lock()
@@ -295,6 +311,49 @@ def broadcast_imessage_progress_event_sync(event_type: str, data: Dict[str, Any]
         for client in disconnected_clients:
             if client in imessage_sse_clients:
                 imessage_sse_clients.remove(client)
+
+
+def update_conversation_summary_progress_state(**kwargs):
+    """Thread-safe function to update conversation summary progress state."""
+    global conversation_summary_progress
+    with conversation_summary_lock:
+        for key, value in kwargs.items():
+            conversation_summary_progress[key] = value
+
+
+def get_conversation_summary_progress_state() -> Dict[str, Any]:
+    """Thread-safe function to get current conversation summary progress state."""
+    global conversation_summary_progress
+    with conversation_summary_lock:
+        return conversation_summary_progress.copy()
+
+
+def broadcast_conversation_summary_event_sync(event_type: str, data: Dict[str, Any]):
+    """Thread-safe function to queue conversation summary event for SSE clients."""
+    global conversation_summary_sse_clients
+    event_data = {
+        "type": event_type,
+        "data": data
+    }
+    message = f"data: {json.dumps(event_data)}\n\n"
+    
+    # Queue message for all connected clients
+    with conversation_summary_sse_clients_lock:
+        disconnected_clients = []
+        for client_queue in conversation_summary_sse_clients:
+            try:
+                # Use put_nowait to avoid blocking
+                client_queue.put_nowait(message)
+            except asyncio.QueueFull:
+                # Queue is full, skip this client
+                pass
+            except Exception:
+                disconnected_clients.append(client_queue)
+        
+        # Remove disconnected clients
+        for client in disconnected_clients:
+            if client in conversation_summary_sse_clients:
+                conversation_summary_sse_clients.remove(client)
 
 
 def update_whatsapp_progress_state(**kwargs):
@@ -1670,6 +1729,287 @@ async def get_conversation_messages(chat_session: str):
         return {"messages": messages_data}
     finally:
         session.close()
+
+
+@app.post("/imessages/conversation/{chat_session}/summarize")
+async def summarize_conversation(chat_session: str):
+    """Summarize a conversation using Gemini LLM synchronously.
+    
+    Args:
+        chat_session: The chat session name (URL encoded)
+        
+    Returns:
+        Dictionary with status, summary, and chat_session
+        
+    Raises:
+        HTTPException: 404 if chat session not found, 500 on error
+    """
+    from urllib.parse import unquote
+    
+    decoded_session = unquote(chat_session)
+    
+    # Query messages from database
+    session = db.get_session()
+    try:
+        messages = session.query(IMessage).filter(
+            IMessage.chat_session == decoded_session
+        ).order_by(
+            IMessage.message_date.asc()
+        ).all()
+        
+        if not messages:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No messages found for chat session: {decoded_session}"
+            )
+        
+        # Format messages into structured JSON
+        from sqlalchemy.orm import joinedload
+        messages_data = {
+            "chat_session": decoded_session,
+            "message_count": len(messages),
+            "messages": []
+        }
+        
+        for msg in messages:
+            # Get attachment info
+            message_attachment = session.query(MessageAttachment).filter(
+                MessageAttachment.message_id == msg.id
+            ).first()
+            
+            has_attachment = message_attachment is not None
+            
+            messages_data["messages"].append({
+                "message_date": msg.message_date.isoformat() if msg.message_date else None,
+                "sender_name": msg.sender_name or "Unknown",
+                "type": msg.type or "",
+                "text": msg.text or "",
+                "has_attachment": has_attachment
+            })
+        
+        # Initialize Gemini service and get summary synchronously
+        try:
+            gemini_service = GeminiService()
+        except ValueError as e:
+            # Error during initialization (e.g., missing API key, invalid model)
+            raise HTTPException(
+                status_code=500,
+                detail=str(e)
+            )
+        
+        try:
+            summary = gemini_service.summarize_conversation(messages_data)
+        except ValueError as e:
+            # Missing API key or invalid data
+            raise HTTPException(
+                status_code=500,
+                detail=str(e)
+            )
+        except Exception as e:
+            # Other errors
+            import traceback
+            error_msg = str(e)
+            traceback.print_exc()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error generating summary: {error_msg}"
+            )
+        
+        return {
+            "status": "completed",
+            "summary": summary,
+            "chat_session": decoded_session
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error summarizing conversation: {str(e)}"
+        )
+    finally:
+        session.close()
+
+
+def summarize_conversation_background(chat_session: str, messages_data: Dict[str, Any]):
+    """Background task to summarize conversation using Gemini LLM.
+    
+    Args:
+        chat_session: The chat session name
+        messages_data: Dictionary containing formatted messages
+    """
+    global conversation_summary_in_progress
+    
+    try:
+        # Update progress: processing started
+        update_conversation_summary_progress_state(
+            status="processing",
+            stage="calling_llm"
+        )
+        broadcast_conversation_summary_event_sync("progress", {
+            "status": "processing",
+            "stage": "calling_llm",
+            "chat_session": chat_session
+        })
+        
+        # Initialize Gemini service and get summary
+        try:
+            gemini_service = GeminiService()
+        except ValueError as e:
+            # Error during initialization (e.g., missing API key, invalid model)
+            error_msg = str(e)
+            update_conversation_summary_progress_state(
+                status="error",
+                error=error_msg
+            )
+            broadcast_conversation_summary_event_sync("error", {
+                "status": "error",
+                "error": error_msg,
+                "chat_session": chat_session
+            })
+            return
+        
+        summary = gemini_service.summarize_conversation(messages_data)
+        
+        # Update progress: completed
+        update_conversation_summary_progress_state(
+            status="completed",
+            stage="completed",
+            summary=summary
+        )
+        broadcast_conversation_summary_event_sync("completed", {
+            "status": "completed",
+            "summary": summary,
+            "chat_session": chat_session
+        })
+        
+    except ValueError as e:
+        # Missing API key or invalid data
+        error_msg = str(e)
+        update_conversation_summary_progress_state(
+            status="error",
+            error=error_msg
+        )
+        broadcast_conversation_summary_event_sync("error", {
+            "status": "error",
+            "error": error_msg,
+            "chat_session": chat_session
+        })
+    except Exception as e:
+        # Other errors
+        import traceback
+        error_msg = str(e)
+        # If it's already a user-friendly message, use it directly
+        if not error_msg.startswith("Error generating summary:"):
+            error_msg = f"Error generating summary: {error_msg}"
+        traceback.print_exc()
+        update_conversation_summary_progress_state(
+            status="error",
+            error=error_msg
+        )
+        broadcast_conversation_summary_event_sync("error", {
+            "status": "error",
+            "error": error_msg,
+            "chat_session": chat_session
+        })
+    finally:
+        # Reset in_progress flag
+        with conversation_summary_lock:
+            conversation_summary_in_progress = False
+
+
+@app.get("/imessages/conversation/{chat_session}/summarize/stream")
+async def stream_conversation_summary_progress(chat_session: str):
+    """Stream conversation summary progress updates via Server-Sent Events (SSE).
+    
+    Args:
+        chat_session: The chat session name (URL encoded)
+    
+    Returns:
+        StreamingResponse with text/event-stream content type
+    """
+    from urllib.parse import unquote
+    decoded_session = unquote(chat_session)
+    
+    async def event_generator():
+        # Create a queue for this client
+        client_queue = asyncio.Queue(maxsize=100)
+        
+        # Add client to the list
+        with conversation_summary_sse_clients_lock:
+            conversation_summary_sse_clients.append(client_queue)
+        
+        try:
+            # Send initial progress state
+            initial_state = get_conversation_summary_progress_state()
+            # Only send if it's for this chat session
+            if initial_state.get("chat_session") == decoded_session:
+                event_data = {
+                    "type": "progress",
+                    "data": initial_state
+                }
+                yield f"data: {json.dumps(event_data)}\n\n"
+            
+            # Send heartbeat every 30 seconds to keep connection alive
+            heartbeat_interval = 30
+            last_heartbeat = asyncio.get_event_loop().time()
+            
+            while True:
+                try:
+                    # Wait for message with timeout for heartbeat
+                    timeout = max(1, heartbeat_interval - (asyncio.get_event_loop().time() - last_heartbeat))
+                    try:
+                        message = await asyncio.wait_for(client_queue.get(), timeout=timeout)
+                        yield message
+                    except asyncio.TimeoutError:
+                        # Send heartbeat
+                        heartbeat_data = {
+                            "type": "heartbeat",
+                            "data": {"timestamp": datetime.now().isoformat()}
+                        }
+                        yield f"data: {json.dumps(heartbeat_data)}\n\n"
+                        last_heartbeat = asyncio.get_event_loop().time()
+                    
+                    # Check if processing is complete
+                    progress_state = get_conversation_summary_progress_state()
+                    if progress_state.get("chat_session") == decoded_session:
+                        if progress_state["status"] in ["completed", "error"]:
+                            # Send final state and close
+                            final_event = {
+                                "type": progress_state["status"],
+                                "data": progress_state
+                            }
+                            yield f"data: {json.dumps(final_event)}\n\n"
+                            break
+                        
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    # Send error and break
+                    error_event = {
+                        "type": "error",
+                        "data": {"error": str(e)}
+                    }
+                    yield f"data: {json.dumps(error_event)}\n\n"
+                    break
+        finally:
+            # Remove client from the list
+            with conversation_summary_sse_clients_lock:
+                if client_queue in conversation_summary_sse_clients:
+                    conversation_summary_sse_clients.remove(client_queue)
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 @app.delete("/imessages/conversation/{chat_session}")
@@ -5108,6 +5448,69 @@ async def bulk_update_images(update_data: Dict[str, Any]):
             status_code=500,
             detail=f"Error bulk updating images: {str(e)}"
         )
+
+
+@app.get("/images/{image_id}/metadata", response_model=MediaMetadataResponse)
+async def get_image_metadata(image_id: int):
+    """Get image metadata by ID.
+    
+    Args:
+        image_id: The metadata ID of the image
+        
+    Returns:
+        MediaMetadataResponse with full image metadata
+        
+    Raises:
+        HTTPException: 404 if image not found
+    """
+    session = db.get_session()
+    try:
+        media_item = session.query(MediaMetadata).filter(MediaMetadata.id == image_id).first()
+        
+        if not media_item:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Image with ID {image_id} not found"
+            )
+        
+        # Convert to response model
+        return MediaMetadataResponse(
+            id=media_item.id,
+            media_blob_id=media_item.media_blob_id,
+            description=media_item.description,
+            title=media_item.title,
+            author=media_item.author,
+            tags=media_item.tags,
+            categories=media_item.categories,
+            notes=media_item.notes,
+            available_for_task=media_item.available_for_task,
+            media_type=media_item.media_type,
+            processed=media_item.processed,
+            location_processed=media_item.location_processed,
+            image_processed=media_item.image_processed,
+            created_at=media_item.created_at,
+            updated_at=media_item.updated_at,
+            year=media_item.year,
+            month=media_item.month,
+            latitude=media_item.latitude,
+            longitude=media_item.longitude,
+            altitude=media_item.altitude,
+            rating=media_item.rating or 5,
+            has_gps=media_item.has_gps,
+            google_maps_url=media_item.google_maps_url,
+            region=media_item.region,
+            source=media_item.source,
+            source_reference=media_item.source_reference
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving image metadata: {str(e)}"
+        )
+    finally:
+        session.close()
 
 
 @app.put("/images/{image_id}")

@@ -395,11 +395,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Debug DOM elements
-    console.log('DOM elements found:');
-    console.log('interviewerModeBtn:', DOM.interviewerModeBtn);
-    console.log('interviewerMain:', DOM.interviewerMain);
-    console.log('voicePreviewImg:', DOM.voicePreviewImg);
-    console.log('voicePreviewDesc:', DOM.voicePreviewDesc);
 
     // --- Configure Marked ---
     marked.setOptions({
@@ -1223,20 +1218,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function updateVoicePreview(voiceName) {
-            console.log('updateVoicePreview called with voiceName:', voiceName);
+
             if (DOM.voicePreviewImg) {
                 const imageName = CONSTANTS.VOICE_IMAGES[voiceName];
-                console.log('Image name from CONSTANTS:', imageName);
+ 
                 if (imageName) {
                     const imagePath = `/static/images/${imageName}`;
-                    console.log('Setting image src to:', imagePath);
                     DOM.voicePreviewImg.src = imagePath;
                     DOM.voicePreviewImg.alt = `${voiceName} character`;
                     
-                    // Test if image loads
-                    DOM.voicePreviewImg.onload = () => {
-                        console.log('Voice preview image loaded successfully');
-                    };
+
                     DOM.voicePreviewImg.onerror = () => {
                         console.error('Failed to load voice preview image:', imagePath);
                     };
@@ -1308,7 +1299,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         function setInitialState() {
             const initialVoice = getSelectedVoice();
-            console.log('Setting initial voice:', initialVoice);
             updateVoicePreview(initialVoice); // Update preview for initial voice
             updateSelectedVoiceImage(initialVoice); // Update selected voice image
             if (initialVoice === 'expert') {
@@ -2193,27 +2183,43 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
 
-                debugger;
+  
+
+                // Helper function to handle marker click - fetch full image data and open detail modal
+                async function handleMarkerClick(item) {
+                    try {
+                        // Fetch full image metadata from API
+                        const response = await fetch(`/images/${item.id}/metadata`);
+                        if (!response.ok) {
+                            throw new Error(`Failed to fetch image metadata: ${response.status}`);
+                        }
+                        const fullImageData = await response.json();
+                        
+                        // Open detail modal with full image data (don't allow redirects from Locations)
+                        Modals.ImageDetailModal.open(fullImageData, {
+                            allowRedirects: false
+                        });
+                    } catch (error) {
+                        console.error('Error fetching image metadata:', error);
+                        // Fallback to basic display if fetch fails
+                        const imageUrl = `/images/${item.id}?type=metadata`;
+                        const filename = item.title || item.source_reference || `Image ${item.id}`;
+                        Modals.SingleImageDisplay.showSingleImageModal(
+                            filename,
+                            imageUrl,
+                            item.created_at,
+                            item.latitude,
+                            item.longitude
+                        );
+                    }
+                }
 
                 photoItems.forEach(item => {
                     const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
                     
                     // Add click handler to display image in modal
                     marker.on('click', function() {
-                        // Construct image URL using the media item ID
-                        const imageUrl = `/images/${item.id}?type=metadata`;
-                        
-                        // Get display name (use title, source_reference, or fallback)
-                        const filename = item.title || item.source_reference || `Image ${item.id}`;
-                        
-                        // Call the existing modal display function
-                        Modals.SingleImageDisplay.showSingleImageModal(
-                            filename,           // Display name
-                            imageUrl,            // Image URL (will be used as file_id)
-                            item.created_at,     // Date taken
-                            item.latitude,       // Latitude
-                            item.longitude       // Longitude
-                        );
+                        handleMarkerClick(item);
                     });
                     
                     photoMarkers.push(marker);
@@ -2222,15 +2228,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 messageItems.forEach(item => {
                     const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
                     marker.on('click', function() {
-                        const imageUrl = `/images/${item.id}?type=metadata`;
-                        const filename = item.title || item.source_reference || `Image ${item.id}`;
-                        Modals.SingleImageDisplay.showSingleImageModal(
-                            filename,           // Display name
-                            imageUrl,            // Image URL (will be used as file_id)
-                            item.created_at,     // Date taken
-                            item.latitude,       // Latitude
-                            item.longitude       // Longitude
-                        );
+                        handleMarkerClick(item);
                     });
                     messageMarkers.push(marker);
                 });
@@ -2238,75 +2236,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 emailItems.forEach(item => {
                     const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
                     marker.on('click', function() {
-                        const imageUrl = `/images/${item.id}?type=metadata`;
-                        const filename = item.title || item.source_reference || `Image ${item.id}`;
-                        Modals.SingleImageDisplay.showSingleImageModal(
-                            filename,           // Display name
-                            imageUrl,            // Image URL (will be used as file_id)
-                            item.created_at,     // Date taken
-                            item.latitude,       // Latitude
-                            item.longitude       // Longitude
-                        );
-                    });                   emailMarkers.push(marker);
+                        handleMarkerClick(item);
+                    });
+                    emailMarkers.push(marker);
                 });
                 biographItems.forEach(item => {
                     const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
                     marker.on('click', function() {
-                        const imageUrl = `/images/${item.id}?type=metadata`;
-                        const filename = item.title || item.source_reference || `Image ${item.id}`;
-                        Modals.SingleImageDisplay.showSingleImageModal(
-                            filename,           // Display name
-                            imageUrl,            // Image URL (will be used as file_id)
-                            item.created_at,     // Date taken
-                            item.latitude,       // Latitude
-                            item.longitude       // Longitude
-                        );
-                    });                   marker.bindPopup(item.destination);
+                        handleMarkerClick(item);
+                    });
+                    marker.bindPopup(item.destination);
                     biographyMarkers.push(marker);
                 });
                 fbItems.forEach(item => {
                     const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
                     marker.on('click', function() {
-                        const imageUrl = `/images/${item.id}?type=metadata`;
-                        const filename = item.title || item.source_reference || `Image ${item.id}`;
-                        Modals.SingleImageDisplay.showSingleImageModal(
-                            filename,           // Display name
-                            imageUrl,            // Image URL (will be used as file_id)
-                            item.created_at,     // Date taken
-                            item.latitude,       // Latitude
-                            item.longitude       // Longitude
-                        );
-                    });                   marker.bindPopup(item.destination);
+                        handleMarkerClick(item);
+                    });
+                    marker.bindPopup(item.destination);
                     fbMarkers.push(marker);
                 });
                 otherItems.forEach(item => {
                     const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
                     marker.on('click', function() {
-                        const imageUrl = `/images/${item.id}?type=metadata`;
-                        const filename = item.title || item.source_reference || `Image ${item.id}`;
-                        Modals.SingleImageDisplay.showSingleImageModal(
-                            filename,           // Display name
-                            imageUrl,            // Image URL (will be used as file_id)
-                            item.created_at,     // Date taken
-                            item.latitude,       // Latitude
-                            item.longitude       // Longitude
-                        );
-                    });                   marker.bindPopup(item.destination);
+                        handleMarkerClick(item);
+                    });
+                    marker.bindPopup(item.destination);
                     otherMarkers.push(marker);
                 });
                 whatsappItems.forEach(item => {
                     const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
                     marker.on('click', function() {
-                        const imageUrl = `/images/${item.id}?type=metadata`;
-                        const filename = item.title || item.source_reference || `Image ${item.id}`;
-                        Modals.SingleImageDisplay.showSingleImageModal(
-                            filename,           // Display name
-                            imageUrl,            // Image URL (will be used as file_id)
-                            item.created_at,     // Date taken
-                            item.latitude,       // Latitude
-                            item.longitude       // Longitude
-                        );
-                    });                   marker.bindPopup(item.destination);
+                        handleMarkerClick(item);
+                    });
+                    marker.bindPopup(item.destination);
                     whatsappMarkers.push(marker);
                 });
 
@@ -2856,7 +2819,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         // Functionality will be added later
                         const selectedOption = document.querySelector('input[name="email-ask-ai-option"]:checked')?.value;
                         const otherText = emailAskAIOtherInput?.value || '';
-                        console.log('Ask AI - Selected option:', selectedOption, 'Other text:', otherText);
                         // TODO: Implement AI functionality
                         emailAskAIModal.style.display = 'none';
                     });
@@ -4584,47 +4546,7 @@ ${textContent}
                 // Initialize resizable panes
                 _initResizablePanes();
                 
-                // Close detail modal handler
-                if (DOM.closeNewImageGalleryDetailModalBtn) {
-                    DOM.closeNewImageGalleryDetailModalBtn.addEventListener('click', () => {
-                        DOM.newImageGalleryDetailModal.style.display = 'none';
-                        currentImageInModal = null;
-                        originalImageData = null;
-                        if (DOM.newImageGallerySaveBtn) {
-                            DOM.newImageGallerySaveBtn.disabled = true;
-                        }
-                    });
-                }
-                
-                // Close modal when clicking outside
-                if (DOM.newImageGalleryDetailModal) {
-                    DOM.newImageGalleryDetailModal.addEventListener('click', (e) => {
-                        if (e.target === DOM.newImageGalleryDetailModal) {
-                            DOM.newImageGalleryDetailModal.style.display = 'none';
-                            currentImageInModal = null;
-                            originalImageData = null;
-                            if (DOM.newImageGallerySaveBtn) {
-                                DOM.newImageGallerySaveBtn.disabled = true;
-                            }
-                        }
-                    });
-                }
-                
-                // Delete button handler
-                if (DOM.newImageGalleryDeleteBtn) {
-                    DOM.newImageGalleryDeleteBtn.addEventListener('click', async (e) => {
-                        e.stopPropagation();
-                        await _deleteCurrentImage();
-                    });
-                }
-                
-                // Save button handler
-                if (DOM.newImageGallerySaveBtn) {
-                    DOM.newImageGallerySaveBtn.addEventListener('click', async (e) => {
-                        e.stopPropagation();
-                        await _saveImageChanges();
-                    });
-                }
+                // Note: Detail modal handlers are now managed by Modals.ImageDetailModal.init()
             }
             
             function _initResizablePanes() {
@@ -5051,7 +4973,34 @@ ${textContent}
                     });
                     
                     // Open detail modal with full image and metadata
-                    _openImageDetailModal(image);
+                    Modals.ImageDetailModal.open(image, {
+                        allowRedirects: true,
+                        onSave: (updatedImage, updateData) => {
+                            // Update the image in imageData array
+                            const imageIndex = imageData.findIndex(img => img.id === updatedImage.id);
+                            if (imageIndex !== -1) {
+                                imageData[imageIndex].description = updateData.description;
+                                imageData[imageIndex].tags = updateData.tags;
+                                imageData[imageIndex].rating = updateData.rating;
+                            }
+                        },
+                        onDelete: (deletedImage) => {
+                            // Remove from imageData array
+                            imageData = imageData.filter(img => img.id !== deletedImage.id);
+                            
+                            // Update selected index
+                            if (selectedImageIndex >= imageData.length) {
+                                selectedImageIndex = -1;
+                            }
+                            
+                            // Refresh thumbnail grid
+                            _renderThumbnailGrid();
+                            
+                            // Remove selected state from thumbnails
+                            const thumbnails = DOM.newImageGalleryThumbnailGrid.querySelectorAll('.new-image-gallery-thumbnail-item');
+                            thumbnails.forEach(thumb => thumb.classList.remove('selected'));
+                        }
+                    });
                 }
             }
             
@@ -5190,10 +5139,9 @@ ${textContent}
                     
                     // Close detail modal if the deleted image was being viewed
                     const deletedIds = new Set(imageIds);
-                    if (currentImageInModal && deletedIds.has(currentImageInModal.id)) {
+                    // Note: ImageDetailModal manages its own state, so we just close it
+                    if (deletedIds.size > 0 && DOM.newImageGalleryDetailModal) {
                         DOM.newImageGalleryDetailModal.style.display = 'none';
-                        currentImageInModal = null;
-                        originalImageData = null;
                     }
                     
                     alert(`Successfully deleted ${result.deleted_count} image(s)`);
@@ -5203,141 +5151,76 @@ ${textContent}
                 }
             }
 
-            let currentImageInModal = null;
-            let originalImageData = null; // Store original values to detect changes
-            let starRatingListenerAttached = false; // Flag to track if star rating listener is attached
 
-            function _openImageDetailModal(image) {
-                // Check if source is Email - if so, navigate to Email Gallery instead
-                if (image.source === "Email" && image.source_reference) {
-                    const emailId = parseInt(image.source_reference);
-                    
-                    if (!isNaN(emailId)) {
-                        // Close Image Gallery modals
-                        DOM.newImageGalleryModal.style.display = 'none';
-                        DOM.newImageGalleryDetailModal.style.display = 'none';
-                        
-                        // Open Email Gallery and select the email
-                        Modals.EmailGallery.openAndSelectEmail(emailId);
-                        return; // Don't open image detail modal
-                    }
-                }
-                
-                // Check if source is Facebook Album - if so, navigate to Facebook Albums Gallery instead
-                if (image.source === "Facebook Album" && image.source_reference) {
-                    const albumId = image.source_reference;
-                    
-                    if (albumId) {
-                        // Close Image Gallery modals
-                        DOM.newImageGalleryModal.style.display = 'none';
-                        DOM.newImageGalleryDetailModal.style.display = 'none';
-                        
-                        // Open Facebook Albums Gallery and select the album
-                        Modals.FBAlbums.openAndSelectAlbum(albumId);
-                        return; // Don't open image detail modal
-                    }
-                }
-                
-                currentImageInModal = image;
-                
-                // Store original values for change detection
-                originalImageData = {
-                    description: image.description || '',
-                    tags: image.tags || '',
-                    rating: image.rating || null
-                };
-                
-                // Set image source
-                DOM.newImageGalleryDetailImage.src = `/images/${image.id}?type=metadata&convert_heic_to_jpg=true`;
-                DOM.newImageGalleryDetailImage.alt = image.title || 'Image';
-                
-                // Show delete and save buttons
-                if (DOM.newImageGalleryDeleteBtn) {
-                    DOM.newImageGalleryDeleteBtn.style.display = 'inline-block';
-                }
-                if (DOM.newImageGallerySaveBtn) {
-                    DOM.newImageGallerySaveBtn.style.display = 'inline-block';
-                    DOM.newImageGallerySaveBtn.disabled = true;
-                }
-                
-                // Format date/time in Australian format (DD/MM/YYYY HH:MM)
-                function formatDateTime(dateTime) {
-                    if (!dateTime) return 'N/A';
-                    try {
-                        const date = new Date(dateTime);
-                        if (isNaN(date.getTime())) return 'N/A';
-                        
-                        const day = String(date.getDate()).padStart(2, '0');
-                        const month = String(date.getMonth() + 1).padStart(2, '0');
-                        const year = date.getFullYear();
-                        const hours = String(date.getHours()).padStart(2, '0');
-                        const minutes = String(date.getMinutes()).padStart(2, '0');
-                        
-                        return `${day}/${month}/${year} ${hours}:${minutes}`;
-                    } catch (e) {
-                        return dateTime.toString();
-                    }
-                }
-                
-                // Populate all metadata fields
-                DOM.newImageDetailTitle.textContent = image.title || 'N/A';
-                
-                // Populate editable fields
-                if (DOM.newImageDetailDescriptionEdit) {
-                    DOM.newImageDetailDescriptionEdit.value = image.description || '';
-                }
-                if (DOM.newImageDetailTagsEdit) {
-                    DOM.newImageDetailTagsEdit.value = image.tags || '';
-                }
-                
-                // Set up star rating
-                _setupStarRating(image.rating || null);
-                
-                DOM.newImageDetailAuthor.textContent = image.author || 'N/A';
-                DOM.newImageDetailCategories.textContent = image.categories || 'N/A';
-                DOM.newImageDetailNotes.textContent = image.notes || 'N/A';
-                DOM.newImageDetailDate.textContent = formatDate(image.year, image.month);
-                DOM.newImageDetailImageType.textContent = image.image_type || 'N/A';
-                DOM.newImageDetailSource.textContent = image.source || 'N/A';
-                DOM.newImageDetailSourceReference.textContent = image.source_reference || 'N/A';
-                DOM.newImageDetailRegion.textContent = image.region || 'N/A';
-                DOM.newImageDetailAvailableForTask.textContent = image.available_for_task ? 'Yes' : 'No';
-                DOM.newImageDetailProcessed.textContent = image.processed ? 'Yes' : 'No';
-                DOM.newImageDetailLocationProcessed.textContent = image.location_processed ? 'Yes' : 'No';
-                DOM.newImageDetailImageProcessed.textContent = image.image_processed ? 'Yes' : 'No';
-                DOM.newImageDetailCreatedAt.textContent = formatDateTime(image.created_at);
-                DOM.newImageDetailUpdatedAt.textContent = formatDateTime(image.updated_at);
-                
-                // GPS Location
-                if (image.has_gps && (image.latitude || image.longitude)) {
-                    let gpsText = '';
-                    if (image.latitude && image.longitude) {
-                        gpsText = `${image.latitude.toFixed(6)}, ${image.longitude.toFixed(6)}`;
-                        if (image.google_maps_url) {
-                            gpsText = `${gpsText} (<a href="${image.google_maps_url}" target="_blank">View on Google Maps</a>)`;
-                        }
-                    }
-                    DOM.newImageDetailGps.innerHTML = gpsText || 'GPS data available';
-                    DOM.newImageDetailGpsRow.style.display = 'flex';
-                } else {
-                    DOM.newImageDetailGpsRow.style.display = 'none';
-                }
-                
-                // Altitude
-                if (image.altitude !== null && image.altitude !== undefined) {
-                    DOM.newImageDetailAltitude.textContent = `${image.altitude.toFixed(2)} meters`;
-                    DOM.newImageDetailAltitudeRow.style.display = 'flex';
-                } else {
-                    DOM.newImageDetailAltitudeRow.style.display = 'none';
-                }
-                
-                // Set up change tracking
-                _setupChangeTracking();
-                
-                // Show modal
-                DOM.newImageGalleryDetailModal.style.display = 'flex';
+            function _handleSearch() {
+                _loadImageData();
             }
-            
+
+            function _handleClear() {
+                if (DOM.newImageGalleryTitle) DOM.newImageGalleryTitle.value = '';
+                if (DOM.newImageGalleryDescription) DOM.newImageGalleryDescription.value = '';
+                if (DOM.newImageGalleryTags) DOM.newImageGalleryTags.value = '';
+                if (DOM.newImageGalleryAuthor) DOM.newImageGalleryAuthor.value = '';
+                if (DOM.newImageGallerySource) DOM.newImageGallerySource.value = '';
+                if (DOM.newImageGalleryYearFilter) DOM.newImageGalleryYearFilter.value = 0;
+                if (DOM.newImageGalleryMonthFilter) DOM.newImageGalleryMonthFilter.value = 0;
+                if (DOM.newImageGalleryRating) DOM.newImageGalleryRating.value = '';
+                if (DOM.newImageGalleryRatingMin) DOM.newImageGalleryRatingMin.value = '';
+                if (DOM.newImageGalleryRatingMax) DOM.newImageGalleryRatingMax.value = '';
+                if (DOM.newImageGalleryHasGps) DOM.newImageGalleryHasGps.checked = false;
+                if (DOM.newImageGalleryProcessed) DOM.newImageGalleryProcessed.checked = false;
+                
+                selectedImageIndex = -1;
+                selectedImageIds.clear();
+                _updateSelectionUI();
+                imageData = [];
+                _renderThumbnailGrid();
+            }
+
+
+            return { init, open, close };
+        })(),
+
+        ImageDetailModal: (() => {
+            let currentImageInModal = null;
+            let originalImageData = null;
+            let starRatingListenerAttached = false;
+            let onSaveCallback = null;
+            let onDeleteCallback = null;
+            let allowRedirects = true;
+
+            function formatDate(year, month) {
+                if (!year && !month) return 'No Date';
+                const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                    'July', 'August', 'September', 'October', 'November', 'December'];
+                if (year && month) {
+                    return `${monthNames[month - 1]} ${year}`;
+                } else if (year) {
+                    return year.toString();
+                } else if (month) {
+                    return monthNames[month - 1];
+                }
+                return 'No Date';
+            }
+
+            function formatDateTime(dateTime) {
+                if (!dateTime) return 'N/A';
+                try {
+                    const date = new Date(dateTime);
+                    if (isNaN(date.getTime())) return 'N/A';
+                    
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const year = date.getFullYear();
+                    const hours = String(date.getHours()).padStart(2, '0');
+                    const minutes = String(date.getMinutes()).padStart(2, '0');
+                    
+                    return `${day}/${month}/${year} ${hours}:${minutes}`;
+                } catch (e) {
+                    return dateTime.toString();
+                }
+            }
+
             function _setupStarRating(rating) {
                 if (!DOM.newImageDetailRatingContainer || !DOM.newImageDetailRatingEdit) {
                     return;
@@ -5372,12 +5255,6 @@ ${textContent}
                     }
                 });
                 
-                // Debug: log the rating and active stars
-                console.log('Star rating setup:', {
-                    inputRating: rating,
-                    currentRating: currentRating,
-                    activeStars: Array.from(stars).filter(s => s.classList.contains('active')).length
-                });
                 
                 // Set up click handler using event delegation (only once)
                 if (!starRatingListenerAttached) {
@@ -5402,10 +5279,6 @@ ${textContent}
                             }
                         });
                         
-                        console.log('Star clicked:', {
-                            clickedRating: starRating,
-                            activeStars: Array.from(allStars).filter(s => s.classList.contains('active')).length
-                        });
                         
                         _checkForChanges();
                     });
@@ -5446,7 +5319,7 @@ ${textContent}
                 }
             }
             
-            async function _saveImageChanges() {
+            async function saveChanges() {
                 if (!currentImageInModal) return;
                 
                 const imageId = currentImageInModal.id;
@@ -5473,14 +5346,6 @@ ${textContent}
                         throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
                     }
                     
-                    // Update the image in imageData array
-                    const imageIndex = imageData.findIndex(img => img.id === imageId);
-                    if (imageIndex !== -1) {
-                        imageData[imageIndex].description = description;
-                        imageData[imageIndex].tags = tags;
-                        imageData[imageIndex].rating = rating;
-                    }
-                    
                     // Update currentImageInModal
                     currentImageInModal.description = description;
                     currentImageInModal.tags = tags;
@@ -5498,6 +5363,11 @@ ${textContent}
                         DOM.newImageGallerySaveBtn.disabled = true;
                     }
                     
+                    // Call callback if provided
+                    if (onSaveCallback) {
+                        onSaveCallback(currentImageInModal, updateData);
+                    }
+                    
                     alert('Image metadata updated successfully');
                 } catch (error) {
                     console.error('Error updating image:', error);
@@ -5505,7 +5375,7 @@ ${textContent}
                 }
             }
 
-            async function _deleteCurrentImage() {
+            async function deleteImage() {
                 if (!currentImageInModal) return;
                 
                 const imageId = currentImageInModal.id;
@@ -5528,22 +5398,14 @@ ${textContent}
                     
                     // Close the modal
                     DOM.newImageGalleryDetailModal.style.display = 'none';
+                    const deletedImage = currentImageInModal;
                     currentImageInModal = null;
+                    originalImageData = null;
                     
-                    // Remove from imageData array
-                    imageData = imageData.filter(img => img.id !== imageId);
-                    
-                    // Update selected index
-                    if (selectedImageIndex >= imageData.length) {
-                        selectedImageIndex = -1;
+                    // Call callback if provided
+                    if (onDeleteCallback) {
+                        onDeleteCallback(deletedImage);
                     }
-                    
-                    // Refresh thumbnail grid
-                    _renderThumbnailGrid();
-                    
-                    // Remove selected state from thumbnails
-                    const thumbnails = DOM.newImageGalleryThumbnailGrid.querySelectorAll('.new-image-gallery-thumbnail-item');
-                    thumbnails.forEach(thumb => thumb.classList.remove('selected'));
                     
                     alert(`Successfully deleted image: ${imageTitle}`);
                 } catch (error) {
@@ -5552,31 +5414,184 @@ ${textContent}
                 }
             }
 
-            function _handleSearch() {
-                _loadImageData();
-            }
+            function open(image, options = {}) {
+                // Extract options
+                allowRedirects = options.allowRedirects !== undefined ? options.allowRedirects : true;
+                onSaveCallback = options.onSave || null;
+                onDeleteCallback = options.onDelete || null;
 
-            function _handleClear() {
-                if (DOM.newImageGalleryTitle) DOM.newImageGalleryTitle.value = '';
-                if (DOM.newImageGalleryDescription) DOM.newImageGalleryDescription.value = '';
-                if (DOM.newImageGalleryTags) DOM.newImageGalleryTags.value = '';
-                if (DOM.newImageGalleryAuthor) DOM.newImageGalleryAuthor.value = '';
-                if (DOM.newImageGallerySource) DOM.newImageGallerySource.value = '';
-                if (DOM.newImageGalleryYearFilter) DOM.newImageGalleryYearFilter.value = 0;
-                if (DOM.newImageGalleryMonthFilter) DOM.newImageGalleryMonthFilter.value = 0;
-                if (DOM.newImageGalleryRating) DOM.newImageGalleryRating.value = '';
-                if (DOM.newImageGalleryRatingMin) DOM.newImageGalleryRatingMin.value = '';
-                if (DOM.newImageGalleryRatingMax) DOM.newImageGalleryRatingMax.value = '';
-                if (DOM.newImageGalleryHasGps) DOM.newImageGalleryHasGps.checked = false;
-                if (DOM.newImageGalleryProcessed) DOM.newImageGalleryProcessed.checked = false;
+                // Check if source is Email - if so, navigate to Email Gallery instead (if redirects allowed)
+                if (allowRedirects && image.source === "Email" && image.source_reference) {
+                    const emailId = parseInt(image.source_reference);
+                    
+                    if (!isNaN(emailId)) {
+                        // Close Image Gallery modals
+                        if (DOM.newImageGalleryModal) DOM.newImageGalleryModal.style.display = 'none';
+                        if (DOM.newImageGalleryDetailModal) DOM.newImageGalleryDetailModal.style.display = 'none';
+                        
+                        // Open Email Gallery and select the email
+                        Modals.EmailGallery.openAndSelectEmail(emailId);
+                        return; // Don't open image detail modal
+                    }
+                }
                 
-                selectedImageIndex = -1;
-                selectedImageIds.clear();
-                _updateSelectionUI();
-                imageData = [];
-                _renderThumbnailGrid();
+                // Check if source is Facebook Album - if so, navigate to Facebook Albums Gallery instead (if redirects allowed)
+                if (allowRedirects && image.source === "Facebook Album" && image.source_reference) {
+                    const albumId = image.source_reference;
+                    
+                    if (albumId) {
+                        // Close Image Gallery modals
+                        if (DOM.newImageGalleryModal) DOM.newImageGalleryModal.style.display = 'none';
+                        if (DOM.newImageGalleryDetailModal) DOM.newImageGalleryDetailModal.style.display = 'none';
+                        
+                        // Open Facebook Albums Gallery and select the album
+                        Modals.FBAlbums.openAndSelectAlbum(albumId);
+                        return; // Don't open image detail modal
+                    }
+                }
+                
+                currentImageInModal = image;
+                
+                // Store original values for change detection
+                originalImageData = {
+                    description: image.description || '',
+                    tags: image.tags || '',
+                    rating: image.rating || null
+                };
+                
+                // Set image source
+                DOM.newImageGalleryDetailImage.src = `/images/${image.id}?type=metadata&convert_heic_to_jpg=true`;
+                DOM.newImageGalleryDetailImage.alt = image.title || 'Image';
+                
+                // Show delete and save buttons
+                if (DOM.newImageGalleryDeleteBtn) {
+                    DOM.newImageGalleryDeleteBtn.style.display = 'inline-block';
+                }
+                if (DOM.newImageGallerySaveBtn) {
+                    DOM.newImageGallerySaveBtn.style.display = 'inline-block';
+                    DOM.newImageGallerySaveBtn.disabled = true;
+                }
+                
+                // Populate all metadata fields
+                DOM.newImageDetailTitle.textContent = image.title || 'N/A';
+                
+                // Populate editable fields
+                if (DOM.newImageDetailDescriptionEdit) {
+                    DOM.newImageDetailDescriptionEdit.value = image.description || '';
+                }
+                if (DOM.newImageDetailTagsEdit) {
+                    DOM.newImageDetailTagsEdit.value = image.tags || '';
+                }
+                
+                // Set up star rating
+                _setupStarRating(image.rating || null);
+                
+                DOM.newImageDetailAuthor.textContent = image.author || 'N/A';
+                DOM.newImageDetailCategories.textContent = image.categories || 'N/A';
+                DOM.newImageDetailNotes.textContent = image.notes || 'N/A';
+                DOM.newImageDetailDate.textContent = formatDate(image.year, image.month);
+                DOM.newImageDetailImageType.textContent = image.media_type || image.image_type || 'N/A';
+                DOM.newImageDetailSource.textContent = image.source || 'N/A';
+                DOM.newImageDetailSourceReference.textContent = image.source_reference || 'N/A';
+                DOM.newImageDetailRegion.textContent = image.region || 'N/A';
+                DOM.newImageDetailAvailableForTask.textContent = image.available_for_task ? 'Yes' : 'No';
+                DOM.newImageDetailProcessed.textContent = image.processed ? 'Yes' : 'No';
+                DOM.newImageDetailLocationProcessed.textContent = image.location_processed ? 'Yes' : 'No';
+                DOM.newImageDetailImageProcessed.textContent = image.image_processed ? 'Yes' : 'No';
+                DOM.newImageDetailCreatedAt.textContent = formatDateTime(image.created_at);
+                DOM.newImageDetailUpdatedAt.textContent = formatDateTime(image.updated_at);
+                
+                // GPS Location
+            
+                if (image.has_gps && (image.latitude || image.longitude)) {
+                    let gpsText = '';
+                    if (image.latitude && image.longitude) {
+                        gpsText = `${image.latitude.toFixed(6)}, ${image.longitude.toFixed(6)}`;
+                        
+                        // Create Google Maps URL
+                        const googleMapsUrl = `https://www.google.com/maps?q=${image.latitude},${image.longitude}`;
+                        
+                        // Add button to open Google Maps in new tab
+                        const openMapsButton = document.createElement('button');
+                        openMapsButton.type = 'button';
+                        openMapsButton.className = 'modal-btn modal-btn-secondary';
+                        openMapsButton.style.cssText = 'margin-left: 10px; padding: 0.3em 0.8em; font-size: 0.85em; display: inline-flex; align-items: center; gap: 0.3em;';
+                        openMapsButton.innerHTML = '<i class="fas fa-map-marker-alt"></i> Open in Google Maps';
+                        openMapsButton.onclick = function(e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            window.open(googleMapsUrl, '_blank');
+                        };
+                        
+                        // Clear existing content and add coordinates and button
+                        DOM.newImageDetailGps.innerHTML = '';
+                        DOM.newImageDetailGps.appendChild(document.createTextNode(gpsText));
+                        DOM.newImageDetailGps.appendChild(openMapsButton);
+                    } else {
+                        DOM.newImageDetailGps.textContent = 'GPS data available';
+                    }
+                    DOM.newImageDetailGpsRow.style.display = 'flex';
+                } else {
+                    DOM.newImageDetailGpsRow.style.display = 'none';
+                }
+                
+                // Altitude
+                if (image.altitude !== null && image.altitude !== undefined) {
+                    DOM.newImageDetailAltitude.textContent = `${image.altitude.toFixed(2)} meters`;
+                    DOM.newImageDetailAltitudeRow.style.display = 'flex';
+                } else {
+                    DOM.newImageDetailAltitudeRow.style.display = 'none';
+                }
+                
+                // Set up change tracking
+                _setupChangeTracking();
+                
+                // Show modal
+                DOM.newImageGalleryDetailModal.style.display = 'flex';
             }
 
+            function close() {
+                if (DOM.newImageGalleryDetailModal) {
+                    DOM.newImageGalleryDetailModal.style.display = 'none';
+                }
+                currentImageInModal = null;
+                originalImageData = null;
+                if (DOM.newImageGallerySaveBtn) {
+                    DOM.newImageGallerySaveBtn.disabled = true;
+                }
+            }
+
+            function init() {
+                // Close detail modal handler
+                if (DOM.closeNewImageGalleryDetailModalBtn) {
+                    DOM.closeNewImageGalleryDetailModalBtn.addEventListener('click', close);
+                }
+                
+                // Close modal when clicking outside
+                if (DOM.newImageGalleryDetailModal) {
+                    DOM.newImageGalleryDetailModal.addEventListener('click', (e) => {
+                        if (e.target === DOM.newImageGalleryDetailModal) {
+                            close();
+                        }
+                    });
+                }
+                
+                // Delete button handler
+                if (DOM.newImageGalleryDeleteBtn) {
+                    DOM.newImageGalleryDeleteBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        await deleteImage();
+                    });
+                }
+                
+                // Save button handler
+                if (DOM.newImageGallerySaveBtn) {
+                    DOM.newImageGallerySaveBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        await saveChanges();
+                    });
+                }
+            }
 
             return { init, open, close };
         })(),
@@ -5616,6 +5631,199 @@ ${textContent}
             }
 
             return { init,open };
+        })(),
+
+        ConversationSummary: (() => {
+            let currentChatSession = null;
+
+            function open(chatSession) {
+                currentChatSession = chatSession;
+                const modal = document.getElementById('conversation-summary-modal');
+                const progressDiv = document.getElementById('conversation-summary-progress');
+                const contentDiv = document.getElementById('conversation-summary-content');
+                const errorDiv = document.getElementById('conversation-summary-error');
+                const progressText = document.getElementById('conversation-summary-progress-text');
+
+                if (!modal) {
+                    console.error('Conversation summary modal not found');
+                    return;
+                }
+
+                // Reset UI and show waiting dialog immediately
+                contentDiv.innerHTML = '';
+                errorDiv.style.display = 'none';
+                errorDiv.innerHTML = '';
+                progressDiv.style.display = 'flex';
+                progressText.textContent = 'Generating summary... Please wait.';
+                modal.style.display = 'flex';
+
+                // Encode chat session for URL
+                const encodedSession = encodeURIComponent(chatSession);
+
+                // Use requestAnimationFrame to ensure modal is visible before starting fetch
+                requestAnimationFrame(() => {
+                    // Call summarize endpoint synchronously
+                    fetch(`/imessages/conversation/${encodedSession}/summarize`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.json().then(err => {
+                                const errorMsg = err.detail || 'Failed to generate summary';
+                                throw new Error(errorMsg);
+                            }).catch(() => {
+                                // If JSON parsing fails, use status text
+                                throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                            });
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        // Display summary
+                        if (data.status === 'completed' && data.summary) {
+                            displaySummary(data.summary);
+                        } else {
+                            displayError('Unexpected response format');
+                        }
+                    })
+                    .catch(error => {
+                        let errorMessage = 'Failed to generate summary';
+                        
+                        if (error.message) {
+                            errorMessage = error.message;
+                        } else if (error instanceof TypeError && error.message.includes('fetch')) {
+                            errorMessage = 'Network error: Unable to connect to server. Please check your connection.';
+                        } else if (error.name === 'NetworkError' || error.message.includes('network')) {
+                            errorMessage = 'Network error: Unable to connect to server. Please check your connection.';
+                        }
+                        
+                        displayError(errorMessage);
+                    });
+                });
+            }
+
+            function displaySummary(summary) {
+                const progressDiv = document.getElementById('conversation-summary-progress');
+                const contentDiv = document.getElementById('conversation-summary-content');
+                const errorDiv = document.getElementById('conversation-summary-error');
+
+                if (!contentDiv) return;
+
+                // Hide progress
+                if (progressDiv) {
+                    progressDiv.style.display = 'none';
+                }
+
+                // Hide error
+                if (errorDiv) {
+                    errorDiv.style.display = 'none';
+                }
+
+                // Display summary (support markdown-like formatting)
+                contentDiv.innerHTML = formatSummaryText(summary);
+            }
+
+            function formatSummaryText(text) {
+                if (!text) return '<p>No summary available.</p>';
+
+                // Check if marked is available
+                if (typeof marked !== 'undefined') {
+                    try {
+                        // Parse and render Markdown
+                        const html = marked.parse(text);
+                        
+                        // Sanitize HTML if DOMPurify is available
+                        if (typeof DOMPurify !== 'undefined') {
+                            return DOMPurify.sanitize(html);
+                        }
+                        
+                        return html;
+                    } catch (error) {
+                        console.error('Error rendering markdown:', error);
+                        // Fallback to plain text if markdown parsing fails
+                        return formatSummaryTextPlain(text);
+                    }
+                } else {
+                    // Fallback if marked is not available
+                    console.warn('marked.js not available, using plain text formatting');
+                    return formatSummaryTextPlain(text);
+                }
+            }
+
+            function formatSummaryTextPlain(text) {
+                // Escape HTML first
+                const escaped = text
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+
+                // Convert line breaks to paragraphs
+                const paragraphs = escaped.split(/\n\n+/).filter(p => p.trim());
+                return paragraphs.map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+            }
+
+            function displayError(errorMessage) {
+                const progressDiv = document.getElementById('conversation-summary-progress');
+                const errorDiv = document.getElementById('conversation-summary-error');
+                const contentDiv = document.getElementById('conversation-summary-content');
+
+                if (!errorDiv) return;
+
+                // Hide progress
+                if (progressDiv) {
+                    progressDiv.style.display = 'none';
+                }
+
+                // Clear content
+                if (contentDiv) {
+                    contentDiv.innerHTML = '';
+                }
+
+                // Display error
+                errorDiv.style.display = 'block';
+                errorDiv.innerHTML = `<strong>Error:</strong> ${escapeHtml(errorMessage)}`;
+            }
+
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            function close() {
+                // Hide modal
+                const modal = document.getElementById('conversation-summary-modal');
+                if (modal) {
+                    modal.style.display = 'none';
+                }
+
+                currentChatSession = null;
+            }
+
+            function init() {
+                const closeBtn = document.getElementById('close-conversation-summary-modal');
+                const modal = document.getElementById('conversation-summary-modal');
+
+                if (closeBtn) {
+                    closeBtn.addEventListener('click', () => {
+                        close();
+                    });
+                }
+
+                // Close modal when clicking outside
+                if (modal) {
+                    modal.addEventListener('click', (e) => {
+                        if (e.target === modal) {
+                            close();
+                        }
+                    });
+                }
+            }
+
+            return { init, open, close, displaySummary, displayError };
         })(),
 
         SMSMessages: (() => {
@@ -6480,12 +6688,36 @@ ${textContent}
 
                 if (askAISubmitBtn) {
                     askAISubmitBtn.addEventListener('click', () => {
-                        // Functionality will be added later
                         const selectedOption = document.querySelector('input[name="sms-ask-ai-option"]:checked')?.value;
                         const otherText = askAIOtherInput?.value || '';
-                        console.log('Ask AI - Selected option:', selectedOption, 'Other text:', otherText);
-                        // TODO: Implement AI functionality
-                        askAIModal.style.display = 'none';
+
+                        // Close the Ask AI modal
+                        if (askAIModal) {
+                            askAIModal.style.display = 'none';
+                        }
+
+                        // Handle "Summarise the Conversation" option
+                        if (selectedOption === 'summarise') {
+                            if (!currentSession) {
+                                alert('No conversation selected');
+                                return;
+                            }
+
+                            try {
+                                // Open the conversation summary modal
+                                // currentSession is already the chat session name (string)
+                                Modals.ConversationSummary.open(currentSession);
+                            } catch (error) {
+                                console.error('Error opening conversation summary:', error);
+                                alert('Failed to start conversation summarization. Please try again.');
+                            }
+                        } else if (selectedOption === 'imaginary') {
+                            // TODO: Implement imaginary conversation functionality
+                            alert('Imaginary conversation feature coming soon!');
+                        } else if (selectedOption === 'other') {
+                            // TODO: Implement other AI functionality
+                            alert('Other AI features coming soon!');
+                        }
                     });
                 }
 
@@ -6703,11 +6935,7 @@ ${textContent}
                 if (imageModalImgElement && currentGalleryImages.length > 0) {
                     const item = currentGalleryImages[currentGalleryIndex];
 
-                    console.log("MuliImageDisplay updateGalleryImage called");
-                    console.log(item);
-
-
-                    debugger;
+        
                     let src = "/getImage?id="+item.file_id
                     let alt = item.photo_description || `Image ${currentGalleryIndex + 1}`;
                     let srcType = item.file_type;
@@ -7480,6 +7708,7 @@ ${textContent}
         initAll: () => {
             Modals.Suggestions.init();
             Modals.FBAlbums.init();
+            Modals.ImageDetailModal.init();
             Modals.MultiImageDisplay.init();
             //Modals.HaveYourSay.init();
             Modals.Locations.init();
@@ -7492,6 +7721,7 @@ ${textContent}
             Modals.ReferenceDocuments.init();
             Modals.ConfirmationModal.init();
             Modals.ChangeUserId.init();
+            Modals.ConversationSummary.init();
             Modals.AddInterviewee.init();
         }
     };
@@ -7671,7 +7901,7 @@ ${textContent}
                 // Add a system message indicating the switch
                 addInterviewerMessage('system', `Switched to interviewee: ${subjectName}`, false);
                 
-                console.log(`Switched to interviewee: ${data.current_interviewee}`);
+
             } else {
                 console.error(data.error || 'Failed to switch interviewee');
             }
@@ -7722,7 +7952,6 @@ ${textContent}
                 // Add a system message indicating the new interviewee
                 addInterviewerMessage('system', `Added new interviewee: ${subjectName}`, false);
                 
-                console.log(`Added new interviewee: ${data.current_interviewee}`);
                 
                 // Close the modal
                 Modals.AddInterviewee.close();
@@ -7761,11 +7990,11 @@ ${textContent}
     // --- Interviewer Mode Module ---
     const InterviewerMode = (() => {
         async function toggleInterviewerMode() {
-            console.log('toggleInterviewerMode called');
+
             AppState.isInterviewerMode = !AppState.isInterviewerMode;
             
             if (AppState.isInterviewerMode) {
-                console.log('Switching to interviewer mode');
+
                 
                 // Fetch current interview state from API
                 try {
@@ -7782,7 +8011,7 @@ ${textContent}
                     // Update the page title
                     document.title = `Interviewer - ${interviewData.subject_name}`;
                     
-                    console.log('Interview state loaded:', interviewData);
+
                 } catch (error) {
                     console.error('Failed to fetch interview state:', error);
                     AppState.interviewState = 'initial';
@@ -7816,7 +8045,7 @@ ${textContent}
                 // Focus on interviewer input
                 DOM.interviewerUserInput.focus();
             } else {
-                console.log('Switching back to normal mode');
+
                 // Switch back to normal mode
                 DOM.interviewerMain.style.display = 'none';
                 DOM.chatMain.style.display = 'flex';
@@ -8164,15 +8393,13 @@ ${textContent}
             
             // Add event listeners for interviewer mode
             if (DOM.interviewerModeBtn) {
-                console.log('Interviewer mode button found, adding event listener');
+
                 DOM.interviewerModeBtn.addEventListener('click', async () => {
                     await toggleInterviewerMode();
                 });
                 
                 // Add a simple test click handler
-                DOM.interviewerModeBtn.addEventListener('click', () => {
-                    console.log('Interviewer mode button clicked!');
-                });
+
             } else {
                 console.error('Interviewer mode button not found!');
             }
@@ -8249,7 +8476,7 @@ ${textContent}
 
         // Interview control button handlers
         async function handleStartInterview() {
-            console.log('Start Interview clicked');
+
             
             try {
                 // Check if there's existing interview data
@@ -8298,7 +8525,7 @@ ${textContent}
         }
 
         async function handleResumeInterview() {
-            console.log('Resume Interview clicked');
+
             addInterviewerMessage('system', 'Interview resumed.', false);
             clearInterviewerError();
             setInterviewerControlsEnabled(false);
@@ -8319,7 +8546,7 @@ ${textContent}
         }
 
         async function handlePauseInterview() {
-            console.log('Pause Interview clicked');
+      
             addInterviewerMessage('system', 'Interview paused. You can resume it later.', false);
             showInterviewerLoadingIndicator();
             const response = await ApiService.pauseInterview();
@@ -8337,7 +8564,7 @@ ${textContent}
         }
 
         async function handleWriteInterimBio() {
-            console.log('Write Interim Biography clicked');
+    
             showInterviewerLoadingIndicator();
             const response = await ApiService.writeInterimBio();
             const data = await response.json();
@@ -8350,7 +8577,7 @@ ${textContent}
         }
 
         function handleFinishInterview() {
-            console.log('Finish Interview clicked');
+
             addInterviewerMessage('system', 'Interview finished. You can now write the final biography or exit interview mode.', false);
             // Update interview state to 'finished' and enable appropriate buttons
             AppState.interviewState = 'finished';
@@ -8360,7 +8587,7 @@ ${textContent}
         }
 
         async function handleWriteFinalBio() {
-            console.log('Write Final Biography clicked');
+ 
             showInterviewerLoadingIndicator();
             const response = await ApiService.writeFinalBio();
             const data = await response.json();
@@ -8373,7 +8600,7 @@ ${textContent}
         }
 
         async function handleResetInterview() {
-            console.log('Reset Interview clicked');
+   
             
             // Show confirmation dialog
             Modals.ConfirmationModal.open(
@@ -8418,7 +8645,7 @@ ${textContent}
 
         function handleInterviewPurposeChange() {
             const selectedPurpose = DOM.interviewPurposeSelect.value;
-            console.log('Interview purpose changed to:', selectedPurpose);
+
             
             if (selectedPurpose) {
                 // Add a system message to indicate the interview purpose
@@ -8536,7 +8763,7 @@ ${textContent}
                         DOM.voiceSelect.value = 'expert';
                         DOM.voiceSelect.dispatchEvent(new Event('change', { bubbles: true }));
                     }
-                    console.log('New chat started.');
+
                 } else {
                     UI.displayError('Failed to start new chat on server.');
                 }
@@ -11603,14 +11830,6 @@ ${textContent}
             SSE.init();
             InterviewerMode.init(); // Initialize interviewer mode
             initEventListeners(); // Attach main app event listeners
-
-            // Test interviewer mode button
-            if (DOM.interviewerModeBtn) {
-                console.log('Testing interviewer mode button...');
-                DOM.interviewerModeBtn.addEventListener('click', async () => {
-                    console.log('Interviewer mode button clicked from main init!');
-                });
-            }
 
             // Initial info box visibility
             if (DOM.chatBox.querySelectorAll('.message').length === 0 && DOM.infoBox) {
