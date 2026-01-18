@@ -228,6 +228,26 @@ filesystem_import_progress: Dict[str, Any] = {
 filesystem_import_sse_clients: List[asyncio.Queue] = []
 filesystem_import_sse_clients_lock = threading.Lock()
 
+# Thumbnail processing state management
+thumbnail_processing_lock = threading.Lock()
+thumbnail_processing_cancelled = threading.Event()
+thumbnail_processing_in_progress = False
+
+# Progress state for Thumbnail processing SSE streaming
+thumbnail_processing_progress: Dict[str, Any] = {
+    "phase": None,
+    "phase1_scanned": 0,
+    "phase1_updated": 0,
+    "phase2_scanned": 0,
+    "phase2_processed": 0,
+    "phase2_errors": 0,
+    "status": "idle",  # idle, in_progress, completed, cancelled, error
+    "error_message": None
+}
+
+thumbnail_processing_sse_clients: List[asyncio.Queue] = []
+thumbnail_processing_sse_clients_lock = threading.Lock()
+
 
 def update_imessage_progress_state(**kwargs):
     """Thread-safe function to update iMessage import progress state."""
@@ -467,6 +487,50 @@ def broadcast_filesystem_import_progress_event_sync(event_type: str, data: Dict[
         for client in disconnected_clients:
             if client in filesystem_import_sse_clients:
                 filesystem_import_sse_clients.remove(client)
+
+
+def update_thumbnail_processing_progress_state(**kwargs):
+    """Thread-safe function to update thumbnail processing progress state."""
+    global thumbnail_processing_progress
+    with thumbnail_processing_lock:
+        for key, value in kwargs.items():
+            if key in thumbnail_processing_progress:
+                thumbnail_processing_progress[key] = value
+
+
+def get_thumbnail_processing_progress_state() -> Dict[str, Any]:
+    """Thread-safe function to get current thumbnail processing progress state."""
+    global thumbnail_processing_progress
+    with thumbnail_processing_lock:
+        return thumbnail_processing_progress.copy()
+
+
+def broadcast_thumbnail_processing_event_sync(event_type: str, data: Dict[str, Any]):
+    """Thread-safe function to queue thumbnail processing progress event for SSE clients."""
+    global thumbnail_processing_sse_clients
+    event_data = {
+        "type": event_type,
+        "data": data
+    }
+    message = f"data: {json.dumps(event_data)}\n\n"
+    
+    # Queue message for all connected clients
+    with thumbnail_processing_sse_clients_lock:
+        disconnected_clients = []
+        for client_queue in thumbnail_processing_sse_clients:
+            try:
+                # Use put_nowait to avoid blocking
+                client_queue.put_nowait(message)
+            except asyncio.QueueFull:
+                # Queue is full, skip this client
+                pass
+            except Exception:
+                disconnected_clients.append(client_queue)
+        
+        # Remove disconnected clients
+        for client in disconnected_clients:
+            if client in thumbnail_processing_sse_clients:
+                thumbnail_processing_sse_clients.remove(client)
 
 
 def update_instagram_progress_state(**kwargs):
@@ -2624,12 +2688,19 @@ def import_facebook_albums_background(directory_path: str, result_dict: dict):
 
 
 def import_filesystem_images_background(
-    directory_path: str,
+    directory_paths: List[str],
     max_images: Optional[int],
     create_thumbnail: bool,
     result_dict: dict
 ):
-    """Background function to import images from filesystem."""
+    """Background function to import images from filesystem.
+    
+    Args:
+        directory_paths: List of directory paths to import from
+        max_images: Maximum total number of images to import across all directories (None for all)
+        create_thumbnail: Whether to create thumbnails
+        result_dict: Dictionary to store results
+    """
     global filesystem_import_in_progress
     
     # Mark processing as started
@@ -2652,6 +2723,17 @@ def import_filesystem_images_background(
     # Broadcast initial progress event
     broadcast_filesystem_import_progress_event_sync("progress", get_filesystem_import_progress_state())
     
+    # Accumulated stats across all directories
+    accumulated_stats = {
+        'total_files': 0,
+        'files_processed': 0,
+        'images_imported': 0,
+        'images_updated': 0,
+        'errors': 0,
+        'error_messages': [],
+        'current_file': None
+    }
+    
     try:
         def progress_callback(stats: Dict[str, Any]):
             """Callback function to update progress state."""
@@ -2659,15 +2741,17 @@ def import_filesystem_images_background(
             if filesystem_import_cancelled.is_set():
                 return
             
-            # Update progress state with current stats
+            # Calculate totals: accumulated stats from previous directories + current directory progress
+            # Note: stats from import_images_from_filesystem are cumulative for the current directory
+            # So we add accumulated stats (from previous directories) to current directory stats
             update_filesystem_import_progress_state(
                 current_file=stats.get("current_file"),
-                files_processed=stats.get("files_processed", 0),
-                total_files=stats.get("total_files", 0),
-                images_imported=stats.get("images_imported", 0),
-                images_updated=stats.get("images_updated", 0),
-                errors=stats.get("errors", 0),
-                error_messages=stats.get("error_messages", []),
+                files_processed=accumulated_stats['files_processed'] + stats.get("files_processed", 0),
+                total_files=accumulated_stats['total_files'] + stats.get("total_files", 0),
+                images_imported=accumulated_stats['images_imported'] + stats.get("images_imported", 0),
+                images_updated=accumulated_stats['images_updated'] + stats.get("images_updated", 0),
+                errors=accumulated_stats['errors'] + stats.get("errors", 0),
+                error_messages=accumulated_stats['error_messages'] + stats.get("error_messages", []),
                 status="in_progress"
             )
             
@@ -2682,23 +2766,51 @@ def import_filesystem_images_background(
         config = get_config()
         exclude_patterns = config.get_filesystem_exclude_patterns()
         
-        # Run import with progress callback
-        stats = import_images_from_filesystem(
-            root_directory=directory_path,
-            max_images=max_images,
-            should_create_thumbnail=create_thumbnail,
-            progress_callback=progress_callback,
-            cancelled_check=cancelled_check,
-            exclude_patterns=exclude_patterns
-        )
+        # Process each directory sequentially
+        remaining_images = max_images  # Track remaining images if max_images is set
+        for idx, directory_path in enumerate(directory_paths):
+            # Check for cancellation before processing each directory
+            if filesystem_import_cancelled.is_set():
+                break
+            
+            # Calculate max_images for this directory
+            directory_max_images = None
+            if remaining_images is not None:
+                # If we've already imported enough, skip remaining directories
+                if remaining_images <= 0:
+                    break
+                directory_max_images = remaining_images
+            
+            # Run import with progress callback for this directory
+            stats = import_images_from_filesystem(
+                root_directory=directory_path,
+                max_images=directory_max_images,
+                should_create_thumbnail=create_thumbnail,
+                progress_callback=progress_callback,
+                cancelled_check=cancelled_check,
+                exclude_patterns=exclude_patterns
+            )
+            
+            # Accumulate stats (stats from import_images_from_filesystem are totals for that directory)
+            accumulated_stats['total_files'] += stats.get('total_files', 0)
+            accumulated_stats['files_processed'] += stats.get('files_processed', 0)
+            accumulated_stats['images_imported'] += stats.get('images_imported', 0)
+            accumulated_stats['images_updated'] += stats.get('images_updated', 0)
+            accumulated_stats['errors'] += stats.get('errors', 0)
+            accumulated_stats['error_messages'].extend(stats.get('error_messages', []))
+            
+            # Update remaining images count
+            if remaining_images is not None:
+                images_added = stats.get('images_imported', 0) + stats.get('images_updated', 0)
+                remaining_images -= images_added
         
-        result_dict.update(stats)
+        result_dict.update(accumulated_stats)
         result_dict["success"] = True
         
         # Update final progress state
         update_filesystem_import_progress_state(
             status="completed",
-            **{k: v for k, v in stats.items() if k in filesystem_import_progress and k != "status"}
+            **{k: v for k, v in accumulated_stats.items() if k in filesystem_import_progress and k != "status"}
         )
         broadcast_filesystem_import_progress_event_sync("completed", get_filesystem_import_progress_state())
         
@@ -2871,10 +2983,10 @@ async def import_filesystem_images(
     request: ImportFilesystemImagesRequest,
     background_tasks: BackgroundTasks
 ):
-    """Import images from filesystem directory.
+    """Import images from filesystem directory(ies).
     
     Args:
-        request: Import request containing root_directory, optional max_images, and create_thumbnail flag
+        request: Import request containing root_directory (semicolon-separated paths), optional max_images, and create_thumbnail flag
         background_tasks: FastAPI background tasks
         
     Returns:
@@ -2892,21 +3004,39 @@ async def import_filesystem_images(
                 detail="Filesystem images import is already in progress"
             )
     
-    # Validate directory path
-    directory_path = Path(request.root_directory)
-    if not directory_path.exists() or not directory_path.is_dir():
+    # Parse semicolon-separated directory paths
+    directory_paths_str = request.root_directory
+    directory_paths = [path.strip() for path in directory_paths_str.split(';') if path.strip()]
+    
+    if not directory_paths:
         raise HTTPException(
             status_code=400,
-            detail=f"Directory does not exist or is not a directory: {request.root_directory}"
+            detail="At least one directory path is required"
+        )
+    
+    # Validate all directory paths
+    invalid_paths = []
+    validated_paths = []
+    for path_str in directory_paths:
+        directory_path = Path(path_str)
+        if not directory_path.exists() or not directory_path.is_dir():
+            invalid_paths.append(path_str)
+        else:
+            validated_paths.append(str(directory_path))
+    
+    if invalid_paths:
+        raise HTTPException(
+            status_code=400,
+            detail=f"One or more directories do not exist or are not directories: {', '.join(invalid_paths)}"
         )
     
     # Prepare result dictionary for background task
     result_dict = {}
     
-    # Start background import task
+    # Start background import task with multiple directories
     background_tasks.add_task(
         import_filesystem_images_background,
-        str(directory_path),
+        validated_paths,
         request.max_images,
         request.create_thumbnail,
         result_dict
@@ -3013,6 +3143,327 @@ async def get_filesystem_import_status():
         return {
             "in_progress": filesystem_import_in_progress,
             "cancelled": filesystem_import_cancelled.is_set(),
+            **progress_state
+        }
+
+
+def process_thumbnails_background(result_dict: dict):
+    """Background function to process image thumbnails.
+    
+    Phase 1: Scan media_blob table - if thumbnail_data is not null, 
+             set image_processed=true in corresponding media_items table.
+    Phase 2: Scan media_items table - for items with image_processed=false 
+             and media_type starting with "image/", create thumbnails and 
+             set image_processed=true.
+    """
+    global thumbnail_processing_in_progress
+    
+    # Mark processing as started
+    with thumbnail_processing_lock:
+        thumbnail_processing_in_progress = True
+        thumbnail_processing_cancelled.clear()
+    
+    # Initialize progress state
+    update_thumbnail_processing_progress_state(
+        phase=None,
+        phase1_scanned=0,
+        phase1_updated=0,
+        phase2_scanned=0,
+        phase2_processed=0,
+        phase2_errors=0,
+        status="in_progress",
+        error_message=None
+    )
+    
+    # Broadcast initial progress event
+    broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
+    
+    try:
+        session = db.get_session()
+        
+        try:
+            # Phase 1: Update image_processed for items that already have thumbnails
+            update_thumbnail_processing_progress_state(phase="1")
+            broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
+            
+            # Query MediaBlob where thumbnail_data is not null
+            blobs_with_thumbnails = session.query(MediaBlob).filter(
+                MediaBlob.thumbnail_data.isnot(None)
+            ).all()
+            
+            phase1_scanned = 0
+            phase1_updated = 0
+            
+            for blob in blobs_with_thumbnails:
+                # Check for cancellation
+                if thumbnail_processing_cancelled.is_set():
+                    update_thumbnail_processing_progress_state(status="cancelled")
+                    broadcast_thumbnail_processing_event_sync("cancelled", get_thumbnail_processing_progress_state())
+                    return
+                
+                phase1_scanned += 1
+                
+                # Find corresponding MediaMetadata
+                metadata = session.query(MediaMetadata).filter(
+                    MediaMetadata.media_blob_id == blob.id,
+                    MediaMetadata.image_processed == False
+                ).first()
+                
+                if metadata:
+                    metadata.image_processed = True
+                    phase1_updated += 1
+                    
+                    # Commit periodically (every 100 items)
+                    if phase1_scanned % 100 == 0:
+                        session.commit()
+                        update_thumbnail_processing_progress_state(
+                            phase1_scanned=phase1_scanned,
+                            phase1_updated=phase1_updated
+                        )
+                        broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
+            
+            # Final commit for phase 1
+            session.commit()
+            update_thumbnail_processing_progress_state(
+                phase1_scanned=phase1_scanned,
+                phase1_updated=phase1_updated
+            )
+            broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
+            
+            # Phase 2: Create thumbnails for images without them
+            update_thumbnail_processing_progress_state(phase="2")
+            broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
+            
+            # Import create_thumbnail function
+            from ..imageimport.filesystemimport import create_thumbnail
+            
+            # Query MediaMetadata where image_processed=False and media_type starts with "image/"
+            items_needing_thumbnails = session.query(MediaMetadata).filter(
+                MediaMetadata.image_processed == False,
+                MediaMetadata.media_type.like('image/%')
+            ).all()
+            
+            phase2_scanned = 0
+            phase2_processed = 0
+            phase2_errors = 0
+            
+            for metadata_item in items_needing_thumbnails:
+                # Check for cancellation
+                if thumbnail_processing_cancelled.is_set():
+                    session.commit()
+                    update_thumbnail_processing_progress_state(status="cancelled")
+                    broadcast_thumbnail_processing_event_sync("cancelled", get_thumbnail_processing_progress_state())
+                    return
+                
+                phase2_scanned += 1
+                
+                try:
+                    # Get MediaBlob
+                    blob = session.query(MediaBlob).filter(
+                        MediaBlob.id == metadata_item.media_blob_id
+                    ).first()
+                    
+                    if blob and blob.image_data:
+                        # Create thumbnail
+                        thumbnail_data = create_thumbnail(blob.image_data)
+                        
+                        if thumbnail_data:
+                            # Update blob with thumbnail
+                            blob.thumbnail_data = thumbnail_data
+                            # Mark as processed
+                            metadata_item.image_processed = True
+                            phase2_processed += 1
+                        else:
+                            # Thumbnail creation failed, but don't count as error
+                            # Just mark as processed to avoid retrying
+                            metadata_item.image_processed = True
+                            phase2_errors += 1
+                    else:
+                        # No image data, mark as processed to avoid retrying
+                        metadata_item.image_processed = True
+                        phase2_errors += 1
+                    
+                    # Commit periodically (every 50 items)
+                    if phase2_scanned % 50 == 0:
+                        session.commit()
+                        update_thumbnail_processing_progress_state(
+                            phase2_scanned=phase2_scanned,
+                            phase2_processed=phase2_processed,
+                            phase2_errors=phase2_errors
+                        )
+                        broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
+                
+                except Exception as e:
+                    # Handle errors gracefully - continue processing
+                    print(f"Error processing thumbnail for media_item {metadata_item.id}: {e}")
+                    phase2_errors += 1
+                    # Mark as processed to avoid retrying
+                    metadata_item.image_processed = True
+                    continue
+            
+            # Final commit for phase 2
+            session.commit()
+            update_thumbnail_processing_progress_state(
+                phase2_scanned=phase2_scanned,
+                phase2_processed=phase2_processed,
+                phase2_errors=phase2_errors,
+                status="completed"
+            )
+            broadcast_thumbnail_processing_event_sync("completed", get_thumbnail_processing_progress_state())
+            
+            result_dict.update({
+                "success": True,
+                "phase1_scanned": phase1_scanned,
+                "phase1_updated": phase1_updated,
+                "phase2_scanned": phase2_scanned,
+                "phase2_processed": phase2_processed,
+                "phase2_errors": phase2_errors
+            })
+        
+        except Exception as e:
+            error_msg = str(e)
+            print(f"Error in thumbnail processing: {error_msg}")
+            update_thumbnail_processing_progress_state(
+                status="error",
+                error_message=error_msg
+            )
+            broadcast_thumbnail_processing_event_sync("error", get_thumbnail_processing_progress_state())
+            result_dict.update({
+                "success": False,
+                "error": error_msg
+            })
+        
+        finally:
+            session.close()
+    
+    finally:
+        # Mark processing as complete
+        with thumbnail_processing_lock:
+            thumbnail_processing_in_progress = False
+
+
+@app.post("/images/process-thumbnails")
+async def start_thumbnail_processing(background_tasks: BackgroundTasks):
+    """Start thumbnail processing.
+    
+    Returns:
+        Response indicating processing has started
+        
+    Raises:
+        HTTPException: 400 if processing is already in progress
+    """
+    global thumbnail_processing_in_progress
+    
+    with thumbnail_processing_lock:
+        if thumbnail_processing_in_progress:
+            raise HTTPException(
+                status_code=400,
+                detail="Thumbnail processing is already in progress"
+            )
+    
+    result_dict = {}
+    
+    # Start background processing task
+    background_tasks.add_task(
+        process_thumbnails_background,
+        result_dict
+    )
+    
+    return {
+        "message": "Thumbnail processing started",
+        "status": "started"
+    }
+
+
+@app.get("/images/process-thumbnails/stream")
+async def stream_thumbnail_processing_progress(request: Request):
+    """Stream thumbnail processing progress via Server-Sent Events (SSE).
+    
+    Returns:
+        StreamingResponse with SSE events containing progress updates
+    """
+    async def event_generator():
+        # Create a queue for this client
+        client_queue = asyncio.Queue()
+        
+        # Add client queue to list
+        with thumbnail_processing_sse_clients_lock:
+            thumbnail_processing_sse_clients.append(client_queue)
+        
+        try:
+            # Send initial state
+            initial_state = get_thumbnail_processing_progress_state()
+            event_data = {
+                "type": "progress",
+                "data": initial_state
+            }
+            yield f"data: {json.dumps(event_data)}\n\n"
+            
+            # Keep connection alive and send events
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    break
+                
+                try:
+                    # Wait for event with timeout
+                    message = await asyncio.wait_for(client_queue.get(), timeout=1.0)
+                    yield message
+                except asyncio.TimeoutError:
+                    # Send keepalive
+                    yield ": keepalive\n\n"
+                    continue
+                except Exception as e:
+                    print(f"Error in thumbnail processing SSE stream: {e}")
+                    break
+        finally:
+            # Remove client queue from list
+            with thumbnail_processing_sse_clients_lock:
+                if client_queue in thumbnail_processing_sse_clients:
+                    thumbnail_processing_sse_clients.remove(client_queue)
+    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/images/process-thumbnails/cancel")
+async def cancel_thumbnail_processing():
+    """Cancel thumbnail processing if it is in progress.
+    
+    Returns:
+        Success message indicating cancellation status
+    """
+    global thumbnail_processing_in_progress
+    
+    with thumbnail_processing_lock:
+        if not thumbnail_processing_in_progress:
+            return {
+                "message": "No thumbnail processing is currently in progress",
+                "cancelled": False
+            }
+        
+        thumbnail_processing_cancelled.set()
+        
+        return {
+            "message": "Thumbnail processing cancellation requested. Processing will stop after current item completes.",
+            "cancelled": True
+        }
+
+
+@app.get("/images/process-thumbnails/status")
+async def get_thumbnail_processing_status():
+    """Get the current status of thumbnail processing.
+    
+    Returns:
+        Status information about thumbnail processing
+    """
+    global thumbnail_processing_in_progress
+    
+    progress_state = get_thumbnail_processing_progress_state()
+    
+    with thumbnail_processing_lock:
+        return {
+            "in_progress": thumbnail_processing_in_progress,
+            "cancelled": thumbnail_processing_cancelled.is_set(),
             **progress_state
         }
 
@@ -4495,6 +4946,73 @@ async def get_distinct_tags():
         raise HTTPException(
             status_code=500,
             detail=f"Error retrieving distinct tags: {str(e)}"
+        )
+    finally:
+        session.close()
+
+
+@app.get("/getLocations")
+async def get_locations():
+    """Get metadata of media items that have GPS data set.
+    
+    Returns:
+        List of media items with GPS coordinates, including:
+        - id: Media item ID
+        - latitude: Latitude coordinate
+        - longitude: Longitude coordinate
+        - altitude: Altitude (if available)
+        - title: Media title
+        - description: Media description
+        - year: Year the media was taken
+        - month: Month the media was taken
+        - tags: Tags associated with the media
+        - google_maps_url: Google Maps URL (if available)
+        - region: Region name (if available)
+        - created_at: Creation timestamp
+        - source: Source of the media item (if available)
+        - source_reference: Source reference (if available)
+    """
+    session = db.get_session()
+    try:
+        # Query media items with GPS data
+        # Filter by has_gps=True OR (latitude is not None AND longitude is not None)
+        media_items = session.query(MediaMetadata).filter(
+            or_(
+                MediaMetadata.has_gps == True,
+                and_(
+                    MediaMetadata.latitude.isnot(None),
+                    MediaMetadata.longitude.isnot(None)
+                )
+            )
+        ).all()
+        
+        # Build response list
+        locations = []
+        for item in media_items:
+            location_data = {
+                "id": item.id,
+                "latitude": item.latitude,
+                "longitude": item.longitude,
+                "altitude": item.altitude,
+                "title": item.title,
+                "description": item.description,
+                "year": item.year,
+                "month": item.month,
+                "tags": item.tags,
+                "google_maps_url": item.google_maps_url,
+                "region": item.region,
+                "created_at": item.created_at.isoformat() if item.created_at else None,
+                "media_type": item.media_type,
+                "source": item.source,
+                "source_reference": item.source_reference
+            }
+            locations.append(location_data)
+        
+        return {"locations": locations}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving locations: {str(e)}"
         )
     finally:
         session.close()

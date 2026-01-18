@@ -526,6 +526,24 @@
                             <div id="empty-tables-status" style="margin-top: 10px; padding: 10px; border-radius: 4px; display: none;"></div>
                         </div>
                     </section>
+                    <section class="config-section">
+                        <h3>Image Processing</h3>
+                        <div class="setting-group">
+                            <p style="margin-bottom: 10px;">
+                                Process image thumbnails: sync existing thumbnails and generate missing ones.
+                            </p>
+                            <button type="button" id="process-thumbnails-btn" class="modal-btn">
+                                Process Thumbnails
+                            </button>
+                            <button type="button" id="cancel-thumbnail-processing-btn" class="modal-btn" style="display: none;">
+                                Cancel Processing
+                            </button>
+                        </div>
+                        <div id="thumbnail-processing-status" style="display: none; margin-top: 10px;">
+                            <div id="thumbnail-processing-status-message"></div>
+                            <div id="thumbnail-processing-status-details"></div>
+                        </div>
+                    </section>
                 </div>
                 <div class="config-tab-content" id="api-docs-tab">
                     <iframe id="api-docs-iframe" src="/docs"></iframe>
@@ -917,9 +935,9 @@
                     <section class="config-section">
                         <h3>Filesystem Image Import Controls</h3>
                         <div class="setting-group">
-                            <label for="filesystem-import-directory">Root Directory:</label>
-                            <input type="text" id="filesystem-import-directory" placeholder="e.g., C:\Users\Dave\Pictures" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
-                            <small style="color: #666; display: block; margin-top: 5px;">Root directory to search for images (searches recursively through all subfolders)</small>
+                            <label for="filesystem-import-directory">Root Directory(ies):</label>
+                            <input type="text" id="filesystem-import-directory" placeholder="e.g., C:\Users\Dave\Pictures; D:\Photos; E:\Images" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                            <small style="color: #666; display: block; margin-top: 5px;">One or more root directories to search for images, separated by semicolons (searches recursively through all subfolders)</small>
                         </div>
                         <div class="setting-group" style="margin-top: 10px;">
                             <label for="filesystem-import-max-images">Max Images (Optional):</label>
@@ -1094,9 +1112,12 @@
         <div id="geo-metadata-modal" class="modal">
             <div class="modal-content geo-metadata-modal-content">
                 <button id="close-geo-metadata-modal" class="modal-close-btn">&times;</button>
-                <div style="position: absolute; top: 10px; left: 10px; z-index: 1000;">
+                <div style="position: absolute; top: 10px; left: 10px; z-index: 1000; display: flex; gap: 0.5em;">
                     <button id="shuffle-photos-btn" class="modal-btn modal-btn-primary" style="background: #233366; color: white; border: none; padding: 0.5em 1em; border-radius: 6px; cursor: pointer; font-size: 0.9em;">
                         <i class="fas fa-random" style="margin-right: 0.5em;"></i>Shuffle Photos
+                    </button>
+                    <button id="refresh-locations-btn" class="modal-btn modal-btn-primary" style="background: #28a745; color: white; border: none; padding: 0.5em 1em; border-radius: 6px; cursor: pointer; font-size: 0.9em;">
+                        <i class="fas fa-sync-alt" style="margin-right: 0.5em;"></i>Refresh
                     </button>
                 </div>
                 <div style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 1000;">

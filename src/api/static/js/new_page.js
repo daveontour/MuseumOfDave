@@ -177,6 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
         geoMapFixedBtn: document.getElementById('geo-map-fixed-btn'),
         closeGeoMetadataModalBtn: document.getElementById('close-geo-metadata-modal'),
         shufflePhotosBtn: document.getElementById('shuffle-photos-btn'),
+        refreshLocationsBtn: document.getElementById('refresh-locations-btn'),
         leafletmap: document.getElementById('map'),
         tabButtons: document.querySelectorAll('.geo-tab-btn'),
         tabContents: document.querySelectorAll('.geo-metadata-tab-content'),
@@ -1971,10 +1972,28 @@ document.addEventListener('DOMContentLoaded', () => {
             let currentPhotoIndex = 0;
             let layerControl = null;
 
+            let biographyMarkers = [];
+            let fbMarkers = []
+            let otherMarkers = []
+            let whatsappMarkers = []
+            let emailMarkers = []
+            let messageMarkers = []
+            let photoMarkers = []
+            let activePhotoMarkers = []
+
+            let biographItems = [];
+            let fbItems = []
+            let otherItems = []
+            let whatsappItems = []
+            let emailItems = []
+            let messageItems = []
+            let photoItems = []
+
             function init() {
                 if (DOM.geoMapFixedBtn) DOM.geoMapFixedBtn.addEventListener('click', _openGeoMapInNewTab);
                 if (DOM.closeGeoMetadataModalBtn) DOM.closeGeoMetadataModalBtn.addEventListener('click', close);
                 if (DOM.shufflePhotosBtn) DOM.shufflePhotosBtn.addEventListener('click', shufflePhotoMarkers);
+                if (DOM.refreshLocationsBtn) DOM.refreshLocationsBtn.addEventListener('click', refresh);
             }
 
             function _createPhotoMarkers() {
@@ -1983,25 +2002,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Generate a new random starting index
                 currentPhotoIndex = Math.floor(Math.random() * 8);
-                
                 geoData.forEach(item => {
                     if (!item.latitude || !item.longitude) {
                         return;
                     }
-                    if (item.file_id) {
+                    if (item.source === 'Filesystem') {
                         currentPhotoIndex++;
-                        if (currentPhotoIndex % 8 === 0) {  // Only show every 8th markers at a time
+                        if (currentPhotoIndex % 8 === 0 || geoData.length < 100) {  // Only show every 8th markers at a time
                             photoShown++;
                             try{
                                 const marker = L.marker([item.latitude, item.longitude])
-                                marker.file = item.file; // Attach file info to marker
-                                marker.file_id = item.file_id;
-                                marker.taken = item.date_taken;
+                                marker.file = item.source_reference; // Attach file info to marker
+                                marker.file_id = item.id;
+                                marker.taken = item.created_at;
                                 marker.lat = item.latitude;
                                 marker.long = item.longitude;
-                                marker.on('click', function() {
-                                    Modals.SingleImageDisplay.showSingleImageModal(item.file, item.file_id, item.taken, item.lat, item.long);
-                                });
+                                // marker.on('click', function() {
+                                //     Modals.SingleImageDisplay.showSingleImageModal(item.file, item.file_id, item.taken, item.lat, item.long);
+                                // });
                                 photoMarkers.push(marker);
                             } catch (e) {
                                 console.error('Error adding photo place marker:', e);
@@ -2021,14 +2039,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 layerControl.removeLayer(photoMarkersLayer);
                 
                 // Create new photo markers with new random starting index
-                const { photoMarkers, photoShown, currentPhotoIndex } = _createPhotoMarkers();
+                
+                //randomly select 200 markers from photoMarkers and add to activePhotoMarkers
+                activePhotoMarkers = [...photoMarkers].sort(() => Math.random() - 0.5).slice(0, 200);
                 
                 // Create new layer and add to map and layer control
-                photoMarkersLayer = L.layerGroup(photoMarkers).addTo(mapView);
+                photoMarkersLayer = L.layerGroup(activePhotoMarkers).addTo(mapView);
                 layerControl.addOverlay(photoMarkersLayer, 'GPS Photos Locations ('+photoMarkers.length+')');
                 
                 // Update the count display
-                document.getElementById('geo-metadata-shown-count').textContent = 'Showing '+photoShown+' of '+currentPhotoIndex+' photos (Shuffled!)';
+                document.getElementById('geo-metadata-shown-count').textContent = 'Showing 200 of '+photoItems.length+' photos (Shuffled!)';
+
+                mapView.invalidateSize();
             }
 
             function open() {
@@ -2037,7 +2059,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (geoData.length === 0 || photoPlacesData.length === 0) {
 
                     fetch('/getLocations').then(r => r.json()).then(data => {
-                        geoData = data;
+                        geoData = data.locations || [];
                         mapViewInitialized = false;
                          _initMapView();
                     });
@@ -2047,6 +2069,52 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
             }
+            
+            function refresh() {
+                // Fetch fresh data from server
+                fetch('/getLocations').then(r => r.json()).then(data => {
+                    geoData = data.locations || [];
+                    
+                    // Reset map state
+                    mapViewInitialized = false;
+                    
+                    // Clear existing map if it exists
+                    if (mapView) {
+                        mapView.remove();
+                        mapView = null;
+                    }
+                    
+                    // Clear marker arrays
+                    biographyMarkers = [];
+                    fbMarkers = [];
+                    otherMarkers = [];
+                    whatsappMarkers = [];
+                    emailMarkers = [];
+                    messageMarkers = [];
+                    photoMarkers = [];
+                    activePhotoMarkers = [];
+                    
+                    // Clear item arrays
+                    biographItems = [];
+                    fbItems = [];
+                    otherItems = [];
+                    whatsappItems = [];
+                    emailItems = [];
+                    messageItems = [];
+                    photoItems = [];
+                    
+                    // Reset other state
+                    photoMarkersLayer = null;
+                    layerControl = null;
+                    selectedIdx = -1;
+                    
+                    // Reinitialize map with fresh data
+                    _initMapView();
+                }).catch(error => {
+                    console.error('Error refreshing location data:', error);
+                });
+            }
+            
             function close() {
                 Modals._closeModal(DOM.geoMetadataModal);
             }
@@ -2055,6 +2123,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 open();
             }
              function _initMapView() {
+
                 if (mapViewInitialized) {
                     setTimeout(() => { mapView.invalidateSize(); }, 100);
                     return;
@@ -2074,6 +2143,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const latlngs = geoData.map(item => [item.latitude, item.longitude]);
                 if (latlngs.length > 0) {
                     mapView.fitBounds(latlngs, { padding: [20, 20] });
+                }else {
+                    mapView.setView([0, 0], 1);
                 }
                 layerControl = L.control.layers().addTo(mapView);
                 mapView.invalidateSize();
@@ -2085,39 +2156,172 @@ document.addEventListener('DOMContentLoaded', () => {
                     popupAnchor: [0, -32]
                 });
 
-                let biographyMarkers = [];
-                let fbMarkers = []
-                let otherMarkers = []
+
                 
                 // Create photo markers using the extracted function
-                const { photoMarkers, photoShown, currentPhotoIndex } = _createPhotoMarkers();
-                
+                //const { photoMarkers, photoShown, currentPhotoIndex } = _createPhotoMarkers();
+
                 geoData.forEach(item => {
                     if (!item.latitude || !item.longitude) {
                         return;
                     }
-                    if (!item.file_id) { // Only process non-photo items here since photos are handled above
-                        if (item.source === 'biography') {
-                             if (item.latitude && item.longitude) {
-                                 const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
-                                 marker.bindPopup(item.destination);  
-                                 biographyMarkers.push(marker);
-                             }
-                        } else if (item.source === 'Facebook') {
-                                const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
-                                marker.bindPopup(item.destination);
-                                fbMarkers.push(marker);
-                        } else {
-                                const marker = L.marker([item.latitude, item.longitude]);
-                                // marker.bindPopup(item.label_values.find(v => v.label === 'Place name').value);
-                                // marker.place = item; // Attach place info to marker
-                                otherMarkers.push(marker);
-                        }
+
+                    switch (item.source) {
+                        case 'Filesystem':
+                            photoItems.push(item);
+                            break;
+                        case 'biography':
+                            biographyItems.push(item);
+                            break;
+                        case 'Facebook':
+                            fbItems.push(item);
+                            break;
+                        case 'WhatsApp':
+                            whatsapItems.push(item);
+                            break;
+                        case 'email_attachment':
+                            emailItems.push(item);
+                            break;
+                        case 'message':
+                        case 'imessage':
+                        case 'message_attachment':
+                            messageItems.push(item);
+                            break;
+                        default:
+                            otherItems.push(item);
+                            break;
                     }
                 });
+
+                debugger;
+
+                photoItems.forEach(item => {
+                    const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
+                    
+                    // Add click handler to display image in modal
+                    marker.on('click', function() {
+                        // Construct image URL using the media item ID
+                        const imageUrl = `/images/${item.id}?type=metadata`;
+                        
+                        // Get display name (use title, source_reference, or fallback)
+                        const filename = item.title || item.source_reference || `Image ${item.id}`;
+                        
+                        // Call the existing modal display function
+                        Modals.SingleImageDisplay.showSingleImageModal(
+                            filename,           // Display name
+                            imageUrl,            // Image URL (will be used as file_id)
+                            item.created_at,     // Date taken
+                            item.latitude,       // Latitude
+                            item.longitude       // Longitude
+                        );
+                    });
+                    
+                    photoMarkers.push(marker);
+                });
+
+                messageItems.forEach(item => {
+                    const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
+                    marker.on('click', function() {
+                        const imageUrl = `/images/${item.id}?type=metadata`;
+                        const filename = item.title || item.source_reference || `Image ${item.id}`;
+                        Modals.SingleImageDisplay.showSingleImageModal(
+                            filename,           // Display name
+                            imageUrl,            // Image URL (will be used as file_id)
+                            item.created_at,     // Date taken
+                            item.latitude,       // Latitude
+                            item.longitude       // Longitude
+                        );
+                    });
+                    messageMarkers.push(marker);
+                });
+
+                emailItems.forEach(item => {
+                    const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
+                    marker.on('click', function() {
+                        const imageUrl = `/images/${item.id}?type=metadata`;
+                        const filename = item.title || item.source_reference || `Image ${item.id}`;
+                        Modals.SingleImageDisplay.showSingleImageModal(
+                            filename,           // Display name
+                            imageUrl,            // Image URL (will be used as file_id)
+                            item.created_at,     // Date taken
+                            item.latitude,       // Latitude
+                            item.longitude       // Longitude
+                        );
+                    });                   emailMarkers.push(marker);
+                });
+                biographItems.forEach(item => {
+                    const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
+                    marker.on('click', function() {
+                        const imageUrl = `/images/${item.id}?type=metadata`;
+                        const filename = item.title || item.source_reference || `Image ${item.id}`;
+                        Modals.SingleImageDisplay.showSingleImageModal(
+                            filename,           // Display name
+                            imageUrl,            // Image URL (will be used as file_id)
+                            item.created_at,     // Date taken
+                            item.latitude,       // Latitude
+                            item.longitude       // Longitude
+                        );
+                    });                   marker.bindPopup(item.destination);
+                    biographyMarkers.push(marker);
+                });
+                fbItems.forEach(item => {
+                    const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
+                    marker.on('click', function() {
+                        const imageUrl = `/images/${item.id}?type=metadata`;
+                        const filename = item.title || item.source_reference || `Image ${item.id}`;
+                        Modals.SingleImageDisplay.showSingleImageModal(
+                            filename,           // Display name
+                            imageUrl,            // Image URL (will be used as file_id)
+                            item.created_at,     // Date taken
+                            item.latitude,       // Latitude
+                            item.longitude       // Longitude
+                        );
+                    });                   marker.bindPopup(item.destination);
+                    fbMarkers.push(marker);
+                });
+                otherItems.forEach(item => {
+                    const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
+                    marker.on('click', function() {
+                        const imageUrl = `/images/${item.id}?type=metadata`;
+                        const filename = item.title || item.source_reference || `Image ${item.id}`;
+                        Modals.SingleImageDisplay.showSingleImageModal(
+                            filename,           // Display name
+                            imageUrl,            // Image URL (will be used as file_id)
+                            item.created_at,     // Date taken
+                            item.latitude,       // Latitude
+                            item.longitude       // Longitude
+                        );
+                    });                   marker.bindPopup(item.destination);
+                    otherMarkers.push(marker);
+                });
+                whatsappItems.forEach(item => {
+                    const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
+                    marker.on('click', function() {
+                        const imageUrl = `/images/${item.id}?type=metadata`;
+                        const filename = item.title || item.source_reference || `Image ${item.id}`;
+                        Modals.SingleImageDisplay.showSingleImageModal(
+                            filename,           // Display name
+                            imageUrl,            // Image URL (will be used as file_id)
+                            item.created_at,     // Date taken
+                            item.latitude,       // Latitude
+                            item.longitude       // Longitude
+                        );
+                    });                   marker.bindPopup(item.destination);
+                    whatsappMarkers.push(marker);
+                });
+
                  
-                 photoMarkersLayer = L.layerGroup(photoMarkers).addTo(mapView);
+                 // Initialize activePhotoMarkers with first 200 markers (or all if less than 200)
+                 activePhotoMarkers = photoMarkers.slice(0, 200);
+                 
+                 photoMarkersLayer = L.layerGroup(activePhotoMarkers).addTo(mapView);
                  layerControl.addOverlay(photoMarkersLayer, 'GPS Photos Locations ('+photoMarkers.length+')');
+                 var whatsappMarkersLayer = L.layerGroup(whatsappMarkers).addTo(mapView);
+                 layerControl.addOverlay(whatsappMarkersLayer, 'WhatsApp Locations ('+whatsappMarkers.length+')');
+                 var emailMarkersLayer = L.layerGroup(emailMarkers).addTo(mapView);
+                 layerControl.addOverlay(emailMarkersLayer, 'Email Locations ('+emailMarkers.length+')');
+                 var messageMarkersLayer = L.layerGroup(messageMarkers).addTo(mapView);
+                 layerControl.addOverlay(messageMarkersLayer, 'Message Locations ('+messageMarkers.length+')');
                  var biographyMarkersLayer = L.layerGroup(biographyMarkers).addTo(mapView);
                  layerControl.addOverlay(biographyMarkersLayer, 'Biography Locations ('+biographyMarkers.length+')');
                  var fbMarkersLayer = L.layerGroup(fbMarkers).addTo(mapView);
@@ -2125,15 +2329,16 @@ document.addEventListener('DOMContentLoaded', () => {
                  var otherMarkersLayer = L.layerGroup(otherMarkers).addTo(mapView);
                  layerControl.addOverlay(otherMarkersLayer, 'Other Locations ('+otherMarkers.length+')');
 
+
                 mapView.invalidateSize();
 
                 mapViewInitialized = true;
 
-                document.getElementById('geo-metadata-shown-count').textContent = 'Showing '+photoShown+' of '+currentPhotoIndex+' photos (Click Shuffle Photos to see different images)' ;
+                //document.getElementById('geo-metadata-shown-count').textContent = 'Showing '+photoShown+' of '+currentPhotoIndex+' photos (Click Shuffle Photos to see different images)' ;
                 // setTimeout(() => { mapView.invalidateSize(); }, 100);
             }
 
-             return { init,open,openMapView,shufflePhotoMarkers};
+             return { init,open,openMapView,shufflePhotoMarkers,refresh};
         })(),
 
         // ImageGallery: (() => {
@@ -6798,7 +7003,7 @@ ${textContent}
                     }
                     DOM.singleImageModalImg.style.display = 'block';
                 } else {
-                    if (file_id.startsWith('/getImage')) {
+                    if (file_id.startsWith('/getImage') || file_id.startsWith('/images/')) {
                         DOM.singleImageModalImg.src = file_id;
                     } else {
                         DOM.singleImageModalImg.src = '/getImage?id=' + file_id;
@@ -8792,6 +8997,173 @@ ${textContent}
                         // Re-enable button
                         emptyMediaTablesBtn.disabled = false;
                         emptyMediaTablesBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Empty Media and Message Tables';
+                    }
+                });
+            }
+
+            // Thumbnail Processing Controls
+            const processThumbnailsBtn = document.getElementById('process-thumbnails-btn');
+            const cancelThumbnailProcessingBtn = document.getElementById('cancel-thumbnail-processing-btn');
+            const thumbnailProcessingStatus = document.getElementById('thumbnail-processing-status');
+            const thumbnailProcessingStatusMessage = document.getElementById('thumbnail-processing-status-message');
+            const thumbnailProcessingStatusDetails = document.getElementById('thumbnail-processing-status-details');
+            let thumbnailProcessingInProgress = false;
+            let thumbnailProcessingEventSource = null;
+
+            // Show thumbnail processing status
+            function showThumbnailProcessingStatus(type, title, message) {
+                if (!thumbnailProcessingStatus || !thumbnailProcessingStatusMessage) return;
+                
+                thumbnailProcessingStatus.style.display = 'block';
+                thumbnailProcessingStatusMessage.innerHTML = `<strong>${title}</strong>: ${message}`;
+                thumbnailProcessingStatusMessage.style.color = type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#333';
+            }
+
+            // Update thumbnail processing progress
+            function updateThumbnailProcessingProgress(data) {
+                if (!thumbnailProcessingStatusDetails) return;
+                
+                const phase = data.phase || 'Unknown';
+                const phase1Info = `Phase 1: Scanned ${data.phase1_scanned || 0}, Updated ${data.phase1_updated || 0}`;
+                const phase2Info = `Phase 2: Scanned ${data.phase2_scanned || 0}, Processed ${data.phase2_processed || 0}, Errors ${data.phase2_errors || 0}`;
+                
+                let details = '';
+                if (phase === '1') {
+                    details = `${phase1Info}`;
+                } else if (phase === '2') {
+                    details = `${phase1Info}<br>${phase2Info}`;
+                } else {
+                    details = `${phase1Info}<br>${phase2Info}`;
+                }
+                
+                thumbnailProcessingStatusDetails.innerHTML = details;
+            }
+
+            // Close thumbnail processing SSE connection
+            function closeThumbnailProcessingEventSource() {
+                if (thumbnailProcessingEventSource) {
+                    thumbnailProcessingEventSource.close();
+                    thumbnailProcessingEventSource = null;
+                }
+            }
+
+            // Connect to thumbnail processing SSE stream
+            function connectToThumbnailProcessingStream() {
+                // Close existing connection if any
+                closeThumbnailProcessingEventSource();
+
+                // Create EventSource connection
+                thumbnailProcessingEventSource = new EventSource('/images/process-thumbnails/stream');
+
+                thumbnailProcessingEventSource.onmessage = (event) => {
+                    try {
+                        const eventData = JSON.parse(event.data);
+                        if (eventData.type === 'progress') {
+                            updateThumbnailProcessingProgress(eventData.data);
+                            showThumbnailProcessingStatus('info', 'Processing', 'Thumbnail processing in progress...');
+                        } else if (eventData.type === 'completed') {
+                            updateThumbnailProcessingProgress(eventData.data);
+                            showThumbnailProcessingStatus('success', 'Completed', 'Thumbnail processing completed successfully!');
+                            thumbnailProcessingInProgress = false;
+                            processThumbnailsBtn.disabled = false;
+                            cancelThumbnailProcessingBtn.style.display = 'none';
+                            closeThumbnailProcessingEventSource();
+                        } else if (eventData.type === 'cancelled') {
+                            showThumbnailProcessingStatus('info', 'Cancelled', 'Thumbnail processing was cancelled.');
+                            thumbnailProcessingInProgress = false;
+                            processThumbnailsBtn.disabled = false;
+                            cancelThumbnailProcessingBtn.style.display = 'none';
+                            closeThumbnailProcessingEventSource();
+                        } else if (eventData.type === 'error') {
+                            showThumbnailProcessingStatus('error', 'Error', eventData.data.error_message || 'An error occurred during thumbnail processing.');
+                            thumbnailProcessingInProgress = false;
+                            processThumbnailsBtn.disabled = false;
+                            cancelThumbnailProcessingBtn.style.display = 'none';
+                            closeThumbnailProcessingEventSource();
+                        }
+                    } catch (error) {
+                        console.error('Error parsing thumbnail processing SSE event:', error);
+                    }
+                };
+
+                thumbnailProcessingEventSource.onerror = (error) => {
+                    console.error('Thumbnail processing SSE connection error:', error);
+                    // Don't close on error - EventSource will attempt to reconnect
+                };
+
+                // Clean up on page unload
+                window.addEventListener('beforeunload', () => {
+                    closeThumbnailProcessingEventSource();
+                });
+            }
+
+            // Start thumbnail processing
+            if (processThumbnailsBtn) {
+                processThumbnailsBtn.addEventListener('click', async () => {
+                    if (thumbnailProcessingInProgress) {
+                        return;
+                    }
+
+                    try {
+                        processThumbnailsBtn.disabled = true;
+                        showThumbnailProcessingStatus('info', 'Starting', 'Starting thumbnail processing...');
+                        thumbnailProcessingStatus.style.display = 'block';
+                        cancelThumbnailProcessingBtn.style.display = 'inline-block';
+
+                        const response = await fetch('/images/process-thumbnails', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok) {
+                            thumbnailProcessingInProgress = true;
+                            showThumbnailProcessingStatus('info', 'Started', result.message || 'Thumbnail processing has been initiated.');
+                            connectToThumbnailProcessingStream();
+                        } else {
+                            showThumbnailProcessingStatus('error', 'Failed', result.detail || 'An error occurred while starting thumbnail processing.');
+                            thumbnailProcessingStatus.style.display = 'none';
+                            thumbnailProcessingInProgress = false;
+                            processThumbnailsBtn.disabled = false;
+                            cancelThumbnailProcessingBtn.style.display = 'none';
+                        }
+                    } catch (error) {
+                        showThumbnailProcessingStatus('error', 'Error', error.message);
+                        thumbnailProcessingStatus.style.display = 'none';
+                        thumbnailProcessingInProgress = false;
+                        processThumbnailsBtn.disabled = false;
+                        cancelThumbnailProcessingBtn.style.display = 'none';
+                    }
+                });
+            }
+
+            // Cancel thumbnail processing
+            if (cancelThumbnailProcessingBtn) {
+                cancelThumbnailProcessingBtn.addEventListener('click', async () => {
+                    try {
+                        cancelThumbnailProcessingBtn.disabled = true;
+                        showThumbnailProcessingStatus('info', 'Cancelling', 'Sending cancellation request...');
+
+                        const response = await fetch('/images/process-thumbnails/cancel', {
+                            method: 'POST'
+                        });
+
+                        const result = await response.json();
+
+                        if (result.cancelled) {
+                            showThumbnailProcessingStatus('info', 'Cancellation requested', result.message || 'Thumbnail processing cancellation has been requested.');
+                            // The SSE stream will send the cancelled event
+                        } else {
+                            showThumbnailProcessingStatus('info', 'No processing in progress', result.message || 'No thumbnail processing is currently in progress.');
+                            closeThumbnailProcessingEventSource();
+                        }
+                    } catch (error) {
+                        showThumbnailProcessingStatus('error', 'Error cancelling', error.message);
+                    } finally {
+                        cancelThumbnailProcessingBtn.disabled = false;
                     }
                 });
             }
@@ -11023,10 +11395,21 @@ ${textContent}
             // Start Filesystem import
             if (startFilesystemImportBtn) {
                 startFilesystemImportBtn.addEventListener('click', async () => {
-                    const directoryPath = filesystemImportDirectoryPath?.value?.trim();
+                    const directoryPathInput = filesystemImportDirectoryPath?.value?.trim();
                     
-                    if (!directoryPath) {
-                        showFilesystemImportStatus('error', 'Directory path required', 'Please enter a directory path.');
+                    if (!directoryPathInput) {
+                        showFilesystemImportStatus('error', 'Directory path required', 'Please enter at least one directory path.');
+                        return;
+                    }
+                    
+                    // Parse semicolon-separated paths
+                    const directoryPaths = directoryPathInput
+                        .split(';')
+                        .map(path => path.trim())
+                        .filter(path => path.length > 0);
+                    
+                    if (directoryPaths.length === 0) {
+                        showFilesystemImportStatus('error', 'Directory path required', 'Please enter at least one directory path.');
                         return;
                     }
                     
@@ -11039,7 +11422,7 @@ ${textContent}
                         filesystemImportInProgress = true;
                         startFilesystemImportBtn.disabled = true;
                         cancelFilesystemImportBtn.style.display = 'inline-block';
-                        showFilesystemImportStatus('info', 'Starting import...', 'Sending request to server...');
+                        showFilesystemImportStatus('info', 'Starting import...', `Processing ${directoryPaths.length} director${directoryPaths.length === 1 ? 'y' : 'ies'}...`);
                         
                         updateFilesystemImportProgress({
                             files_processed: 0,
@@ -11051,7 +11434,7 @@ ${textContent}
                         });
                         
                         const requestBody = {
-                            root_directory: directoryPath,
+                            root_directory: directoryPaths.join(';'),
                             create_thumbnail: filesystemImportCreateThumbnail?.checked || false
                         };
                         

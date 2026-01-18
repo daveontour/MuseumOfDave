@@ -2,7 +2,11 @@
 
 from typing import List, Set, Optional, Dict, Any, Tuple
 from datetime import datetime
+from io import BytesIO
 from sqlalchemy.orm import Session
+
+from PIL import Image
+from PIL.ExifTags import TAGS, GPSTAGS
 
 from .connection import Database
 from .models import Email, IMessage, FacebookAlbum, MediaMetadata, MediaBlob, MessageAttachment, AlbumMedia, utcnow
@@ -109,6 +113,15 @@ class EmailStorage:
                     # Create MediaBlob and MediaItem entries for unified media system
                     if attachment_data is not None:
                         try:
+                            # Extract EXIF data if it's an image
+                            exif_data = {}
+                            if content_type and content_type.startswith('image/'):
+                                try:
+                                    exif_data = extract_exif_data_from_bytes(attachment_data)
+                                except Exception as e:
+                                    print(f"Warning: Could not extract EXIF data from email attachment: {e}")
+                                    exif_data = {}
+                            
                             # Create MediaBlob
                             media_blob = MediaBlob(
                                 image_data=attachment_data,
@@ -117,25 +130,30 @@ class EmailStorage:
                             session.add(media_blob)
                             session.flush()  # Get blob ID
                             
-                            # Extract year and month from email date if available
-                            year = None
-                            month = None
-                            if email.date:
-                                if isinstance(email.date, datetime):
-                                    year = email.date.year
-                                    month = email.date.month
+                            # Extract year and month - prefer EXIF data, fallback to email date
+                            year = exif_data.get('year')
+                            month = exif_data.get('month')
+                            if year is None or month is None:
+                                if email.date:
+                                    if isinstance(email.date, datetime):
+                                        year = email.date.year
+                                        month = email.date.month
                             
                             # Create MediaItem with source="email_attachment" and source_reference=email.id
                             media_item = MediaMetadata(
                                 media_blob_id=media_blob.id,
                                 source="email_attachment",
                                 source_reference=str(email.id),  # Email ID as string in source_reference
-                                title=att_data.get("filename"),  # Use filename as title
-                                description=email.snippet,  # Use email snippet as description
+                                title=exif_data.get('title') or att_data.get("filename"),  # Use EXIF title if available, otherwise filename
+                                description=exif_data.get('description') or email.snippet,  # Use EXIF description if available, otherwise email snippet
                                 tags=email.subject,  # Use email subject as tags
                                 media_type=content_type,  # Store all content types (images, PDFs, etc.)
                                 year=year,
-                                month=month
+                                month=month,
+                                latitude=exif_data.get('latitude'),
+                                longitude=exif_data.get('longitude'),
+                                altitude=exif_data.get('altitude'),
+                                has_gps=exif_data.get('has_gps', False)
                             )
                             session.add(media_item)
                             has_saved_attachments = True
@@ -161,6 +179,146 @@ class EmailStorage:
             return session.query(Email).filter(Email.id == email_id).first()
         finally:
             session.close()
+
+
+def _convert_to_degrees(value):
+    """Convert GPS coordinate to decimal degrees.
+    
+    Args:
+        value: Tuple of (degrees, minutes, seconds) or (degrees, minutes)
+        
+    Returns:
+        Decimal degrees
+    """
+    try:
+        d, m, s = value[0], value[1], value[2] if len(value) > 2 else 0
+        return float(d) + float(m) / 60.0 + float(s) / 3600.0
+    except (ValueError, TypeError, IndexError):
+        return None
+
+
+def extract_exif_data_from_bytes(image_data: bytes) -> Dict[str, Any]:
+    """Extract EXIF data from image bytes.
+    
+    Args:
+        image_data: Image file bytes
+        
+    Returns:
+        Dictionary with extracted EXIF data including:
+        - year, month: Date taken
+        - latitude, longitude, altitude: GPS coordinates
+        - has_gps: Boolean indicating if GPS data exists
+        - title, description, author: Image metadata
+    """
+    exif_data = {
+        'year': None,
+        'month': None,
+        'latitude': None,
+        'longitude': None,
+        'altitude': None,
+        'has_gps': False,
+        'title': None,
+        'description': None,
+        'author': None
+    }
+    
+    try:
+        with Image.open(BytesIO(image_data)) as img:
+            # Try to get EXIF data
+            exif = None
+            if hasattr(img, '_getexif'):
+                exif = img._getexif()
+            elif hasattr(img, 'getexif'):
+                exif = img.getexif()
+            
+            # Check if exif is valid and dictionary-like
+            if not exif:
+                return exif_data
+            
+            # Ensure exif is a dictionary-like object
+            if not hasattr(exif, 'items'):
+                # If exif is not dictionary-like, try to convert or skip
+                return exif_data
+            
+            # Process EXIF tags
+            try:
+                for tag_id, value in exif.items():
+                    tag = TAGS.get(tag_id, tag_id)
+                    
+                    # Extract date taken
+                    if tag == 'DateTime' or tag == 'DateTimeOriginal':
+                        try:
+                            date_str = str(value)
+                            # Format: "YYYY:MM:DD HH:MM:SS"
+                            if ':' in date_str:
+                                parts = date_str.split(' ')
+                                if len(parts) > 0:
+                                    date_parts = parts[0].split(':')
+                                    if len(date_parts) >= 2:
+                                        exif_data['year'] = int(date_parts[0])
+                                        exif_data['month'] = int(date_parts[1])
+                        except (ValueError, AttributeError):
+                            pass
+                    
+                    # Extract title/description/author
+                    if tag == 'ImageDescription':
+                        exif_data['description'] = str(value) if value else None
+                    elif tag == 'XPComment' or tag == 'UserComment':
+                        if not exif_data['description']:
+                            exif_data['description'] = str(value) if value else None
+                    elif tag == 'Artist' or tag == 'Copyright':
+                        exif_data['author'] = str(value) if value else None
+                    elif tag == 'DocumentName':
+                        exif_data['title'] = str(value) if value else None
+            except (AttributeError, TypeError) as e:
+                # If items() fails or exif structure is unexpected, skip EXIF processing
+                pass
+            
+            # Extract GPS data
+            try:
+                if hasattr(exif, 'get'):
+                    gps_info = exif.get(34853)  # GPSInfo tag
+                else:
+                    gps_info = None
+                
+                if gps_info and hasattr(gps_info, 'items'):
+                    gps_data = {}
+                    for key, value in gps_info.items():
+                        tag = GPSTAGS.get(key, key)
+                        gps_data[tag] = value
+                    
+                    # Convert GPS coordinates to decimal degrees
+                    if 'GPSLatitude' in gps_data and 'GPSLatitudeRef' in gps_data:
+                        lat = _convert_to_degrees(gps_data['GPSLatitude'])
+                        if lat is not None:
+                            if gps_data['GPSLatitudeRef'] == 'S':
+                                lat = -lat
+                            exif_data['latitude'] = lat
+                    
+                    if 'GPSLongitude' in gps_data and 'GPSLongitudeRef' in gps_data:
+                        lon = _convert_to_degrees(gps_data['GPSLongitude'])
+                        if lon is not None:
+                            if gps_data['GPSLongitudeRef'] == 'W':
+                                lon = -lon
+                            exif_data['longitude'] = lon
+                    
+                    if 'GPSAltitude' in gps_data:
+                        try:
+                            exif_data['altitude'] = float(gps_data['GPSAltitude'])
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    # Set has_gps if we have coordinates
+                    if exif_data['latitude'] is not None and exif_data['longitude'] is not None:
+                        exif_data['has_gps'] = True
+            except (AttributeError, TypeError):
+                # If GPS extraction fails, continue without GPS data
+                pass
+                    
+    except Exception as e:
+        print(f"Warning: Could not extract EXIF data from image bytes: {e}")
+    
+    return exif_data
 
 
 class IMessageStorage:
@@ -247,12 +405,20 @@ class IMessageStorage:
                 try:
                     # Create thumbnail if it's an image
                     thumbnail_data = None
+                    exif_data = {}
                     if attachment_type and attachment_type.startswith('image/'):
                         try:
                             from ..imageimport.filesystemimport import create_thumbnail
                             thumbnail_data = create_thumbnail(attachment_data)
                         except Exception as e:
                             print(f"Warning: Could not create thumbnail for message attachment: {e}")
+                        
+                        # Extract EXIF data including GPS location
+                        try:
+                            exif_data = extract_exif_data_from_bytes(attachment_data)
+                        except Exception as e:
+                            print(f"Warning: Could not extract EXIF data from message attachment: {e}")
+                            exif_data = {}
                     
                     # Create MediaBlob
                     media_blob = MediaBlob(
@@ -262,27 +428,33 @@ class IMessageStorage:
                     session.add(media_blob)
                     session.flush()  # Get blob ID
                     
-                    # Extract year and month from message date if available
-                    year = None
-                    month = None
-                    message_date = message_data.get("message_date")
-                    if message_date:
-                        if isinstance(message_date, datetime):
-                            year = message_date.year
-                            month = message_date.month
+                    # Extract year and month - prefer EXIF data, fallback to message date
+                    year = exif_data.get('year')
+                    month = exif_data.get('month')
+                    if year is None or month is None:
+                        message_date = message_data.get("message_date")
+                        if message_date:
+                            if isinstance(message_date, datetime):
+                                year = message_date.year
+                                month = message_date.month
                     
                     if source == None:
                         source = "message_attachment"
-                    # Create MediaMetadata entry
+                    # Create MediaMetadata entry with GPS data if available
                     media_item = MediaMetadata(
                         media_blob_id=media_blob.id,
                         tags=message_data.get("chat_session"),
                         source=source,
                         source_reference=str(imessage.id),
-                        title=attachment_filename,
+                        title=exif_data.get('title') or attachment_filename,
+                        description=exif_data.get('description'),
                         media_type=attachment_type,
                         year=year,
-                        month=month
+                        month=month,
+                        latitude=exif_data.get('latitude'),
+                        longitude=exif_data.get('longitude'),
+                        altitude=exif_data.get('altitude'),
+                        has_gps=exif_data.get('has_gps', False)
                     )
                     session.add(media_item)
                     session.flush()  # Get media_item ID
