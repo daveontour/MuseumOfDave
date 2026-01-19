@@ -1,7 +1,7 @@
 """Message service for business logic."""
 
 import re
-from typing import List
+from typing import List, Dict, Any, Optional
 from sqlalchemy import func, case, text
 
 from ..database import Database
@@ -172,5 +172,59 @@ class MessageService:
             ).order_by(IMessage.message_date.asc()).all()
             
             return messages
+        finally:
+            session.close()
+
+    def get_formatted_conversation_messages(self, chat_session: str, db: Optional[Database] = None) -> Dict[str, Any]:
+        """Get formatted conversation messages for a chat session.
+        
+        Args:
+            chat_session: Name of the chat session
+            db: Optional Database instance. If not provided, uses self.db.
+            
+        Returns:
+            Dictionary with chat_session, message_count, and messages list
+            
+        Raises:
+            NotFoundError: If no messages found for the chat session
+        """
+        if db is None:
+            db = self.db
+        
+        session = db.get_session()
+        try:
+            messages = session.query(IMessage).filter(
+                IMessage.chat_session == chat_session
+            ).order_by(
+                IMessage.message_date.asc()
+            ).all()
+            
+            if not messages:
+                raise NotFoundError(f"No messages found for chat session: {chat_session}")
+            
+            # Format messages into structured JSON
+            messages_data = {
+                "chat_session": chat_session,
+                "message_count": len(messages),
+                "messages": []
+            }
+            
+            for msg in messages:
+                # Get attachment info
+                message_attachment = session.query(MessageAttachment).filter(
+                    MessageAttachment.message_id == msg.id
+                ).first()
+                
+                has_attachment = message_attachment is not None
+                
+                messages_data["messages"].append({
+                    "message_date": msg.message_date.isoformat() if msg.message_date else None,
+                    "sender_name": msg.sender_name or "Unknown",
+                    "type": msg.type or "",
+                    "text": msg.text or "",
+                    "has_attachment": has_attachment
+                })
+            
+            return messages_data
         finally:
             session.close()

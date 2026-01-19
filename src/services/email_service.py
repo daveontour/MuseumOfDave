@@ -1,10 +1,13 @@
 """Email service for business logic."""
 
-from typing import List, Callable, Optional
+from typing import List, Callable, Optional, Dict, Any
 import threading
 
 from ..loader import EmailDatabaseLoader
-from .exceptions import ConflictError, ValidationError
+from ..database import Database
+from ..database.models import Email
+from sqlalchemy import or_
+from .exceptions import ConflictError, ValidationError, NotFoundError
 
 
 class EmailService:
@@ -117,3 +120,53 @@ class EmailService:
             if self._cancellation_event:
                 self._cancellation_event.set()
             return True
+
+    def get_conversation_messages(self, participant_email: str, db: Optional[Database] = None) -> Dict[str, Any]:
+        """Get formatted conversation messages for a participant email address.
+        
+        Args:
+            participant_email: Email address to search for (in from_address or to_addresses)
+            db: Optional Database instance. If not provided, creates a new one.
+            
+        Returns:
+            Dictionary with chat_session, message_count, and messages list
+            
+        Raises:
+            NotFoundError: If no emails found for the participant
+        """
+        if db is None:
+            db = Database()
+        
+        session = db.get_session()
+        try:
+            emails = session.query(Email).filter(
+                or_(
+                    Email.from_address.like(f"%{participant_email}%"),
+                    Email.to_addresses.like(f"%{participant_email}%")
+                )
+            ).order_by(
+                Email.date.asc()
+            ).all()
+            
+            if not emails:
+                raise NotFoundError(f"No emails found for person: {participant_email}")
+            
+            # Format messages into structured JSON
+            messages_data = {
+                "chat_session": participant_email,
+                "message_count": len(emails),
+                "messages": []
+            }
+            
+            for email in emails:
+                messages_data["messages"].append({
+                    "message_date": email.date.isoformat() if email.date else None,
+                    "sender_name": email.from_address or "Unknown",
+                    "type": "Incoming" if email.to_addresses and participant_email in (email.to_addresses or "") else "Outgoing",
+                    "text": email.plain_text or email.snippet or "",
+                    "has_attachment": email.has_attachments or False
+                })
+            
+            return messages_data
+        finally:
+            session.close()

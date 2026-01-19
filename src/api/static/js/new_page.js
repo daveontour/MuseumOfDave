@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'male_friend': 'a supportive male friend offering caring advice'
         },
         API_PATHS: {
-            CHAT: '/chat',
+            CHAT: '/chat/generate',
             NEW_CHAT: '/new',
             INTERVIEW: '/interviewer/interview',
             NEW_INTERVIEW: '/interviewer/newinterview',
@@ -2819,6 +2819,25 @@ document.addEventListener('DOMContentLoaded', () => {
                         // Functionality will be added later
                         const selectedOption = document.querySelector('input[name="email-ask-ai-option"]:checked')?.value;
                         const otherText = emailAskAIOtherInput?.value || '';
+
+
+                        if (selectedOption === 'summarise') {
+                            if (!emailData[selectedEmailIndex].sender) {
+                                alert('No conversation selected');
+                                return;
+                            }
+
+                            try {
+                                // Open the conversation summary modal
+                                // currentSession is already the chat session name (string)
+                                Modals.ConversationSummary.openForEmailThread(emailData[selectedEmailIndex].sender);
+                            } catch (error) {
+                                console.error('Error opening conversation summary:', error);
+                                alert('Failed to start conversation summarization. Please try again.');
+                            }
+                        }
+
+
                         // TODO: Implement AI functionality
                         emailAskAIModal.style.display = 'none';
                     });
@@ -5705,6 +5724,75 @@ ${textContent}
                 });
             }
 
+            function openForEmailThread(chatSession) {
+                currentChatSession = chatSession;
+                const modal = document.getElementById('conversation-summary-modal');
+                const progressDiv = document.getElementById('conversation-summary-progress');
+                const contentDiv = document.getElementById('conversation-summary-content');
+                const errorDiv = document.getElementById('conversation-summary-error');
+                const progressText = document.getElementById('conversation-summary-progress-text');
+
+                if (!modal) {
+                    console.error('Conversation summary modal not found');
+                    return;
+                }
+
+                // Reset UI and show waiting dialog immediately
+                contentDiv.innerHTML = '';
+                errorDiv.style.display = 'none';
+                errorDiv.innerHTML = '';
+                progressDiv.style.display = 'flex';
+                progressText.textContent = 'Generating summary... Please wait.';
+                modal.style.display = 'flex';
+
+                // Encode chat session for URL
+                const encodedSession = encodeURIComponent(chatSession);
+
+                // Use requestAnimationFrame to ensure modal is visible before starting fetch
+                requestAnimationFrame(() => {
+                    // Call summarize endpoint synchronously
+                    fetch(`/emails/thread/${encodedSession}/summarize`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.json().then(err => {
+                                const errorMsg = err.detail || 'Failed to generate summary';
+                                throw new Error(errorMsg);
+                            }).catch(() => {
+                                // If JSON parsing fails, use status text
+                                throw new Error(`Server error: ${response.status} ${response.statusText}`);
+                            });
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        // Display summary
+                        if (data.status === 'completed' && data.summary) {
+                            displaySummary(data.summary);
+                        } else {
+                            displayError('Unexpected response format');
+                        }
+                    })
+                    .catch(error => {
+                        let errorMessage = 'Failed to generate summary';
+                        
+                        if (error.message) {
+                            errorMessage = error.message;
+                        } else if (error instanceof TypeError && error.message.includes('fetch')) {
+                            errorMessage = 'Network error: Unable to connect to server. Please check your connection.';
+                        } else if (error.name === 'NetworkError' || error.message.includes('network')) {
+                            errorMessage = 'Network error: Unable to connect to server. Please check your connection.';
+                        }
+                        
+                        displayError(errorMessage);
+                    });
+                });
+            }
+
             function displaySummary(summary) {
                 const progressDiv = document.getElementById('conversation-summary-progress');
                 const contentDiv = document.getElementById('conversation-summary-content');
@@ -5823,7 +5911,7 @@ ${textContent}
                 }
             }
 
-            return { init, open, close, displaySummary, displayError };
+            return { init, open, openForEmailThread, close, displaySummary, displayError };
         })(),
 
         SMSMessages: (() => {
@@ -8739,7 +8827,7 @@ ${textContent}
                 const data = await response.json();
                 UI.hideLoadingIndicator(); // Hide after getting response, before adding message
                 if (data.error) UI.displayError(data.error);
-                else Chat.addMessage('assistant', data.text, true, null, data.embedded_json);
+                else Chat.addMessage('assistant', data.response, true, null, data.embedded_json);
 
             } catch (error) {
                 console.error('Form submit error:', error);

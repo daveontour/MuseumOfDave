@@ -29,7 +29,7 @@ from ..database import Database,  Email, IMessage, FacebookAlbum, ReferenceDocum
 from ..database.models import MediaMetadata, MediaBlob, MessageAttachment, Attachment, AlbumMedia
 from ..database.storage import EmailStorage, ImageStorage
 from ..services import ImageService, EmailService, ReferenceDocumentService, MessageService, ImportService
-from ..services.gemini_service import GeminiService
+from ..services.gemini_service import ChatService, GeminiService
 from ..services.exceptions import ServiceException, ValidationError, NotFoundError, ConflictError
 from ..services.dto import (
     ImageSearchFilters,
@@ -64,6 +64,10 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 # Initialize database connection
 db = Database(get_config())
+
+# The Gemini Chat Service (global instance for maintaining conversation history)
+chat_service = ChatService()
+chat_service.set_database(db)
 
 # Initialize loader (will be initialized per request)
 loader = None
@@ -1099,6 +1103,7 @@ async def root():
             "GET /imessages/conversation/{chat_session}": "Get all messages for a specific chat session",
             "DELETE /imessages/conversation/{chat_session}": "Delete a conversation",
             "GET /imessages/{message_id}/attachment": "Get attachment content for a message",
+            "POST /chat/generate": "Generate a chat response using ChatService with Gemini LLM",
             "POST /whatsapp/import": "Import WhatsApp messages from a directory structure",
             "GET /whatsapp/import/stream": "Stream WhatsApp import progress via SSE",
             "POST /whatsapp/import/cancel": "Cancel WhatsApp import if in progress",
@@ -1748,90 +1753,173 @@ async def summarize_conversation(chat_session: str):
     
     decoded_session = unquote(chat_session)
     
-    # Query messages from database
-    session = db.get_session()
+    # Get formatted conversation messages using MessageService
     try:
-        messages = session.query(IMessage).filter(
-            IMessage.chat_session == decoded_session
-        ).order_by(
-            IMessage.message_date.asc()
-        ).all()
-        
-        if not messages:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No messages found for chat session: {decoded_session}"
-            )
-        
-        # Format messages into structured JSON
-        from sqlalchemy.orm import joinedload
-        messages_data = {
-            "chat_session": decoded_session,
-            "message_count": len(messages),
-            "messages": []
-        }
-        
-        for msg in messages:
-            # Get attachment info
-            message_attachment = session.query(MessageAttachment).filter(
-                MessageAttachment.message_id == msg.id
-            ).first()
-            
-            has_attachment = message_attachment is not None
-            
-            messages_data["messages"].append({
-                "message_date": msg.message_date.isoformat() if msg.message_date else None,
-                "sender_name": msg.sender_name or "Unknown",
-                "type": msg.type or "",
-                "text": msg.text or "",
-                "has_attachment": has_attachment
-            })
-        
-        # Initialize Gemini service and get summary synchronously
-        try:
-            gemini_service = GeminiService()
-        except ValueError as e:
-            # Error during initialization (e.g., missing API key, invalid model)
-            raise HTTPException(
-                status_code=500,
-                detail=str(e)
-            )
-        
-        try:
-            summary = gemini_service.summarize_conversation(messages_data)
-        except ValueError as e:
-            # Missing API key or invalid data
-            raise HTTPException(
-                status_code=500,
-                detail=str(e)
-            )
-        except Exception as e:
-            # Other errors
-            import traceback
-            error_msg = str(e)
-            traceback.print_exc()
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error generating summary: {error_msg}"
-            )
-        
-        return {
-            "status": "completed",
-            "summary": summary,
-            "chat_session": decoded_session
-        }
+        message_service = MessageService(db=db)
+        messages_data = message_service.get_formatted_conversation_messages(decoded_session)
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=str(e)
+        )
     
-    except HTTPException:
-        raise
+    # Initialize Gemini service and get summary synchronously
+    try:
+        gemini_service = GeminiService()
+    except ValueError as e:
+        # Error during initialization (e.g., missing API key, invalid model)
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+    
+    try:
+        summary = gemini_service.summarize_conversation(messages_data)
+    except ValueError as e:
+        # Missing API key or invalid data
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
     except Exception as e:
+        # Other errors
         import traceback
+        error_msg = str(e)
         traceback.print_exc()
         raise HTTPException(
             status_code=500,
-            detail=f"Error summarizing conversation: {str(e)}"
+            detail=f"Error generating summary: {error_msg}"
         )
-    finally:
-        session.close()
+    
+    return {
+        "status": "completed",
+        "summary": summary,
+        "chat_session": decoded_session
+    }
+
+@app.post("/emails/thread/{participant}/summarize")
+async def summarize_conversation(participant: str):
+    """Summarize email intercation  with a person using Gemini LLM synchronously.
+    
+    Args:
+        participant: The person (URL encoded)
+        
+    Returns:
+        Dictionary with status, summary, and chat_session
+        
+    Raises:
+        HTTPException: 404 if chat session not found, 500 on error
+    """
+    from urllib.parse import unquote
+    
+    decoded_session = unquote(participant)
+    
+    # Get conversation messages using EmailService
+    try:
+        email_service = EmailService()
+        messages_data = email_service.get_conversation_messages(decoded_session, db)
+    except NotFoundError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=str(e)
+        )
+    
+    # Initialize Gemini service and get summary synchronously
+    try:
+        gemini_service = GeminiService()
+    except ValueError as e:
+        # Error during initialization (e.g., missing API key, invalid model)
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+    
+    try:
+        summary = gemini_service.summarize_conversation(messages_data)
+    except ValueError as e:
+        # Missing API key or invalid data
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+    except Exception as e:
+        # Other errors
+        import traceback
+        error_msg = str(e)
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating summary: {error_msg}"
+        )
+    
+    return {
+        "status": "completed",
+        "summary": summary,
+        "chat_session": decoded_session
+    }
+
+
+class ChatRequest(BaseModel):
+    """Request model for chat endpoint."""
+    prompt: str
+    voice: Optional[str] = None
+
+
+class ChatResponse(BaseModel):
+    """Response model for chat endpoint."""
+    response: str
+    voice: Optional[str] = None
+
+
+@app.post("/chat/generate", response_model=ChatResponse)
+async def generate_chat_response(request: ChatRequest):
+    """Generate a chat response using ChatService with Gemini LLM.
+    
+    This endpoint allows users to send a prompt and receive a response from the ChatService.
+    The ChatService includes reference documents (with available_for_task=True) and 
+    maintains conversation history (last 20 turns).
+    
+    Args:
+        request: ChatRequest with prompt and optional voice selection
+        
+    Returns:
+        ChatResponse with generated response text
+        
+    Raises:
+        HTTPException: 500 on error
+    """
+    try:
+        # Use global ChatService instance (maintains conversation history across requests)
+        # Set voice if provided
+        if request.voice:
+            try:
+                chat_service.set_voice(request.voice)
+            except Exception as e:
+                print(f"[generate_chat_response] Warning: Could not set voice '{request.voice}': {str(e)}")
+        
+        # Generate response using global chat_service instance
+        response_text = chat_service.generate_response(request.prompt, db=db)
+        
+        return ChatResponse(
+            response=response_text,
+            voice=chat_service.voice
+        )
+        
+    except ValueError as e:
+        # Missing API key or invalid data
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+    except Exception as e:
+        # Other errors
+        import traceback
+        error_msg = str(e)
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating chat response: {error_msg}"
+        )
 
 
 def summarize_conversation_background(chat_session: str, messages_data: Dict[str, Any]):
