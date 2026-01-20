@@ -2906,12 +2906,13 @@ body {
 }
 
 .email-editor-table td.email-editor-col-delete {
-    cursor: pointer;
-    transition: color 0.2s ease;
+    cursor: default;
 }
 
-.email-editor-table td.email-editor-col-delete:hover {
-    color: #c82333 !important;
+.email-editor-table td.email-editor-col-delete input[type="checkbox"] {
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
 }
 
 .email-editor-table tbody tr {

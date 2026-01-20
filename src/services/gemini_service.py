@@ -7,7 +7,8 @@ from typing import Dict, Any, Optional, List
 from io import BytesIO
 import google.generativeai as genai
 from ..database import Database
-from ..database.models import ReferenceDocument
+from ..database.models import ReferenceDocument, IMessage, Email
+from sqlalchemy import or_
 
 
 class GeminiService:
@@ -447,6 +448,222 @@ class ChatService:
 
                 """
 
+    def _get_current_time(self) -> Dict[str, Any]:
+        """Get the current date and time.
+        
+        Returns:
+            Dictionary with current_time in ISO format
+        """
+        from datetime import datetime
+        return {
+            "current_time": datetime.now().isoformat(),
+            "timezone": "UTC"
+        }
+
+    def _get_imessages_by_chat_session(self, chat_session: str) -> Dict[str, Any]:
+        """Get all iMessage entries for a specific chat session.
+        
+        Args:
+            chat_session: The chat session name to search for
+            
+        Returns:
+            Dictionary with chat_session, message_count, and messages list
+        """
+        if not self.db:
+            return {
+                "error": "Database not configured",
+                "chat_session": chat_session,
+                "message_count": 0,
+                "messages": []
+            }
+        
+        session = self.db.get_session()
+        try:
+            messages = session.query(IMessage).filter(
+                IMessage.chat_session.like(f"%{chat_session}%")
+            ).order_by(
+                IMessage.message_date.asc()
+            ).all()
+
+            
+            # Format messages into structured format
+            messages_list = []
+            for msg in messages:
+                messages_list.append({
+                    "id": msg.id,
+                    "message_date": msg.message_date.isoformat() if msg.message_date else None,
+                    "sender_name": msg.sender_name or "Unknown",
+                    "sender_id": msg.sender_id or "",
+                    "type": msg.type or "",
+                    "text": msg.text or "",
+                    "service": msg.service or "",
+                    "subject": msg.subject or None
+                })
+            
+            return {
+                "chat_session": chat_session,
+                "message_count": len(messages),
+                "messages": messages_list
+            }
+        except Exception as e:
+            print(f"[ChatService._get_imessages_by_chat_session] Error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {
+                "error": str(e),
+                "chat_session": chat_session,
+                "message_count": 0,
+                "messages": []
+            }
+        finally:
+            session.close()
+
+    def _get_emails_by_contact(self, name: str) -> Dict[str, Any]:
+        """Get plain text of emails where sender or receiver matches the specified name.
+        
+        Args:
+            name: The name or email address to search for in sender or receiver fields
+            
+        Returns:
+            Dictionary with contact_name, email_count, and emails list with plain_text
+        """
+        if not self.db:
+            return {
+                "error": "Database not configured",
+                "contact_name": name,
+                "email_count": 0,
+                "emails": []
+            }
+        
+        session = self.db.get_session()
+        try:
+            emails = session.query(Email).filter(
+                or_(
+                    Email.from_address.like(f"%{name}%"),
+                    Email.to_addresses.like(f"%{name}%")
+                )
+            ).order_by(
+                Email.date.asc()
+            ).all()
+            
+            # Format emails into structured format with plain text
+            emails_list = []
+            for email in emails:
+                emails_list.append({
+                    "id": email.id,
+                    "date": email.date.isoformat() if email.date else None,
+                    "from_address": email.from_address or "",
+                    "to_addresses": email.to_addresses or "",
+                    "subject": email.subject or "",
+                    "plain_text": email.plain_text or email.snippet or "",
+                    "has_attachments": email.has_attachments or False
+                })
+            
+            return {
+                "contact_name": name,
+                "email_count": len(emails),
+                "emails": emails_list
+            }
+        except Exception as e:
+            print(f"[ChatService._get_emails_by_contact] Error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {
+                "error": str(e),
+                "contact_name": name,
+                "email_count": 0,
+                "emails": []
+            }
+        finally:
+            session.close()
+
+    def _get_tools_config(self) -> List[Any]:
+        """Get the tools configuration for Gemini function calling.
+        
+        Returns:
+            List of Tool objects with function declarations
+        """
+        from google.generativeai.types import FunctionDeclaration, Tool
+        
+        get_current_time_declaration = FunctionDeclaration(
+            name="get_current_time",
+            description="Get the current date and time in ISO format. Useful when user asks about the current time or date.",
+            parameters={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        )
+        
+        get_imessages_declaration = FunctionDeclaration(
+            name="get_imessages_by_chat_session",
+            description="Get all messages for WhatsApp, SMS, and iMessage and Facebook messages for a specific chat. Use this when the user asks about messages, conversations, or chats with a specific person or group.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "chat_session": {
+                        "type": "string",
+                        "description": "The chat session name (person or group name) to retrieve messages for"
+                    }
+                },
+                "required": ["chat_session"]
+            }
+        )
+        
+        get_emails_declaration = FunctionDeclaration(
+            name="get_emails_by_contact",
+            description="Get plain text of emails where the sender or receiver matches the specified name or email address. Use this when the user asks about emails with a specific person or contact.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "The name or email address to search for in sender (from_address) or receiver (to_addresses) fields"
+                    }
+                },
+                "required": ["name"]
+            }
+        )
+        
+        return [Tool(function_declarations=[get_current_time_declaration, get_imessages_declaration, get_emails_declaration])]
+
+    def _execute_function_call(self, function_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a function call by routing to the appropriate handler method.
+        
+        Args:
+            function_name: Name of the function to execute
+            args: Dictionary of arguments for the function
+            
+        Returns:
+            Dictionary with function result
+            
+        Raises:
+            ValueError: If function name is not recognized
+        """
+        # Map function names to handler methods
+        function_handlers = {
+            "get_current_time": self._get_current_time,
+            "get_imessages_by_chat_session": self._get_imessages_by_chat_session,
+            "get_emails_by_contact": self._get_emails_by_contact,
+        }
+        
+        if function_name not in function_handlers:
+            raise ValueError(f"Unknown function: {function_name}")
+        
+        handler = function_handlers[function_name]
+        print(f"[ChatService._execute_function_call] Executing function: {function_name} with args: {args}")
+        
+        try:
+            # Execute the handler function
+            result = handler(**args) if args else handler()
+            print(f"[ChatService._execute_function_call] Function {function_name} returned: {result}")
+            return result
+        except Exception as e:
+            print(f"[ChatService._execute_function_call] Error executing {function_name}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            raise
+
     def generate_response(self, user_input: str, db: Optional[Database] = None) -> str:
         """Generates a response to the prompt using the Gemini LLM API.
         
@@ -525,10 +742,128 @@ class ChatService:
         # Some models may not support files, or files might need to be referenced differently
 
         try:
-            # Generate content with file references and text
+            # Get tools configuration
+            tools = self._get_tools_config()
+            
+            # Generate content with file references, text, and tools
             print(f"[ChatService.generate_response] Generating response with {len(uploaded_files)} file(s) and text prompt")
-            response = self.model.generate_content(contents)
-            response_text = response.text.strip()
+            response = self.model.generate_content(contents, tools=tools)
+            
+            # Handle function calling loop
+            max_iterations = 5  # Prevent infinite loops
+            iteration = 0
+            
+            while iteration < max_iterations:
+                iteration += 1
+                
+                # Check if response contains function calls
+                function_calls = []
+                if response.candidates and len(response.candidates) > 0:
+                    candidate = response.candidates[0]
+                    if hasattr(candidate, 'content') and candidate.content:
+                        if hasattr(candidate.content, 'parts'):
+                            for part in candidate.content.parts:
+                                if hasattr(part, 'function_call') and part.function_call:
+                                    # Only add function calls with valid names
+                                    if hasattr(part.function_call, 'name') and part.function_call.name:
+                                        function_calls.append(part.function_call)
+                                    else:
+                                        print(f"[ChatService.generate_response] Skipping function call with empty name: {part.function_call}")
+                
+                # If no function calls, we're done
+                if not function_calls:
+                    break
+                
+                print(f"[ChatService.generate_response] Found {len(function_calls)} function call(s)")
+                
+                # Execute function calls and build responses
+                function_responses = []
+                for func_call in function_calls:
+                    # Extract function name and validate
+                    func_name = func_call.name if hasattr(func_call, 'name') else ""
+                    if not func_name or not func_name.strip():
+                        print(f"[ChatService.generate_response] Skipping function call with empty or invalid name: {func_call}")
+                        continue
+                    
+                    func_args = dict(func_call.args) if hasattr(func_call, 'args') and func_call.args else {}
+                    print(f"[ChatService.generate_response] Processing function call: {func_name} with args: {func_args}")
+                    
+                    try:
+                        # Execute the function
+                        result = self._execute_function_call(func_name, func_args)
+                        
+                        # Create function response part using protos
+                        # Convert dict result to protobuf Struct
+                        from google.generativeai import protos
+                        from google.protobuf import struct_pb2
+                        
+                        response_struct = struct_pb2.Struct()
+                        response_struct.update(result)
+                        
+                        function_responses.append(
+                            protos.FunctionResponse(
+                                name=func_name,
+                                response=response_struct
+                            )
+                        )
+                    except ValueError as e:
+                        # Unknown function - skip it, don't create error response
+                        print(f"[ChatService.generate_response] Unknown function {func_name}, skipping: {str(e)}")
+                        continue
+                    except Exception as e:
+                        print(f"[ChatService.generate_response] Error executing function {func_name}: {str(e)}")
+                        # Create error response only if we have a valid function name
+                        from google.generativeai import protos
+                        from google.protobuf import struct_pb2
+                        
+                        error_struct = struct_pb2.Struct()
+                        error_struct.update({"error": str(e)})
+                        
+                        function_responses.append(
+                            protos.FunctionResponse(
+                                name=func_name,
+                                response=error_struct
+                            )
+                        )
+                
+                # If we have function responses, make a follow-up call
+                if function_responses:
+                    # Build follow-up contents: original contents + function responses as parts
+                    # Function responses need to be wrapped in Part objects
+                    from google.generativeai import protos
+                    
+                    follow_up_contents = contents.copy()
+                    # Add function responses as parts
+                    for func_response in function_responses:
+                        # Create a Part with function_response
+                        part = protos.Part(function_response=func_response)
+                        follow_up_contents.append(part)
+                    
+                    print(f"[ChatService.generate_response] Making follow-up call with {len(function_responses)} function response(s)")
+                    response = self.model.generate_content(follow_up_contents, tools=tools)
+            
+            # Extract final text response
+            if response.candidates and len(response.candidates) > 0:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'content') and candidate.content:
+                    if hasattr(candidate.content, 'parts'):
+                        text_parts = []
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'text'):
+                                text_parts.append(part.text)
+                        if text_parts:
+                            response_text = " ".join(text_parts).strip()
+                        else:
+                            response_text = response.text.strip() if hasattr(response, 'text') else ""
+                    else:
+                        response_text = response.text.strip() if hasattr(response, 'text') else ""
+                else:
+                    response_text = response.text.strip() if hasattr(response, 'text') else ""
+            else:
+                response_text = response.text.strip() if hasattr(response, 'text') else ""
+            
+            if not response_text:
+                response_text = "I apologize, but I couldn't generate a response."
             
             # Track this turn in conversation history
             self.session_turns.append({

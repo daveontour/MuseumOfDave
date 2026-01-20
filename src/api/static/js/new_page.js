@@ -280,6 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
         emailEditorTableBody: document.getElementById('email-editor-table-body'),
         emailEditorPagination: document.getElementById('email-editor-pagination'),
         emailEditorSidebarBtn: document.getElementById('email-editor-sidebar-btn'),
+        emailEditorBulkDeleteBtn: document.getElementById('email-editor-bulk-delete-btn'),
         // New Image Gallery Elements
         newImageGalleryModal: document.getElementById('new-image-gallery-modal'),
         closeNewImageGalleryModalBtn: document.getElementById('close-new-image-gallery-modal'),
@@ -713,6 +714,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function addMessage(role, text, isMarkdown = true, messageId = null, embeddedJson = null) {
+
             const messageElement = _createMessageElement(role, messageId);
             _addVoiceBranding(messageElement, role);
 
@@ -743,8 +745,59 @@ document.addEventListener('DOMContentLoaded', () => {
                     }, 500); // Small delay to ensure the message is fully rendered
                 }
             }
+
+            //The browser_action is a json object that is included in the embeddedJson. It is used to tell the browser to perform an action.
+            //The browser_action object has a functionName property that is the name of the function to perform.
+            //The browser_action object has an args property that is an array of arguments for the function.
+            // The AI may include a browser_action object in the embeddedJson to tell the browser to perform an action.
+            // The AI is told about the available browser actions in the system_instructions_chat.txt file.
+            if (role === 'assistant') {
+                console.log('embeddedJson', embeddedJson);
+                if (embeddedJson && embeddedJson.browser_action) {
+                    _processBrowserActions(embeddedJson.browser_action);
+                }
+            }
             
             return messageElement;
+        }
+
+        // The browser_action is a json object that is included in the embeddedJson. It is used to tell the browser to perform an action.
+        function _processBrowserActions(browser_action) {
+            if (browser_action) {
+                console.log('browser_action', browser_action);
+            } else {
+                console.log('no browser_actions');
+                return;
+            }
+            switch (browser_action.functionName) {
+                case 'showAlert':
+                    alert(browser_action.args[0]);
+                    break;
+                case 'changeBackgroundColor':
+                    document.body.style.backgroundColor = browser_action.args[0];
+                    break;
+                case 'showContactEmailGallery':
+                    Modals.EmailGallery.openContact(browser_action.args[0]);
+                    break;
+                case 'showFacebookAlbums':
+                    Modals.FBAlbums.open();
+                    break;
+                case 'showImageGallery':
+                    Modals.NewImageGallery.open();
+                    break;
+                case 'showTaggedImages':
+                    Modals.NewImageGallery.openTaggedImages(browser_action.args[0]);
+                    break;
+                case 'showImagesFromDate':
+                    Modals.NewImageGallery.openImagesFromDate(browser_action.args[0], browser_action.args[1]);
+                    break;
+                case 'showLocationInfo':
+                    Modals.Locations.openMapView();
+                    break;
+                default:
+                    console.log('unknown browser_action', browser_action);
+                    break;
+            }
         }
 
         function addEmail(email, messageId = null, embeddedJson = null) {
@@ -3946,6 +3999,7 @@ ${textContent}
             let currentPage = 1;
             let pageSize = 50;
             let selectedRowIndex = -1;
+            let selectedEmailIds = new Set();
 
             function formatDateAustralian(dateString) {
                 if (!dateString) return 'No Date';
@@ -4060,6 +4114,9 @@ ${textContent}
                 DOM.closeEmailEditorModalBtn.addEventListener('click', close);
                 DOM.emailEditorSearchBtn.addEventListener('click', _handleSearch);
                 DOM.emailEditorClearBtn.addEventListener('click', _handleClear);
+                if (DOM.emailEditorBulkDeleteBtn) {
+                    DOM.emailEditorBulkDeleteBtn.addEventListener('click', _handleBulkDelete);
+                }
                 _setupFilters();
             }
 
@@ -4274,16 +4331,25 @@ ${textContent}
                     });
                     row.appendChild(useByAiCell);
 
-                    // Delete column
+                    // Delete column (checkbox)
                     const deleteCell = document.createElement('td');
                     deleteCell.className = 'email-editor-col-delete';
-                    deleteCell.style.cursor = 'pointer';
                     deleteCell.style.textAlign = 'center';
-                    deleteCell.innerHTML = '<i class="fas fa-trash" style="color: #dc3545;"></i>';
-                    deleteCell.addEventListener('click', (e) => {
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.className = 'email-delete-checkbox';
+                    checkbox.dataset.emailId = email.id;
+                    checkbox.checked = selectedEmailIds.has(email.id);
+                    checkbox.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        _confirmDelete(email.id, email.subject || 'this email');
+                        if (checkbox.checked) {
+                            selectedEmailIds.add(email.id);
+                        } else {
+                            selectedEmailIds.delete(email.id);
+                        }
+                        _updateBulkDeleteButton();
                     });
+                    deleteCell.appendChild(checkbox);
                     row.appendChild(deleteCell);
 
                     DOM.emailEditorTableBody.appendChild(row);
@@ -4341,6 +4407,87 @@ ${textContent}
                 });
             }
 
+            function _updateBulkDeleteButton() {
+                if (DOM.emailEditorBulkDeleteBtn) {
+                    if (selectedEmailIds.size > 0) {
+                        DOM.emailEditorBulkDeleteBtn.style.display = 'inline-block';
+                        DOM.emailEditorBulkDeleteBtn.textContent = `Delete Selected (${selectedEmailIds.size})`;
+                    } else {
+                        DOM.emailEditorBulkDeleteBtn.style.display = 'none';
+                    }
+                }
+            }
+
+            function _handleBulkDelete() {
+                if (selectedEmailIds.size === 0) {
+                    return;
+                }
+
+                const emailIdsArray = Array.from(selectedEmailIds);
+                const count = emailIdsArray.length;
+                
+                // Use the existing confirmation modal
+                if (window.Modals && window.Modals.Confirmation) {
+                    window.Modals.Confirmation.show(
+                        'Delete Emails',
+                        `Are you sure you want to delete ${count} email(s)? This action cannot be undone.`,
+                        () => {
+                            _bulkDeleteEmails(emailIdsArray);
+                        }
+                    );
+                } else {
+                    // Fallback to browser confirm
+                    if (confirm(`Are you sure you want to delete ${count} email(s)? This action cannot be undone.`)) {
+                        _bulkDeleteEmails(emailIdsArray);
+                    }
+                }
+            }
+
+            function _bulkDeleteEmails(emailIds) {
+                fetch('/emails/bulk-delete', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email_ids: emailIds })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to delete emails');
+                    }
+                    return response.json();
+                })
+                .then(result => {
+                    // Remove deleted emails from local data
+                    emailIds.forEach(id => {
+                        emailData = emailData.filter(e => e.id !== id);
+                        selectedEmailIds.delete(id);
+                    });
+                    
+                    // Reset to first page if current page is empty
+                    const totalPages = Math.ceil(emailData.length / pageSize);
+                    if (currentPage > totalPages && totalPages > 0) {
+                        currentPage = totalPages;
+                    } else if (totalPages === 0) {
+                        currentPage = 1;
+                    }
+                    
+                    _updateBulkDeleteButton();
+                    _renderTable();
+                    _renderPagination();
+                    
+                    if (result.errors && result.errors.length > 0) {
+                        alert(`Deleted ${result.deleted_count} email(s). Some errors occurred:\n${result.errors.join('\n')}`);
+                    } else {
+                        alert(`Successfully deleted ${result.deleted_count} email(s).`);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error bulk deleting emails:', error);
+                    alert('Failed to delete emails. Please try again.');
+                });
+            }
+
             function _confirmDelete(emailId, emailSubject) {
                 // Use the existing confirmation modal
                 if (window.Modals && window.Modals.Confirmation) {
@@ -4372,6 +4519,7 @@ ${textContent}
                 .then(() => {
                     // Remove from local data
                     emailData = emailData.filter(e => e.id !== emailId);
+                    selectedEmailIds.delete(emailId);
                     // Reset to first page if current page is empty
                     const totalPages = Math.ceil(emailData.length / pageSize);
                     if (currentPage > totalPages && totalPages > 0) {
@@ -4379,6 +4527,7 @@ ${textContent}
                     } else if (totalPages === 0) {
                         currentPage = 1;
                     }
+                    _updateBulkDeleteButton();
                     _renderTable();
                     _renderPagination();
                 })
@@ -4440,7 +4589,9 @@ ${textContent}
                 DOM.emailEditorModal.style.display = 'flex';
                 currentPage = 1;
                 selectedRowIndex = -1;
-                _loadEmails();
+                selectedEmailIds.clear();
+                _updateBulkDeleteButton();
+                //_loadEmails();
             }
 
             function close() {
@@ -4649,6 +4800,40 @@ ${textContent}
                 _updateSelectModeUI();
                 _renderThumbnailGrid();
             }
+
+            async function openTaggedImages(tags) {
+                await open();
+                if (DOM.newImageGalleryTags) {
+                    DOM.newImageGalleryTags.value = tags;
+                }
+                const params = new URLSearchParams();
+                params.append('tags', tags);
+                try {
+                    const response = await fetch('/images/search?' + params.toString());
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    imageData = data;
+                    _renderThumbnailGrid();
+                } catch (error) {
+                    console.error('Error loading image data:', error);
+                    imageData = [];
+                    _renderThumbnailGrid();
+                }
+            }
+
+            async function openImagesFromDate(year, month) {
+                await open();
+                if (DOM.newImageGalleryYearFilter) {
+                    DOM.newImageGalleryYearFilter.value = year;
+                }
+                if (DOM.newImageGalleryMonthFilter) {
+                    DOM.newImageGalleryMonthFilter.value = month;
+                }
+                _handleSearch();
+            }
+            
 
             function close() {
                 DOM.newImageGalleryModal.style.display = 'none';
@@ -5197,7 +5382,7 @@ ${textContent}
             }
 
 
-            return { init, open, close };
+            return { init, open, close,openTaggedImages, openImagesFromDate };
         })(),
 
         ImageDetailModal: (() => {
@@ -7815,109 +8000,109 @@ ${textContent}
     };
 
     // --- SSE Module ---
-    const SSE = (() => {
-        const browserFunctions = { // Functions Gemini can ask the browser to execute
-            showAlert: function(message) {
-                alert(message);
-                _logToChatbox(`Browser: Executed showAlert: "${message}"`);
-            },
-            changeBackgroundColor: function(color) {
-                document.body.style.backgroundColor = color;
-                _logToChatbox(`Browser: Executed changeBackgroundColor to "${color}"`);
-            },
-            showLocationInfo: function() {
-                Modals.ConfirmationModal.open('Location Info', 'Would you like to see the location information mapped out?', () => {
-                    Modals.Locations.openMapView();
-                });
-            },
-            showFacebookAlbums: function() {
-                Modals.ConfirmationModal.open('Facebook Albums', 'Would you like to choose the Facebook Albums to display?', () => {
-                    Modals.FBAlbums.open();
-                });
-            },
-            showImageGallery: function() {
-                Modals.ConfirmationModal.open('Image Gallery', 'Would you like to choose the Image Gallery to display?', () => {
-                    Modals.ImageGallery.open();
-                });
-            },
-            showEmailGallery: function() {
-                Modals.ConfirmationModal.open('Email Gallery', 'Would you like to browse through emails?', () => {
-                    Modals.EmailGallery.open();
-                });
-            },
-            showFacebookAlbum: function(albumTitle) {
-                Modals.FBAlbums.openAlbum(albumTitle);
-            },
-            showContactEmailGallery: function(contactName) {
-                Modals.EmailGallery.openContact(contactName);
-            },
-            testEmail: function() {
-                const emailData = {
-                    from: "sender@example.com",
-                    to: "recipient@example.com",
-                    subject: "Important Meeting Tomorrow",
-                    date: "2024-01-15 14:30:00",
-                    body_text: "Hi there,\n\nJust a reminder about our meeting tomorrow at 10 AM.\n\nBest regards,\nJohn",
-                    attachments: [
-                        { filename: "meeting_notes.pdf", size: 1024000 },
-                        { filename: "agenda.docx", size: 512000 }
-                    ]
-                };
+    // const SSE = (() => {
+    //     const browserFunctions = { // Functions Gemini can ask the browser to execute
+    //         showAlert: function(message) {
+    //             alert(message);
+    //             _logToChatbox(`Browser: Executed showAlert: "${message}"`);
+    //         },
+    //         changeBackgroundColor: function(color) {
+    //             document.body.style.backgroundColor = color;
+    //             _logToChatbox(`Browser: Executed changeBackgroundColor to "${color}"`);
+    //         },
+    //         showLocationInfo: function() {
+    //             Modals.ConfirmationModal.open('Location Info', 'Would you like to see the location information mapped out?', () => {
+    //                 Modals.Locations.openMapView();
+    //             });
+    //         },
+    //         showFacebookAlbums: function() {
+    //             Modals.ConfirmationModal.open('Facebook Albums', 'Would you like to choose the Facebook Albums to display?', () => {
+    //                 Modals.FBAlbums.open();
+    //             });
+    //         },
+    //         showImageGallery: function() {
+    //             Modals.ConfirmationModal.open('Image Gallery', 'Would you like to choose the Image Gallery to display?', () => {
+    //                 Modals.ImageGallery.open();
+    //             });
+    //         },
+    //         showEmailGallery: function() {
+    //             Modals.ConfirmationModal.open('Email Gallery', 'Would you like to browse through emails?', () => {
+    //                 Modals.EmailGallery.open();
+    //             });
+    //         },
+    //         showFacebookAlbum: function(albumTitle) {
+    //             Modals.FBAlbums.openAlbum(albumTitle);
+    //         },
+    //         showContactEmailGallery: function(contactName) {
+    //             Modals.EmailGallery.openContact(contactName);
+    //         },
+    //         testEmail: function() {
+    //             const emailData = {
+    //                 from: "sender@example.com",
+    //                 to: "recipient@example.com",
+    //                 subject: "Important Meeting Tomorrow",
+    //                 date: "2024-01-15 14:30:00",
+    //                 body_text: "Hi there,\n\nJust a reminder about our meeting tomorrow at 10 AM.\n\nBest regards,\nJohn",
+    //                 attachments: [
+    //                     { filename: "meeting_notes.pdf", size: 1024000 },
+    //                     { filename: "agenda.docx", size: 512000 }
+    //                 ]
+    //             };
                 
-                Chat.addEmail(emailData);
-            },
-            // Add more functions here
-        };
+    //             Chat.addEmail(emailData);
+    //         },
+    //         // Add more functions here
+    //     };
 
-        function _logToChatbox(message) { // SSE specific logging, could be Chat.addMessage('system', ...)
-            const p = document.createElement('p');
-            p.textContent = message;
-            DOM.chatBox.appendChild(p);
-            UI.scrollToBottom();
-        }
+    //     function _logToChatbox(message) { // SSE specific logging, could be Chat.addMessage('system', ...)
+    //         const p = document.createElement('p');
+    //         p.textContent = message;
+    //         DOM.chatBox.appendChild(p);
+    //         UI.scrollToBottom();
+    //     }
 
-        function setup() {
-            if (AppState.sseEventSource) AppState.sseEventSource.close(); // Close existing before opening new
+    //     function setup() {
+    //         if (AppState.sseEventSource) AppState.sseEventSource.close(); // Close existing before opening new
 
-            AppState.sseEventSource = new EventSource(`${CONSTANTS.API_PATHS.EVENTS}?clientId=${AppState.clientId}`);
-            AppState.sseEventSource.onopen = () => {  console.log("SSE Connection Opened with clientId:", AppState.clientId);};
-            AppState.sseEventSource.onmessage = (event) => {
-                console.log("SSE Message Received:", event.data);
+    //         AppState.sseEventSource = new EventSource(`${CONSTANTS.API_PATHS.EVENTS}?clientId=${AppState.clientId}`);
+    //         AppState.sseEventSource.onopen = () => {  console.log("SSE Connection Opened with clientId:", AppState.clientId);};
+    //         AppState.sseEventSource.onmessage = (event) => {
+    //             console.log("SSE Message Received:", event.data);
        
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.action === "execute_js" && data.functionName && browserFunctions[data.functionName]) {
-                        //_logToChatbox(`Browser: Received command to execute ${data.functionName}`);
-                        browserFunctions[data.functionName].apply(null, Array.isArray(data.args) ? data.args : (data.args != null ? [data.args] : []));
-                    } else {
-                       // _logToChatbox(`Browser: Unknown function or invalid action requested: ${data.functionName}`);
-                        console.warn("Unknown function or invalid action requested by backend:", data);
-                    }
-                } catch (e) {
-                    console.error("Error parsing SSE message or executing function:", e);
-                    //_logToChatbox(`Browser: Error processing command from server.`);
-                }
-            };
-            AppState.sseEventSource.onerror = (err) => {
-                //_logToChatbox("SSE Error. Connection may be closed.");
-                console.error("EventSource failed:", err);
-                // EventSource attempts to reconnect automatically.
-            };
-        }
+    //             try {
+    //                 const data = JSON.parse(event.data);
+    //                 if (data.action === "execute_js" && data.functionName && browserFunctions[data.functionName]) {
+    //                     //_logToChatbox(`Browser: Received command to execute ${data.functionName}`);
+    //                     browserFunctions[data.functionName].apply(null, Array.isArray(data.args) ? data.args : (data.args != null ? [data.args] : []));
+    //                 } else {
+    //                    // _logToChatbox(`Browser: Unknown function or invalid action requested: ${data.functionName}`);
+    //                     console.warn("Unknown function or invalid action requested by backend:", data);
+    //                 }
+    //             } catch (e) {
+    //                 console.error("Error parsing SSE message or executing function:", e);
+    //                 //_logToChatbox(`Browser: Error processing command from server.`);
+    //             }
+    //         };
+    //         AppState.sseEventSource.onerror = (err) => {
+    //             //_logToChatbox("SSE Error. Connection may be closed.");
+    //             console.error("EventSource failed:", err);
+    //             // EventSource attempts to reconnect automatically.
+    //         };
+    //     }
         
-        function close() {
-            if (AppState.sseEventSource) {
-                AppState.sseEventSource.close();
-                console.log("SSE Connection Closed.");
-            }
-        }
+    //     function close() {
+    //         if (AppState.sseEventSource) {
+    //             AppState.sseEventSource.close();
+    //             console.log("SSE Connection Closed.");
+    //         }
+    //     }
 
-        function init() {
-          //  _logToChatbox(`Client ID: ${AppState.clientId}`);
-            setup();
-        }
-        return { init, close, browserFunctions }; // Expose browserFunctions if needed elsewhere
-    })();
+    //     function init() {
+    //       //  _logToChatbox(`Client ID: ${AppState.clientId}`);
+    //         setup();
+    //     }
+    //     return { init, close, browserFunctions }; // Expose browserFunctions if needed elsewhere
+    // })();
 
     // --- Global Interviewee Management Functions ---
     async function loadInterviewees() {
@@ -11915,8 +12100,8 @@ ${textContent}
             Chat.renderExistingMessages();
             VoiceSelector.init(); // Sets initial voice state, creativity lock, listeners
             Modals.initAll();
-            SSE.init();
-            InterviewerMode.init(); // Initialize interviewer mode
+            //SSE.init();
+            //InterviewerMode.init(); // Initialize interviewer mode
             initEventListeners(); // Attach main app event listeners
 
             // Initial info box visibility

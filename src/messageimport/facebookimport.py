@@ -545,7 +545,7 @@ def import_facebook_from_directory(
                                 
                                 # Save additional attachment as separate message entry
                                 _, is_update_att = storage.save_imessage(
-                                    additional_message_data,
+                                    additional_message_data, 
                                     attachment_data=additional_att.get('data'),
                                     attachment_filename=additional_att.get('filename'),
                                     attachment_type=additional_att.get('type'),

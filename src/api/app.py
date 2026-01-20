@@ -3,10 +3,11 @@
 import os
 import threading
 import json
+import re
 import asyncio
 from pathlib import Path
 from io import BytesIO
-from fastapi import FastAPI, HTTPException, Response, BackgroundTasks, Query, Request, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Response, BackgroundTasks, Query, Request, UploadFile, File, Form, Body
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -1869,6 +1870,7 @@ class ChatResponse(BaseModel):
     """Response model for chat endpoint."""
     response: str
     voice: Optional[str] = None
+    embedded_json: Optional[Dict[str, Any]] = None
 
 
 @app.post("/chat/generate", response_model=ChatResponse)
@@ -1899,10 +1901,29 @@ async def generate_chat_response(request: ChatRequest):
         
         # Generate response using global chat_service instance
         response_text = chat_service.generate_response(request.prompt, db=db)
+
+        # Parse response to extract embedded JSON from markdown code blocks
+        text_content = response_text
+        embedded_json = None
+        
+        # Pattern to match JSON in markdown code blocks (```json ... ```)
+        json_pattern = r'```json\s*\n(.*?)\n```'
+        match = re.search(json_pattern, response_text, re.DOTALL)
+        
+        if match:
+            json_str = match.group(1).strip()
+            try:
+                embedded_json = json.loads(json_str)
+                # Remove the JSON code block from the text content
+                text_content = re.sub(json_pattern, '', response_text, flags=re.DOTALL).strip()
+            except json.JSONDecodeError as e:
+                print(f"[generate_chat_response] Warning: Could not parse embedded JSON: {str(e)}")
+                # If JSON parsing fails, keep the original text
         
         return ChatResponse(
-            response=response_text,
-            voice=chat_service.voice
+            response=text_content,
+            voice=chat_service.voice,
+            embedded_json=embedded_json
         )
         
     except ValueError as e:
@@ -4461,6 +4482,97 @@ async def update_email(email_id: int, updates: Dict[str, Any]):
         raise HTTPException(
             status_code=500,
             detail=f"Error updating email: {str(e)}"
+        )
+    finally:
+        session.close()
+
+
+@app.delete("/emails/bulk-delete")
+async def bulk_delete_emails(delete_data: Dict[str, Any] = Body(...)):
+    """Bulk delete multiple emails by their IDs.
+    
+    Args:
+        delete_data: Dictionary containing:
+            - email_ids: List of email IDs to delete
+        
+    Returns:
+        Success message with count of deleted emails
+        
+    Raises:
+        HTTPException: 400 if validation fails, 500 on error
+    """
+    session = db.get_session()
+    try:
+        email_ids = delete_data.get("email_ids", [])
+        
+        if not email_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="No email IDs provided"
+            )
+        
+        deleted_count = 0
+        errors = []
+        
+        for email_id in email_ids:
+            try:
+                email = session.query(Email).filter(Email.id == email_id).first()
+                
+                if not email:
+                    errors.append(f"Email {email_id} not found")
+                    continue
+                
+                # Delete all media items associated with the email
+                media_items = session.query(MediaMetadata).filter(
+                    MediaMetadata.source == "email_attachment",
+                    MediaMetadata.source_reference == str(email_id)
+                ).all()
+                
+                for media_item in media_items:
+                    # Get the media blob
+                    media_blob = session.query(MediaBlob).filter(
+                        MediaBlob.id == media_item.media_blob_id
+                    ).first()
+                    
+                    # Delete media item
+                    session.delete(media_item)
+                    
+                    # Check if any other media items reference this blob
+                    if media_blob:
+                        other_items_count = session.query(MediaMetadata).filter(
+                            MediaMetadata.media_blob_id == media_blob.id
+                        ).count()
+                        
+                        # If no other items reference this blob, delete it
+                        if other_items_count == 0:
+                            session.delete(media_blob)
+                
+                # Set user_deleted flag to True (soft delete) and clear other fields
+                email.raw_message = None
+                email.plain_text = None
+                email.snippet = None
+                email.embedding = None
+                email.has_attachments = False
+                email.user_deleted = True
+                deleted_count += 1
+                
+            except Exception as e:
+                errors.append(f"Error deleting email {email_id}: {str(e)}")
+        
+        session.commit()
+        
+        return {
+            "message": f"Deleted {deleted_count} email(s)",
+            "deleted_count": deleted_count,
+            "errors": errors
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error bulk deleting emails: {str(e)}"
         )
     finally:
         session.close()
