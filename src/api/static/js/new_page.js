@@ -167,6 +167,11 @@ document.addEventListener('DOMContentLoaded', () => {
         referenceDocumentsEditForm: document.getElementById('reference-documents-edit-form'),
         referenceDocumentsEditCancelBtn: document.getElementById('reference-documents-edit-cancel'),
         referenceDocumentsSidebarBtn: document.getElementById('reference-documents-sidebar-btn'),
+        referenceDocumentsNotificationModal: document.getElementById('reference-documents-notification-modal'),
+        closeReferenceDocumentsNotificationModalBtn: document.getElementById('close-reference-documents-notification-modal'),
+        referenceDocumentsNotificationList: document.getElementById('reference-documents-notification-list'),
+        referenceDocumentsNotificationCancelBtn: document.getElementById('reference-documents-notification-cancel'),
+        referenceDocumentsNotificationProceedBtn: document.getElementById('reference-documents-notification-proceed'),
         // Chat dictation elements
         chatStartDictationBtn: document.getElementById('chat-start-dictation-btn'),
         chatStopDictationBtn: document.getElementById('chat-stop-dictation-btn'),
@@ -1728,6 +1733,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+
             function close() { 
                 Modals._closeModal(DOM.fbAlbumsModal);
             }
@@ -2100,7 +2106,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 Modals._openModal(DOM.geoMetadataModal);
                 // DOM.geoList.innerHTML = '';
                 if (geoData.length === 0 || photoPlacesData.length === 0) {
-
                     fetch('/getLocations').then(r => r.json()).then(data => {
                         geoData = data.locations || [];
                         mapViewInitialized = false;
@@ -2216,11 +2221,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         case 'biography':
                             biographyItems.push(item);
                             break;
-                        case 'Facebook':
+                        case 'facebook_album':
+                            console.log("FB Album Item")
                             fbItems.push(item);
                             break;
                         case 'WhatsApp':
-                            whatsapItems.push(item);
+                            whatsappItems.push(item);
                             break;
                         case 'email_attachment':
                             emailItems.push(item);
@@ -2239,7 +2245,7 @@ document.addEventListener('DOMContentLoaded', () => {
   
 
                 // Helper function to handle marker click - fetch full image data and open detail modal
-                async function handleMarkerClick(item) {
+                async function handleMarkerClick(item, allowRedirects = false) {
                     try {
                         // Fetch full image metadata from API
                         const response = await fetch(`/images/${item.id}/metadata`);
@@ -2247,10 +2253,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             throw new Error(`Failed to fetch image metadata: ${response.status}`);
                         }
                         const fullImageData = await response.json();
+
                         
                         // Open detail modal with full image data (don't allow redirects from Locations)
                         Modals.ImageDetailModal.open(fullImageData, {
-                            allowRedirects: false
+                            allowRedirects: allowRedirects
                         });
                     } catch (error) {
                         console.error('Error fetching image metadata:', error);
@@ -2289,7 +2296,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 emailItems.forEach(item => {
                     const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
                     marker.on('click', function() {
-                        handleMarkerClick(item);
+                        handleMarkerClick(item, true);
                     });
                     emailMarkers.push(marker);
                 });
@@ -2356,439 +2363,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
              return { init,open,openMapView,shufflePhotoMarkers,refresh};
         })(),
-
-        // ImageGallery: (() => {
-        //     let metaData = {};
-        //     let selectedSource = '';
-        //     let selectedYear = '';
-        //     let selectedMonth = '';
-        //     let searchQuery = '';
-        //     let selectedLocation = '';
-        //     let imageData = [];
-        //     let map = null;
-        //     let currentMarker = null;
-        //     let selectedIdx = null;
-        //     let searchTimeout = null;
-        //     let currentImageGalleryFileInfo = null; // Store current file information for download
-
-        //     function init() {
-        //         DOM.imageGalleryModal.addEventListener('click', function(e) {
-        //             if (e.target === DOM.imageGalleryModal) DOM.imageGalleryModal.style.display = 'none';
-        //         });
-        //         DOM.closeImageGalleryModalBtn.addEventListener('click', function() {
-        //             DOM.imageGalleryModal.style.display = 'none';
-        //             close();
-        //         });
-        //         // if (DOM.imageGallerySourceFilter) DOM.imageGallerySourceFilter.addEventListener('change', _handleSourceFilterChange);
-        //         // if (DOM.imageGalleryYearFilter) DOM.imageGalleryYearFilter.addEventListener('change', _handleYearFilterChange);
-        //         // if (DOM.imageGalleryMonthFilter) DOM.imageGalleryMonthFilter.addEventListener('change', _handleMonthFilterChange);
-        //         // if (DOM.imageGalleryLocationFilter) DOM.imageGalleryLocationFilter.addEventListener('change', _handleLocationFilterChange);
-        //        if (DOM.imageGalleryFixedBtn) DOM.imageGalleryFixedBtn.addEventListener('click', _openGeoMapInNewTab);
-        //         if (DOM.imageGallerySearchBtn) DOM.imageGallerySearchBtn.addEventListener('click', _handleSearch);
-        //         if (DOM.imageGalleryClearBtn) DOM.imageGalleryClearBtn.addEventListener('click', _handleClear);
-        //         if (DOM.downloadImageGalleryBtn) DOM.downloadImageGalleryBtn.addEventListener('click', _downloadCurrentImageGalleryItem);
-        //         if (DOM.imageGallerySearch) {
-        //             DOM.imageGallerySearch.addEventListener('input', (e) => {
-        //                 // Clear any existing timeout
-        //                 if (searchTimeout) clearTimeout(searchTimeout);
-                        
-        //                 const query = e.target.value.trim();
-                        
-        //                 // Only search if query is at least 5 characters
-        //                 if (query.length >= 4) {
-        //                     // Set a new timeout to debounce the search
-        //                     searchTimeout = setTimeout(() => {
-        //                         searchQuery = query;
-        //                         // Disable other filters when searching
-        //                         DOM.imageGallerySourceFilter.disabled = true;
-        //                         DOM.imageGalleryYearFilter.disabled = true;
-        //                         DOM.imageGalleryMonthFilter.disabled = true;
-        //                         DOM.imageGalleryLocationFilter.disabled = true;
-        //                        // _renderImageGalleryList();
-        //                     }, 300); // 300ms debounce
-        //                 } else if (query.length === 0) {
-        //                     // If search is cleared, re-enable filters and reset search
-        //                     searchTimeout = setTimeout(() => {
-        //                         searchQuery = '';
-        //                         DOM.imageGallerySourceFilter.disabled = false;
-        //                         DOM.imageGalleryYearFilter.disabled = false;
-        //                         DOM.imageGalleryMonthFilter.disabled = false;
-        //                         DOM.imageGalleryLocationFilter.disabled = false;
-        //                         //_renderImageGalleryList();
-        //                     }, 300);
-        //                 }
-        //             });
-        //         }
-        //     }
-        //     function open() {
-        //         DOM.imageGalleryModal.style.display = 'flex';
-        //         fetch('/imagesmetametadata')
-        //                 .then(r => r.json())
-        //                 .then(data => {
-        //                     metaData = data;
-        //                      _setSourceFilterOptions();
-        //                 });
-
-        //         map = L.map('image-gallery-map');
-        //         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        //             maxZoom: 15,
-        //             attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        //         }).addTo(map);
-        //     }
-        //     function _setSourceFilterOptions() {
-        //         const sourceFilter = DOM.imageGallerySourceFilter;
-        //         sourceFilter.innerHTML = '';
-        //         // Make sure all sources is first in the list
-        //         Object.keys(metaData).forEach(source => {         
-        //             if (source === 'all_sources') {
-        //                 const option = document.createElement('option');
-        //                 option.value = "all_sources";
-        //                 option.textContent = "All Sources";
-        //                 sourceFilter.appendChild(option);
-        //             } 
-        //         });
-        //         Object.keys(metaData).forEach(source => {
-                    
-        //             if (source === 'all_sources') {
-        //                return;
-        //             } else {
-        //                 const option = document.createElement('option');
-        //                 option.value = source;
-        //                 option.textContent = source;
-        //                 sourceFilter.appendChild(option);
-        //             }
-        //         });
-        //         //selectedSource = Object.keys(metaData)[0];
-        //         selectedSource = "all_sources";
-        //         DOM.imageGallerySourceFilter.value = selectedSource;
-        //     //    _setYearFilterOptions();
-        //     }
-        //     // function _handleSourceFilterChange() {
-
-        //     //     selectedSource = DOM.imageGallerySourceFilter.value;
-        //     //     _setYearFilterOptions();
-        //     // }
-        //     // function _setYearFilterOptions() {
-
-        //     //     DOM.imageGalleryYearFilter.innerHTML = '';
-        //     //     const option = document.createElement('option');
-        //     //     option.value = "0";       
-        //     //     option.textContent = "Select Year";
-        //     //     option.disabled = true;
-        //     //     option.selected = true;
-        //     //     DOM.imageGalleryYearFilter.appendChild(option);
-
-        //     //     let years = [];
-        //     //     Object.keys(metaData[selectedSource]).forEach(year => {
-        //     //         years.push(year);
-        //     //     });
-        //     //     years.sort((a, b) => a - b);
-
-        //     //     years.forEach(year => {
-        //     //         const option = document.createElement('option');
-        //     //         option.value = year;
-        //     //         option.textContent = year;
-        //     //         DOM.imageGalleryYearFilter.appendChild(option);
-        //     //     });
-                
-        //     //     selectedYear = years[Math.floor(Math.random() * years.length)];
-        //     //     DOM.imageGalleryYearFilter.value = selectedYear;
-        //     //     _setMonthFilterOptions();
-        //     // }
-
-        //     // function _handleYearFilterChange() {
-        //     //     selectedYear = DOM.imageGalleryYearFilter.value;
-        //     //     _setMonthFilterOptions();
-        //     // }
-
-        //     // function _setMonthFilterOptions() {
-        //     //     const monthFilter = DOM.imageGalleryMonthFilter;
-        //     //     monthFilter.innerHTML = '';
-        //     //     const option = document.createElement('option');
-        //     //     option.value = "0";       
-        //     //     option.textContent = "Select Month";
-        //     //     option.disabled = true;
-        //     //     option.selected = true;
-        //     //     monthFilter.appendChild(option);
-
-        //     //     let months = [];
-        //     //     Object.keys(metaData[selectedSource][selectedYear]).forEach(month => {
-        //     //         months.push(month);
-        //     //     });
-        //     //     months.sort((a, b) => a - b);
-
-        //     //     months.forEach(month => {
-        //     //         const option = document.createElement('option');
-        //     //         option.value = month;
-        //     //         option.textContent = month;
-        //     //         monthFilter.appendChild(option);
-        //     //     });
-        //     //     selectedMonth = months[Math.floor(Math.random() * months.length)];
-        //     //     DOM.imageGalleryMonthFilter.value = selectedMonth;
-        //     //     _renderImageGalleryList();
-        //     // }
-
-        //     // function _handleMonthFilterChange() {
-        //     //     selectedMonth = DOM.imageGalleryMonthFilter.value;
-        //     //     _renderImageGalleryList();
-        //     // }
-        //     // function _handleLocationFilterChange() {
-        //     //     let selectedLocation = DOM.imageGalleryLocationFilter.value;
-        //     //     if (selectedLocation === 'aus' 
-        //     //         || selectedLocation === 'dxb' 
-        //     //         || selectedLocation === 'mea' 
-        //     //         || selectedLocation === 'eur' 
-        //     //         || selectedLocation === 'usa' 
-        //     //         || selectedLocation === 'can'
-        //     //         || selectedLocation === 'nz' 
-        //     //         || selectedLocation === 'sa' 
-        //     //         || selectedLocation === 'af' 
-        //     //         || selectedLocation === 'asia'
-        //     //         || selectedLocation === 'oth'
-        //     //     ) {
-
-        //     //         DOM.imageGallerySourceFilter.value = "all";
-        //     //         selectedSource = "all";
-        //     //         DOM.imageGallerySourceFilter.disabled = true;
-
-        //     //         DOM.imageGalleryYearFilter.value = "0";
-        //     //         selectedYear = "0";
-        //     //         DOM.imageGalleryYearFilter.disabled = true;
-
-        //     //         DOM.imageGalleryMonthFilter.value = "0";
-        //     //         selectedMonth = "0";
-        //     //         DOM.imageGalleryMonthFilter.disabled = true;
-        //     //     } else {
-        //     //         DOM.imageGallerySourceFilter.disabled = false;
-        //     //         DOM.imageGalleryYearFilter.disabled = false;
-        //     //         DOM.imageGalleryMonthFilter.disabled = false;
-        //     //     }
-
-        //     //     _renderImageGalleryList();
-        //     // }
-
-        //     function _handleSearch() {
-              
-        //         _renderImageGalleryList();
-        //     }
-        //     function _handleClear() {
-        //         DOM.imageGallerySearch.value = '';
-        //         DOM.imageGallerySourceFilter.value = 'all_sources';
-        //         DOM.imageGalleryYearFilter.value = '0';
-        //         DOM.imageGalleryMonthFilter.value = '0';
-        //         DOM.imageGalleryLocationFilter.value = 'all';
-        //         searchQuery = '';
-        //         DOM.imageGallerySourceFilter.disabled = false;
-        //         DOM.imageGalleryYearFilter.disabled = false;
-        //         DOM.imageGalleryMonthFilter.disabled = false;
-        //         DOM.imageGalleryLocationFilter.disabled = false;
-
-        //         DOM.imageGalleryList.innerHTML = '';
-
-        //         DOM.imageGalleryImage.style.display = 'none';
-        //         DOM.imageGalleryVideoContainer.style.display = 'none';
-        //         DOM.imageGalleryAudioContainer.style.display = 'none';
-        //         DOM.imageGalleryPdfContainer.style.display = 'none'
-
-        //         DOM.imageGalleryImageDetails.innerHTML = "";
-        //         DOM.imageGalleryMap.style.display = 'none';
-        //         DOM.imageGalleryFixedBtn.style.display = 'none';
-        //         DOM.downloadImageGalleryBtn.style.display = 'none';
-
-        //     }
-
-        //     function _renderImageGalleryList() {
-        //         DOM.imageGalleryList.innerHTML = '';
-
-        //         selectedSource = DOM.imageGallerySourceFilter.value;
-        //         selectedYear = DOM.imageGalleryYearFilter.value;
-        //         selectedMonth = DOM.imageGalleryMonthFilter.value;
-        //         selectedLocation = DOM.imageGalleryLocationFilter.value;
-        //         searchQuery = DOM.imageGallerySearch.value;
-
-          
-        //         let url = '/imagesmetadata?placeholder=true';
-                
-                
-        //         if (searchQuery) {
-        //             url += `&like=${encodeURIComponent(searchQuery)}`;
-        //         } else {
-        //                 url = '/imagesmetadata?source='+selectedSource;
-        //                 url += '&year='+selectedYear;
-        //                 url += '&month='+selectedMonth;
-        //                 url += '&location='+selectedLocation;
-        //         }
-
-        //         url = url.replaceAll(" ", "%20");
- 
-        //         fetch(url)
-        //         .then(r => r.json())
-        //         .then(data => {
-        //             imageData = data.images;
-        //             _renderImages();
-        //         });
-        //     }
-
-        //     function _renderImages() {
-        //         // Clear existing images
-        //         DOM.imageGalleryList.innerHTML = '';
-
-        //         // Create an Intersection Observer
-        //         const observer = new IntersectionObserver((entries) => {
-        //             entries.forEach(entry => {
-        //                 if (entry.isIntersecting) {
-        //                     const img = entry.target.querySelector('img');
-        //                     if (img && img.dataset.src) {
-        //                         img.src = img.dataset.src;
-        //                         img.removeAttribute('data-src');
-        //                     }
-        //                     observer.unobserve(entry.target);
-        //                 }
-        //             });
-        //         }, {
-        //             root: DOM.imageGalleryList,
-        //             threshold: 0.1
-        //         });
-
-        //         imageData.forEach((image, idx) => {
-
-        //                 const imageDiv = document.createElement('div');
-        //                 if (image.has_gps) {
-        //                     imageDiv.classList.add('image-gallery-has-gps');
-        //                 } else {
-        //                     imageDiv.classList.add('image-gallery-has-no-gps');
-        //                 }
-                       
-        //                 // Use data-src for lazy loading
-        //                 imageDiv.innerHTML = `<img data-src="/getImage?preview=true&id=${image.file_id}&resize_to=100" alt="${image.file.split('\\').pop()}" loading="lazy">`;
-        //                 imageDiv.addEventListener('click', () => _selectImage(idx));
-        //                 DOM.imageGalleryList.appendChild(imageDiv);
-                        
-        //                 // Start observing the new image div
-        //                 observer.observe(imageDiv);
-        //         });
-        //     }
-
-        //     function _selectImage(idx) {
-        //         selectedIdx = idx;
-        //         let src = `/getImage?id=${imageData[idx].file_id}`;
-                
-        //         // Store current file information for download
-        //         currentImageGalleryFileInfo = {
-        //             filename: imageData[idx].file,
-        //             file_id: imageData[idx].file_id,
-        //             date_taken: imageData[idx].date_taken
-        //         };
-                
-        //         DOM.imageGalleryInstructions.style.display = 'none';
-        //         DOM.imageGalleryFixedBtn.style.display = 'block';
-
-        //         //stop playing any audio or video
-        //         DOM.imageGalleryAudioPlayer.pause();
-        //         DOM.imageGalleryVideoPlayer.pause();
-        //         DOM.imageGalleryAudioPlayer.currentTime = 0;
-        //         DOM.imageGalleryVideoPlayer.currentTime = 0;
-
-        //         if (imageData[idx].file.endsWith('.mp4')) {
-        //             DOM.imageGalleryImage.style.display = 'none';
-        //             DOM.imageGalleryAudioContainer.style.display = 'none';
-        //             DOM.imageGalleryPdfContainer.style.display = 'none';
-        //             DOM.imageGalleryVideoContainer.style.display = 'block';
-        //             DOM.imageGalleryVideoPlayer.src = src;
-        //             // Reset video to beginning when selecting a new one
-        //             DOM.imageGalleryVideoPlayer.currentTime = 0;
-        //         } else if (imageData[idx].file.endsWith('.opus') || imageData[idx].file.endsWith('.m4a') || imageData[idx].file.endsWith('.mp3') || imageData[idx].file.endsWith('.wav')) {
-        //             DOM.imageGalleryImage.style.display = 'none';
-        //             DOM.imageGalleryVideoContainer.style.display = 'none';
-        //             DOM.imageGalleryPdfContainer.style.display = 'none';
-        //             DOM.imageGalleryAudioContainer.style.display = 'block';
-        //             DOM.imageGalleryAudioPlayer.src = src;
-        //             // Reset audio to beginning when selecting a new one
-        //             DOM.imageGalleryAudioPlayer.currentTime = 0;
-        //         } else if (imageData[idx].file.toLowerCase().endsWith('.pdf')) {
-        //             DOM.imageGalleryImage.style.display = 'none';
-        //             DOM.imageGalleryVideoContainer.style.display = 'none';
-        //             DOM.imageGalleryAudioContainer.style.display = 'none';
-        //             DOM.imageGalleryPdfContainer.style.display = 'block';
-        //             // Use the PDF viewer to display the PDF
-        //             DOM.imageGalleryPdfViewer.src = src;
-        //         } else {
-        //             DOM.imageGalleryImage.style.display = 'block';
-        //             DOM.imageGalleryAudioContainer.style.display = 'none';
-        //             DOM.imageGalleryVideoContainer.style.display = 'none';
-        //             DOM.imageGalleryPdfContainer.style.display = 'none';
-        //             DOM.imageGalleryImage.src = src;
-        //         }
-                
-        //         try {
-        //             DOM.imageGalleryImageDetails.innerHTML = "<p style='font-size: 14px;margin-top: 2px;margin-bottom:1px'>"+imageData[idx].file+"</p><p style='font-size: 14px;margin-top: 3px;;margin-bottom:1px'>Taken: "+imageData[idx].date_taken+"</p>";
-        //         } catch (e) {
-        //             console.error('Error setting image details:', e);
-        //             DOM.imageGalleryImageDetails.innerHTML = "<p>Error</p>";
-        //         }
-
-        //         if (imageData[idx].has_gps) {
-        //             DOM.imageGalleryMap.style.display = 'block';
-        //             map.setView([imageData[idx].latitude, imageData[idx].longitude], 15);
-        //             // Remove previous marker if it exists
-        //             if (currentMarker) {
-        //                 map.removeLayer(currentMarker);
-        //             }
-        //             currentMarker = L.marker([imageData[idx].latitude, imageData[idx].longitude]).addTo(map);
-        //         }
-        //         else {
-        //             DOM.imageGalleryMap.style.display = 'none';
-        //             DOM.imageGalleryFixedBtn.style.display = 'none';
-        //         }
-        //     }
-
-        //     function _openGeoMapInNewTab() {
-        //         try {
-        //             let url = "https://www.google.com/maps?q="+imageData[selectedIdx].latitude+","+imageData[selectedIdx].longitude;
-        //             window.open(url, '_googleMaps');
-        //         } catch (e) {
-        //             console.error('Error opening geo map in new tab:', e);
-        //         }
-        //     }
-
-        //     function _downloadCurrentImageGalleryItem() {
-        //         if (!currentImageGalleryFileInfo) {
-        //             console.error('No file information available for download');
-        //             return;
-        //         }
-
-        //         const { filename, file_id } = currentImageGalleryFileInfo;
-                
-        //         // Use the download endpoint for all file types
-        //         let downloadUrl = `/downloadFile?id=${file_id}`;
-
-        //         // Create a temporary link element to trigger download
-        //         const link = document.createElement('a');
-        //         link.href = downloadUrl;
-        //         link.download = filename || 'download';
-        //         link.target = '_blank';
-                
-        //         // Append to body, click, and remove
-        //         document.body.appendChild(link);
-        //         link.click();
-        //         document.body.removeChild(link);
-        //     }
-
-        //     function close() {
-        //         DOM.imageGalleryAudioPlayer.pause();
-        //         DOM.imageGalleryVideoPlayer.pause();
-        //         DOM.imageGalleryAudioPlayer.currentTime = 0;
-        //         DOM.imageGalleryVideoPlayer.currentTime = 0;
-        //         // Clear PDF viewer
-        //         if (DOM.imageGalleryPdfViewer) {
-        //             DOM.imageGalleryPdfViewer.src = '';
-        //         }
-        //         // Clear current file info
-        //         currentImageGalleryFileInfo = null;
-        //     }
-
-        //     return { init, open, close };
-        // })(),
 
         EmailGallery: (() => {
             let emailData = [];
@@ -3315,6 +2889,54 @@ document.addEventListener('DOMContentLoaded', () => {
                 DOM.emailGalleryAttachmentsFilter.checked = false;
                 DOM.emailGalleryList.innerHTML = '';
                 DOM.emailGalleryEmailContent.style.display = 'none';
+
+                // Repopulate the year filter select with all the years from 1990 to 2040
+                if (DOM.emailGalleryYearFilter) {
+                    DOM.emailGalleryYearFilter.innerHTML = '';
+                    
+                    // Add "All Years" option
+                    const allYearsOption = document.createElement('option');
+                    allYearsOption.value = '0';
+                    allYearsOption.textContent = 'All Years';
+                    DOM.emailGalleryYearFilter.appendChild(allYearsOption);
+                    
+                    // Add years from 2040 down to 1990 (descending order)
+                    for (let year = 2040; year >= 1990; year--) {
+                        const option = document.createElement('option');
+                        option.value = year.toString();
+                        option.textContent = year.toString();
+                        DOM.emailGalleryYearFilter.appendChild(option);
+                    }
+                }
+                
+                // Repopulate the month filter select with all months
+                if (DOM.emailGalleryMonthFilter) {
+                    DOM.emailGalleryMonthFilter.innerHTML = '';
+                    
+                    const months = [
+                        { value: 0, text: 'All Months' },
+                        { value: 1, text: 'January' },
+                        { value: 2, text: 'February' },
+                        { value: 3, text: 'March' },
+                        { value: 4, text: 'April' },
+                        { value: 5, text: 'May' },
+                        { value: 6, text: 'June' },
+                        { value: 7, text: 'July' },
+                        { value: 8, text: 'August' },
+                        { value: 9, text: 'September' },
+                        { value: 10, text: 'October' },
+                        { value: 11, text: 'November' },
+                        { value: 12, text: 'December' }
+                    ];
+                    
+                    months.forEach(month => {
+                        const option = document.createElement('option');
+                        option.value = month.value.toString();
+                        option.textContent = month.text;
+                        DOM.emailGalleryMonthFilter.appendChild(option);
+                    });
+                }
+                
                 //DOM.emailGalleryFolderFilter.value = 'all';
                 
                 // Reset pagination for clear
@@ -3890,104 +3512,89 @@ ${textContent}
                 // Open the Email Gallery modal
                 DOM.emailGalleryModal.style.display = 'flex';
                 
-                // Helper function to load emails and find the target email
-                async function loadAndFindEmail(clearFilters = false) {
-                    return new Promise((resolve, reject) => {
-                        if (clearFilters) {
-                            // Clear all filters to load all emails
-                            DOM.emailGallerySearch.value = '';
-                            DOM.emailGallerySender.value = '';
-                            DOM.emailGalleryRecipient.value = '';
-                            DOM.emailGalleryToFrom.value = '';
-                            DOM.emailGalleryYearFilter.value = '0';
-                            DOM.emailGalleryMonthFilter.value = '0';
-                            DOM.emailGalleryAttachmentsFilter.checked = false;
-                        }
-                        
-                        // Build query parameters
-                        const params = new URLSearchParams();
-                        const searchTerm = DOM.emailGallerySearch.value.trim();
-                        const senderFilter = DOM.emailGallerySender.value.trim();
-                        const recipientFilter = DOM.emailGalleryRecipient.value.trim();
-                        const toFromFilter = DOM.emailGalleryToFrom.value.trim();
-                        const yearFilter = DOM.emailGalleryYearFilter.value;
-                        const monthFilter = DOM.emailGalleryMonthFilter.value;
-                        const attachmentsFilter = DOM.emailGalleryAttachmentsFilter.checked;
-                        
-                        if (searchTerm) {
-                            params.append('subject', searchTerm);
-                        }
-                        if (senderFilter) {
-                            params.append('from_address', senderFilter);
-                        }
-                        if (recipientFilter) {
-                            params.append('to_address', recipientFilter);
-                        }
-                        if (toFromFilter) {
-                            params.append('to_from', toFromFilter);
-                        }
-                        if (yearFilter && yearFilter !== '0' && yearFilter !== '') {
-                            params.append('year', yearFilter);
-                        }
-                        if (monthFilter && monthFilter !== '0' && monthFilter !== '') {
-                            params.append('month', monthFilter);
-                        }
-                        if (attachmentsFilter) {
-                            params.append('has_attachments', 'true');
-                        }
-                        
-                        fetch('/emails/search?' + params.toString())
-                        .then(r => r.json())
-                        .then(data => {
-                            // Transform response to match expected format
-                            emailData = data.map(email => ({
-                                id: email.id,
-                                subject: email.subject || 'No Subject',
-                                sender: email.from_address || 'Unknown Sender',
-                                recipient: email.to_addresses || 'Unknown Recipient',
-                                date: email.date ? formatDateAustralian(email.date) : 'No Date',
-                                folder: email.folder || 'Unknown Folder',
-                                body: email.snippet || 'No content',
-                                preview: email.snippet || 'No preview',
-                                attachments: email.attachment_ids.map(id => `/attachments/${id}`),
-                                emailId: email.id // Store email ID for fetching full content
-                            }));
-                            _renderEmailList();
-                            _showInstructions();
-                            
-                            // Find email index by ID
-                            const emailIndex = emailData.findIndex(email => 
-                                (email.emailId === emailId) || (email.id === emailId)
-                            );
-                            
-                            resolve(emailIndex);
-                        })
-                        .catch(error => {
-                            console.error('Error loading emails:', error);
-                            reject(error);
-                        });
-                    });
-                }
-                
                 try {
-                    // First try with current filters
-                    let emailIndex = await loadAndFindEmail(false);
-                    
-                    // If not found, clear filters and try again
-                    if (emailIndex === -1) {
-                        emailIndex = await loadAndFindEmail(true);
+                    // First, fetch the email metadata to get its properties
+                    const metadataResponse = await fetch(`/emails/${emailId}/metadata`);
+                    if (!metadataResponse.ok) {
+                        throw new Error(`Failed to fetch email metadata: ${metadataResponse.status}`);
                     }
+                    
+                    const emailMetadata = await metadataResponse.json();
+                    
+                    // Extract date information
+                    let year = 0;
+                    let month = 0;
+                    if (emailMetadata.date) {
+                        const emailDate = new Date(emailMetadata.date);
+                        if (!isNaN(emailDate.getTime())) {
+                            year = emailDate.getFullYear();
+                            month = emailDate.getMonth() + 1; // JavaScript months are 0-indexed
+                        }
+                    }
+                    
+                    // Set filters to match the email's properties
+                    DOM.emailGallerySearch.value = '';
+                    DOM.emailGallerySender.value = emailMetadata.from_address || '';
+                    DOM.emailGalleryRecipient.value = '';
+                    DOM.emailGalleryToFrom.value = emailMetadata.from_address || '';
+                    DOM.emailGalleryYearFilter.value = year > 0 ? year.toString() : '0';
+                    DOM.emailGalleryMonthFilter.value = month > 0 ? month.toString() : '0';
+                    DOM.emailGalleryAttachmentsFilter.checked = false;
+                    
+                    // Build query parameters based on the email's properties
+                    const params = new URLSearchParams();
+                    if (emailMetadata.from_address) {
+                        params.append('from_address', emailMetadata.from_address);
+                    }
+                    if (year > 0) {
+                        params.append('year', year.toString());
+                    }
+                    if (month > 0) {
+                        params.append('month', month.toString());
+                    }
+                    
+                    // Load emails with filters matching the email
+                    const searchResponse = await fetch('/emails/search?' + params.toString());
+                    if (!searchResponse.ok) {
+                        throw new Error(`Failed to search emails: ${searchResponse.status}`);
+                    }
+                    
+                    const data = await searchResponse.json();
+                    
+                    // Transform response to match expected format
+                    emailData = data.map(email => ({
+                        id: email.id,
+                        subject: email.subject || 'No Subject',
+                        sender: email.from_address || 'Unknown Sender',
+                        recipient: email.to_addresses || 'Unknown Recipient',
+                        date: email.date ? formatDateAustralian(email.date) : 'No Date',
+                        folder: email.folder || 'Unknown Folder',
+                        body: email.snippet || 'No content',
+                        preview: email.snippet || 'No preview',
+                        attachments: email.attachment_ids.map(id => `/attachments/${id}`),
+                        emailId: email.id // Store email ID for fetching full content
+                    }));
+                    
+                    _renderEmailList();
+                    _showInstructions();
+                    
+                    // Find email index by ID
+                    const emailIndex = emailData.findIndex(email => 
+                        (email.emailId === emailId) || (email.id === emailId)
+                    );
                     
                     if (emailIndex !== -1) {
                         _selectEmail(emailIndex);
                         _scrollToSelectedEmail();
                     } else {
-                        console.warn(`Email with ID ${emailId} not found`);
+                        console.warn(`Email with ID ${emailId} not found in filtered results`);
                         // Show instructions since email wasn't found
                         _showInstructions();
                     }
                 } catch (error) {
-                    console.error('Error loading emails:', error);
+                    console.error('Error loading email:', error);
+                    alert('Failed to load email. Please try again.');
+                    _showInstructions();
                 }
             }
 
@@ -5653,6 +5260,8 @@ ${textContent}
                         return; // Don't open image detail modal
                     }
                 }
+
+
                 
                 currentImageInModal = image;
                 
@@ -5695,7 +5304,50 @@ ${textContent}
                 DOM.newImageDetailNotes.textContent = image.notes || 'N/A';
                 DOM.newImageDetailDate.textContent = formatDate(image.year, image.month);
                 DOM.newImageDetailImageType.textContent = image.media_type || image.image_type || 'N/A';
-                DOM.newImageDetailSource.textContent = image.source || 'N/A';
+                
+                // Source: Show button if not "Filesystem", otherwise show text
+                const sourceValue = image.source || 'N/A';
+                DOM.newImageDetailSource.innerHTML = '';
+                if (sourceValue && sourceValue !== 'N/A' && sourceValue.toLowerCase() !== 'filesystem') {
+                    const openSourceButton = document.createElement('button');
+                    openSourceButton.type = 'button';
+                    openSourceButton.className = 'modal-btn modal-btn-secondary';
+                    openSourceButton.style.cssText = 'padding: 0.3em 0.8em; font-size: 0.85em;';
+                    openSourceButton.textContent = 'Open Source ('+sourceValue+')';
+                    openSourceButton.onclick = function(e) {
+
+
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        // Handle email-attachment source
+                        if (sourceValue.toLowerCase() === 'email_attachment' || sourceValue.toLowerCase() === 'email') {
+                            if (image.source_reference) {
+                                const emailId = parseInt(image.source_reference);
+                                if (!isNaN(emailId)) {
+                                    // Open email gallery and select the email
+                                    Modals.ImageDetailModal.close();
+                                    Modals.EmailGallery.openAndSelectEmail(emailId);
+                                } else {
+                                    console.error('Invalid email ID in source_reference:', image.source_reference);
+                                    alert('Unable to open email: Invalid email ID');
+                                }
+                            } else {
+                                console.error('No source_reference found for email attachment');
+                                alert('Unable to open email: No email reference found');
+                            }
+                        } else if (sourceValue.toLowerCase() === 'message_attachment' || sourceValue.toLowerCase() === 'whatsapp') {
+                            //Open the SMS Messages modal and select the conversation
+                            Modals.ImageDetailModal.close();
+                            Modals.SMSMessages.openAndSelectConversation(image.source_reference);
+                        } 
+                        // Add other source types here as needed
+                    };
+                    DOM.newImageDetailSource.appendChild(openSourceButton);
+                } else {
+                    DOM.newImageDetailSource.textContent = sourceValue;
+                }
+                
                 DOM.newImageDetailSourceReference.textContent = image.source_reference || 'N/A';
                 DOM.newImageDetailRegion.textContent = image.region || 'N/A';
                 DOM.newImageDetailAvailableForTask.textContent = image.available_for_task ? 'Yes' : 'No';
@@ -6461,6 +6113,11 @@ ${textContent}
                     const isIncoming = message.type === 'Incoming';
                     messageDiv.className = `sms-message ${isIncoming ? 'incoming' : 'outgoing'}`;
                     
+                    // Add ID to message div for scrolling to specific messages
+                    if (message.id) {
+                        messageDiv.id = `message-${message.id}`;
+                    }
+                    
                     // Add spacing between message groups
                     if (index > 0) {
                         const prevMessage = messages[index - 1];
@@ -7093,11 +6750,72 @@ ${textContent}
                                 }
                             }
                         }
-                    });
-                    
-                    loadChatSessions();
+                    });      
                 }
             }
+            async function openAndSelectConversation(messageID){
+                // Open the modal first
+                open();
+                
+                try {
+                    // Retrieve the message metadata by messageID
+                    const messageResponse = await fetch(`/imessages/${messageID}/metadata`);
+                    if (!messageResponse.ok) {
+                        throw new Error(`Failed to fetch message metadata: ${messageResponse.status}`);
+                    }
+                    
+                    const messageMetadata = await messageResponse.json();
+                    const chatSession = messageMetadata.chat_session;
+                    
+                    if (!chatSession) {
+                        console.error('Message metadata does not contain chat_session');
+                        alert('Unable to open conversation: Message has no chat session');
+                        return;
+                    }
+                    
+                    // Load chat sessions if not already loaded
+                    if (chatSessions.length === 0) {
+                        await loadChatSessions();
+                    }
+                    
+                    // Wait a bit for the DOM to update after loading sessions
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    // Find the conversation by chat_session name
+                    const conversation = chatSessions.find(s => s.chat_session === chatSession);
+                    
+                    if (conversation) {
+                        // Select the conversation (this loads and displays messages)
+                        await selectChatSession(chatSession);
+                        
+                        // Wait for messages to be rendered in the DOM
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                        
+                        // Scroll to the specific message
+                        const message = document.getElementById('message-'+messageID);
+                        if (message) {
+                            message.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        } else {
+                            console.warn(`Message with ID ${messageID} not found in DOM`);
+                        }
+                    } else {
+                        console.warn(`Conversation with chat_session "${chatSession}" not found`);
+                        // Still render sessions even if the specific one isn't found
+                        renderChatSessions();
+                        alert(`Conversation "${chatSession}" not found in the list`);
+                    }
+                } catch (error) {
+                    console.error('Error opening conversation:', error);
+                    alert('Failed to open conversation. Please try again.');
+                    // Still render sessions on error
+                    if (chatSessions.length === 0) {
+                        await loadChatSessions();
+                    } else {
+                        renderChatSessions();
+                    }
+                }
+            }
+            
 
             function close() {
                 const modal = document.getElementById('sms-messages-modal');
@@ -7106,7 +6824,7 @@ ${textContent}
                 }
             }
 
-            return { init, open, close };
+            return { init, open, close,openAndSelectConversation };
         })(),
 
         ChangeUserId: (() => {
@@ -7807,6 +7525,8 @@ ${textContent}
                     }
                     
                     await loadDocuments();
+                    // Reset notification flag when document is deleted
+                    Modals.ReferenceDocumentsNotification.reset();
                 } catch (error) {
                     console.error("Failed to delete document:", error);
                     alert('Failed to delete document: ' + error.message);
@@ -7908,6 +7628,8 @@ ${textContent}
                             Modals._closeModal(DOM.referenceDocumentsUploadModal);
                             DOM.referenceDocumentsUploadForm.reset();
                             await loadDocuments();
+                            // Reset notification flag when document is added
+                            Modals.ReferenceDocumentsNotification.reset();
                         } catch (error) {
                             console.error("Failed to upload document:", error);
                             alert('Failed to upload document: ' + error.message);
@@ -7958,6 +7680,8 @@ ${textContent}
                             
                             Modals._closeModal(DOM.referenceDocumentsEditModal);
                             await loadDocuments();
+                            // Reset notification flag when document is edited
+                            Modals.ReferenceDocumentsNotification.reset();
                         } catch (error) {
                             console.error("Failed to update document:", error);
                             alert('Failed to update document: ' + error.message);
@@ -7978,6 +7702,191 @@ ${textContent}
             return { init, open, close };
         })(),
 
+        ReferenceDocumentsNotification: (() => {
+            let proceedCallback = null;
+            const STORAGE_KEY = 'reference_documents_notification_shown';
+            const STORAGE_KEY_DOCS_HASH = 'reference_documents_hash';
+
+            async function fetchReferenceDocuments() {
+                try {
+                    // Fetch all reference documents (not just those with available_for_task=true)
+                    const response = await fetch('/reference-documents');
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error fetching reference documents:', error);
+                    return [];
+                }
+            }
+
+            function getDocumentsHash(documents) {
+                // Create a hash of all document IDs and their available_for_task status
+                const allDocs = documents
+                    .map(doc => `${doc.id}:${doc.available_for_task}`)
+                    .sort()
+                    .join(',');
+                return allDocs;
+            }
+
+            function renderDocumentsList(documents) {
+                if (!DOM.referenceDocumentsNotificationList) return;
+
+                if (documents.length === 0) {
+                    DOM.referenceDocumentsNotificationList.innerHTML = 
+                        '<div style="text-align: center; padding: 1rem; color: #666;">No reference documents found.</div>';
+                    return;
+                }
+
+                // Separate selected and non-selected documents
+                const selectedDocs = documents.filter(doc => doc.available_for_task === true);
+                const nonSelectedDocs = documents.filter(doc => doc.available_for_task !== true);
+
+                DOM.referenceDocumentsNotificationList.innerHTML = '';
+
+                // Show selected documents section
+                if (selectedDocs.length > 0) {
+                    const sectionHeader = document.createElement('div');
+                    sectionHeader.style.cssText = 'font-weight: 600; color: #28a745; margin-bottom: 0.75rem; margin-top: 0.5rem; font-size: 0.95em;';
+                    sectionHeader.textContent = `Selected for Chat (${selectedDocs.length}):`;
+                    DOM.referenceDocumentsNotificationList.appendChild(sectionHeader);
+
+                    selectedDocs.forEach(doc => {
+                        const docItem = document.createElement('div');
+                        docItem.style.cssText = 'padding: 0.75rem; margin-bottom: 0.5rem; border: 1px solid #28a745; border-radius: 6px; background: #f0f9f4;';
+                        
+                        const title = document.createElement('div');
+                        title.style.cssText = 'font-weight: 600; color: #233366; margin-bottom: 0.25rem;';
+                        title.textContent = doc.title || doc.filename;
+                        
+                        const details = document.createElement('div');
+                        details.style.cssText = 'font-size: 0.85em; color: #666;';
+                        details.textContent = `${doc.filename}${doc.author ? ` • ${doc.author}` : ''}`;
+                        
+                        docItem.appendChild(title);
+                        docItem.appendChild(details);
+                        DOM.referenceDocumentsNotificationList.appendChild(docItem);
+                    });
+                }
+
+                // Show non-selected documents section
+                if (nonSelectedDocs.length > 0) {
+                    const sectionHeader = document.createElement('div');
+                    sectionHeader.style.cssText = 'font-weight: 600; color: #6c757d; margin-bottom: 0.75rem; margin-top: 1rem; font-size: 0.95em;';
+                    sectionHeader.textContent = `Not Selected (${nonSelectedDocs.length}):`;
+                    DOM.referenceDocumentsNotificationList.appendChild(sectionHeader);
+
+                    nonSelectedDocs.forEach(doc => {
+                        const docItem = document.createElement('div');
+                        docItem.style.cssText = 'padding: 0.75rem; margin-bottom: 0.5rem; border: 1px solid #e9ecef; border-radius: 6px; background: #f8f9fa; opacity: 0.7;';
+                        
+                        const title = document.createElement('div');
+                        title.style.cssText = 'font-weight: 600; color: #6c757d; margin-bottom: 0.25rem;';
+                        title.textContent = doc.title || doc.filename;
+                        
+                        const details = document.createElement('div');
+                        details.style.cssText = 'font-size: 0.85em; color: #999;';
+                        details.textContent = `${doc.filename}${doc.author ? ` • ${doc.author}` : ''}`;
+                        
+                        docItem.appendChild(title);
+                        docItem.appendChild(details);
+                        DOM.referenceDocumentsNotificationList.appendChild(docItem);
+                    });
+                }
+
+                // Show message if no documents are selected
+                if (selectedDocs.length === 0) {
+                    const noSelectionMsg = document.createElement('div');
+                    noSelectionMsg.style.cssText = 'text-align: center; padding: 1rem; color: #dc3545; font-style: italic; margin-top: 0.5rem;';
+                    noSelectionMsg.textContent = 'No documents are currently set to be included in chat.';
+                    DOM.referenceDocumentsNotificationList.appendChild(noSelectionMsg);
+                }
+            }
+
+            async function checkAndShow(callback) {
+                proceedCallback = callback;
+                
+                // Check if we should show the notification
+                const documents = await fetchReferenceDocuments();
+                
+                const currentHash = getDocumentsHash(documents);
+                const storedHash = localStorage.getItem(STORAGE_KEY_DOCS_HASH);
+                const hasShownBefore = localStorage.getItem(STORAGE_KEY) === 'true';
+                
+                // Show if:
+                // 1. User hasn't seen it before, OR
+                // 2. Documents have changed (hash differs)
+                const shouldShow = !hasShownBefore || (storedHash !== currentHash);
+                
+                if (shouldShow) {
+                    renderDocumentsList(documents);
+                    open();
+                    // Update hash after showing
+                    localStorage.setItem(STORAGE_KEY_DOCS_HASH, currentHash);
+                } else {
+                    // No need to show, proceed directly
+                    if (callback) callback();
+                }
+            }
+
+            function open() {
+                if (DOM.referenceDocumentsNotificationModal) {
+                    DOM.referenceDocumentsNotificationModal.style.display = 'flex';
+                }
+            }
+
+            function close() {
+                if (DOM.referenceDocumentsNotificationModal) {
+                    DOM.referenceDocumentsNotificationModal.style.display = 'none';
+                }
+                proceedCallback = null;
+            }
+
+            function proceed() {
+                // Mark as shown
+                localStorage.setItem(STORAGE_KEY, 'true');
+                close();
+                if (proceedCallback) {
+                    proceedCallback();
+                }
+            }
+
+            function cancel() {
+                close();
+                // Don't mark as shown if user cancels
+            }
+
+            function reset() {
+                // Reset the flag when documents change
+                localStorage.removeItem(STORAGE_KEY);
+            }
+
+            function init() {
+                if (DOM.closeReferenceDocumentsNotificationModalBtn) {
+                    DOM.closeReferenceDocumentsNotificationModalBtn.addEventListener('click', cancel);
+                }
+                
+                if (DOM.referenceDocumentsNotificationCancelBtn) {
+                    DOM.referenceDocumentsNotificationCancelBtn.addEventListener('click', cancel);
+                }
+                
+                if (DOM.referenceDocumentsNotificationProceedBtn) {
+                    DOM.referenceDocumentsNotificationProceedBtn.addEventListener('click', proceed);
+                }
+                
+                if (DOM.referenceDocumentsNotificationModal) {
+                    DOM.referenceDocumentsNotificationModal.addEventListener('click', (e) => {
+                        if (e.target === DOM.referenceDocumentsNotificationModal) {
+                            cancel();
+                        }
+                    });
+                }
+            }
+
+            return { init, checkAndShow, reset };
+        })(),
+
         initAll: () => {
             Modals.Suggestions.init();
             Modals.FBAlbums.init();
@@ -7996,6 +7905,90 @@ ${textContent}
             Modals.ChangeUserId.init();
             Modals.ConversationSummary.init();
             Modals.AddInterviewee.init();
+            Modals.ReferenceDocumentsNotification.init();
+        },
+
+        closeAll: () => {
+            // Close all modals that have a close function
+            try {
+                if (Modals.Suggestions && Modals.Suggestions.close) Modals.Suggestions.close();
+            } catch (e) { console.debug('Error closing Suggestions modal:', e); }
+            
+            try {
+                if (Modals.FBAlbums && Modals.FBAlbums.close) Modals.FBAlbums.close();
+            } catch (e) { console.debug('Error closing FBAlbums modal:', e); }
+            
+            try {
+                if (Modals.EmailGallery && Modals.EmailGallery.close) Modals.EmailGallery.close();
+            } catch (e) { console.debug('Error closing EmailGallery modal:', e); }
+            
+            try {
+                if (Modals.EmailEditor && Modals.EmailEditor.close) Modals.EmailEditor.close();
+            } catch (e) { console.debug('Error closing EmailEditor modal:', e); }
+            
+            try {
+                if (Modals.NewImageGallery && Modals.NewImageGallery.close) Modals.NewImageGallery.close();
+            } catch (e) { console.debug('Error closing NewImageGallery modal:', e); }
+            
+            try {
+                if (Modals.ImageDetailModal && Modals.ImageDetailModal.close) Modals.ImageDetailModal.close();
+            } catch (e) { console.debug('Error closing ImageDetailModal:', e); }
+            
+            try {
+                if (Modals.ConversationSummary && Modals.ConversationSummary.close) Modals.ConversationSummary.close();
+            } catch (e) { console.debug('Error closing ConversationSummary modal:', e); }
+            
+            try {
+                if (Modals.SMSMessages && Modals.SMSMessages.close) Modals.SMSMessages.close();
+            } catch (e) { console.debug('Error closing SMSMessages modal:', e); }
+            
+            try {
+                if (Modals.ChangeUserId && Modals.ChangeUserId.close) Modals.ChangeUserId.close();
+            } catch (e) { console.debug('Error closing ChangeUserId modal:', e); }
+            
+            try {
+                if (Modals.AddInterviewee && Modals.AddInterviewee.close) Modals.AddInterviewee.close();
+            } catch (e) { console.debug('Error closing AddInterviewee modal:', e); }
+            
+            try {
+                if (Modals.ReferenceDocuments && Modals.ReferenceDocuments.close) Modals.ReferenceDocuments.close();
+            } catch (e) { console.debug('Error closing ReferenceDocuments modal:', e); }
+            
+            try {
+                if (Modals.Locations && Modals.Locations.close) Modals.Locations.close();
+            } catch (e) { console.debug('Error closing Locations modal:', e); }
+            
+            try {
+                if (Modals.ConfirmationModal && Modals.ConfirmationModal.close) Modals.ConfirmationModal.close();
+            } catch (e) { console.debug('Error closing ConfirmationModal:', e); }
+            
+            // Close SingleImageDisplay modal directly via DOM
+            try {
+                if (DOM.singleImageModal) {
+                    Modals._closeModal(DOM.singleImageModal);
+                }
+            } catch (e) { console.debug('Error closing SingleImageDisplay modal:', e); }
+            
+            // Close MultiImageDisplay modal if it exists
+            try {
+                const multiImageModal = document.getElementById('multi-image-modal');
+                if (multiImageModal) {
+                    Modals._closeModal(multiImageModal);
+                }
+            } catch (e) { console.debug('Error closing MultiImageDisplay modal:', e); }
+            
+            // Also close any other modals by checking DOM elements with modal class
+            try {
+                const allModals = document.querySelectorAll('.modal, [class*="modal"], [id*="modal"], [id*="Modal"]');
+                allModals.forEach(modal => {
+                    if (modal && modal.style) {
+                        const display = window.getComputedStyle(modal).display;
+                        if (display === 'flex' || display === 'block') {
+                            modal.style.display = 'none';
+                        }
+                    }
+                });
+            } catch (e) { console.debug('Error closing modals via DOM query:', e); }
         }
     };
 
@@ -8979,49 +8972,53 @@ ${textContent}
         async function processFormSubmit(userPrompt, category = null, title = null, supplementary_prompt = null) {
             if (!userPrompt && !category && !title) return;
 
-            UI.clearError();
-            DOM.infoBox.classList.add('hidden');
-            UI.setControlsEnabled(false);
-            UI.showLoadingIndicator();
+            // Check and show reference documents notification before proceeding
+            await Modals.ReferenceDocumentsNotification.checkAndShow(async () => {
+                // This callback is called when user proceeds
+                UI.clearError();
+                DOM.infoBox.classList.add('hidden');
+                UI.setControlsEnabled(false);
+                UI.showLoadingIndicator();
 
-            const selectedVoice = VoiceSelector.getSelectedVoice();
-            const selectedMood = (selectedVoice === 'dave' && DOM.daveMood) ? DOM.daveMood.value : null;
-            
-            try {
-                const finalMessage = UI.getWorkModePrefix() + userPrompt;
-
-                if (category && title) Chat.addMessage('suggestion', `**${category}:** ${title}`, true);
-                else Chat.addMessage('user', userPrompt, false); // User messages are not markdown by default
+                const selectedVoice = VoiceSelector.getSelectedVoice();
+                const selectedMood = (selectedVoice === 'dave' && DOM.daveMood) ? DOM.daveMood.value : null;
                 
-                DOM.userInput.value = '';
+                try {
+                    const finalMessage = UI.getWorkModePrefix() + userPrompt;
 
-                const currentUserId = localStorage.getItem('userId') || 'default';
-                const response = await ApiService.fetchChat({
-                    prompt: finalMessage,
-                    voice: selectedVoice,
-                    mood: selectedMood,
-                    interviewMode: AppState.isInterviewerMode, // Use interviewer mode state instead of checkbox
-                    companionMode: DOM.companionModeCheckbox ? DOM.companionModeCheckbox.checked : false,
-                    supplementary_prompt: supplementary_prompt,
-                    temperature: parseFloat(DOM.creativityLevel ? DOM.creativityLevel.value : '0'),
-                    clientId: AppState.clientId,
-                    userId:currentUserId
-                });
-                
-                // Non-streaming JSON response handling (original code commented out streaming)
-                const data = await response.json();
-                UI.hideLoadingIndicator(); // Hide after getting response, before adding message
-                if (data.error) UI.displayError(data.error);
-                else Chat.addMessage('assistant', data.response, true, null, data.embedded_json);
+                    if (category && title) Chat.addMessage('suggestion', `**${category}:** ${title}`, true);
+                    else Chat.addMessage('user', userPrompt, false); // User messages are not markdown by default
+                    
+                    DOM.userInput.value = '';
 
-            } catch (error) {
-                console.error('Form submit error:', error);
-                UI.displayError(error.message || 'An unknown error occurred.');
-                // UI.hideLoadingIndicator(); // Already handled in displayError or finally
-            } finally {
-                UI.setControlsEnabled(true);
-                UI.hideLoadingIndicator(); // Ensure it's hidden
-            }
+                    const currentUserId = localStorage.getItem('userId') || 'default';
+                    const response = await ApiService.fetchChat({
+                        prompt: finalMessage,
+                        voice: selectedVoice,
+                        mood: selectedMood,
+                        interviewMode: AppState.isInterviewerMode, // Use interviewer mode state instead of checkbox
+                        companionMode: DOM.companionModeCheckbox ? DOM.companionModeCheckbox.checked : false,
+                        supplementary_prompt: supplementary_prompt,
+                        temperature: parseFloat(DOM.creativityLevel ? DOM.creativityLevel.value : '0'),
+                        clientId: AppState.clientId,
+                        userId:currentUserId
+                    });
+                    
+                    // Non-streaming JSON response handling (original code commented out streaming)
+                    const data = await response.json();
+                    UI.hideLoadingIndicator(); // Hide after getting response, before adding message
+                    if (data.error) UI.displayError(data.error);
+                    else Chat.addMessage('assistant', data.response, true, null, data.embedded_json);
+
+                } catch (error) {
+                    console.error('Form submit error:', error);
+                    UI.displayError(error.message || 'An unknown error occurred.');
+                    // UI.hideLoadingIndicator(); // Already handled in displayError or finally
+                } finally {
+                    UI.setControlsEnabled(true);
+                    UI.hideLoadingIndicator(); // Ensure it's hidden
+                }
+            });
         }
 
         async function handleNewChat() {

@@ -1607,14 +1607,14 @@
                                 <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-title"></span>
                             </div>
                             <div class="new-image-gallery-detail-metadata-row">
-                                <span class="new-image-gallery-detail-metadata-label">Description:</span>
-                                <textarea class="new-image-gallery-detail-metadata-editable" id="new-image-detail-description-edit" rows="3" placeholder="Enter description"></textarea>
-                            </div>
-                            <div class="new-image-gallery-detail-metadata-row">
                                 <span class="new-image-gallery-detail-metadata-label">Author:</span>
                                 <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-author"></span>
                             </div>
-                            <div class="new-image-gallery-detail-metadata-row">
+                            <div class="new-image-gallery-detail-metadata-row new-image-gallery-detail-metadata-row-full">
+                                <span class="new-image-gallery-detail-metadata-label">Description:</span>
+                                <textarea class="new-image-gallery-detail-metadata-editable" id="new-image-detail-description-edit" rows="3" placeholder="Enter description"></textarea>
+                            </div>
+                            <div class="new-image-gallery-detail-metadata-row new-image-gallery-detail-metadata-row-full">
                                 <span class="new-image-gallery-detail-metadata-label">Tags:</span>
                                 <input type="text" class="new-image-gallery-detail-metadata-editable" id="new-image-detail-tags-edit" placeholder="Enter tags (comma-separated)">
                             </div>
@@ -1692,9 +1692,27 @@
                         </div>
                     </div>
                 </div>
+    </div>
+</div>
+
+        <!-- Reference Documents Notification Modal -->
+        <div id="reference-documents-notification-modal" class="modal" style="display: none; position: fixed; z-index: 4000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center;">
+            <div class="modal-content" style="max-width: 700px; width: 90vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 2rem; position: relative;">
+                <button class="modal-close-btn" id="close-reference-documents-notification-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer;">&times;</button>
+                <div style="margin-bottom: 1.5rem;">
+                    <h2 style="margin: 0 0 0.5rem 0; color: #233366; font-size: 1.5em;">Reference Documents</h2>
+                    <p style="margin: 0; color: #666; font-size: 0.95em;">Reference documents that will be included in your chat are shown below. Documents not selected for chat are also listed.</p>
+                </div>
+                <div id="reference-documents-notification-list" style="max-height: 400px; overflow-y: auto; margin-bottom: 1.5rem; border: 1px solid #e9ecef; border-radius: 8px; padding: 1rem;">
+                    <!-- Documents will be listed here -->
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" id="reference-documents-notification-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+                    <button type="button" id="reference-documents-notification-proceed" class="modal-btn modal-btn-primary">Proceed</button>
+                </div>
             </div>
         </div>
-        
+
         <!-- Reference Documents Modal -->
         <div id="reference-documents-modal" class="modal">
             <div class="modal-content reference-documents-modal-content">

@@ -1737,6 +1737,50 @@ async def get_conversation_messages(chat_session: str):
         session.close()
 
 
+@app.get("/imessages/{message_id}/metadata")
+async def get_message_metadata(message_id: int):
+    """Get message metadata by ID.
+    
+    Args:
+        message_id: The ID of the message to retrieve metadata for
+        
+    Returns:
+        Dictionary with message metadata including chat_session
+        
+    Raises:
+        HTTPException: 404 if message not found
+    """
+    session = db.get_session()
+    try:
+        message = session.query(IMessage).filter(IMessage.id == message_id).first()
+        
+        if not message:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Message with ID {message_id} not found"
+            )
+        
+        return {
+            "id": message.id,
+            "chat_session": message.chat_session,
+            "message_date": message.message_date.isoformat() if message.message_date else None,
+            "service": message.service,
+            "type": message.type,
+            "sender_id": message.sender_id,
+            "sender_name": message.sender_name,
+            "text": message.text
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving message metadata: {str(e)}"
+        )
+    finally:
+        session.close()
+
+
 @app.post("/imessages/conversation/{chat_session}/summarize")
 async def summarize_conversation(chat_session: str):
     """Summarize a conversation using Gemini LLM synchronously.
