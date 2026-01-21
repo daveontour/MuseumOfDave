@@ -8636,26 +8636,26 @@ ${textContent}
 
     // --- Application Actions (for dynamic function calls from suggestions.json) ---
     const AppActions = {
-        [CONSTANTS.FUNCTION_NAMES.FirstFunction]: async () => { // getFacebookChatters
-            UI.clearError();
-            DOM.infoBox.classList.add('hidden');
-            UI.setControlsEnabled(false);
-            UI.showLoadingIndicator();
-            try {
-                const data = await ApiService.fetchFacebookChatters();
-                let markdownText = '# Facebook Chat Statistics\n\n|Participant|Number of Messages|\n|-----|---|\n';
-                for (const message of Object.values(data)) { // Iterate over values if data is an object
-                    markdownText += `| ${message.participant[0].name} |${message.number_of_messages}|\n`;
-                }
-                Chat.addMessage('assistant', markdownText, true);
-            } catch (error) {
-                console.error('Error in getFacebookChatters:', error);
-                UI.displayError("Failed to get FB chatters: " + error.message);
-            } finally {
-                UI.setControlsEnabled(true);
-                UI.hideLoadingIndicator();
-            }
-        },
+        // [CONSTANTS.FUNCTION_NAMES.FirstFunction]: async () => { // getFacebookChatters
+        //     UI.clearError();
+        //     DOM.infoBox.classList.add('hidden');
+        //     UI.setControlsEnabled(false);
+        //     UI.showLoadingIndicator();
+        //     try {
+        //         const data = await ApiService.fetchFacebookChatters();
+        //         let markdownText = '# Facebook Chat Statistics\n\n|Participant|Number of Messages|\n|-----|---|\n';
+        //         for (const message of Object.values(data)) { // Iterate over values if data is an object
+        //             markdownText += `| ${message.participant[0].name} |${message.number_of_messages}|\n`;
+        //         }
+        //         Chat.addMessage('assistant', markdownText, true);
+        //     } catch (error) {
+        //         console.error('Error in getFacebookChatters:', error);
+        //         UI.displayError("Failed to get FB chatters: " + error.message);
+        //     } finally {
+        //         UI.setControlsEnabled(true);
+        //         UI.hideLoadingIndicator();
+        //     }
+        // },
         // [CONSTANTS.FUNCTION_NAMES.ThirdFunction]: () => Modals.FBAlbums.open(),    // showFBAlbumsOptions
         // [CONSTANTS.FUNCTION_NAMES.FourthFunction]: () => Modals.Locations.open(), // showGeoMetadataOptions
         // [CONSTANTS.FUNCTION_NAMES.FifthFunction]: () => SSE.browserFunctions.showLocationInfo(), // showTileAlbumOptions

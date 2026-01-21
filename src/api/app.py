@@ -1908,6 +1908,7 @@ class ChatRequest(BaseModel):
     """Request model for chat endpoint."""
     prompt: str
     voice: Optional[str] = None
+    temperature: Optional[float] = None
 
 
 class ChatResponse(BaseModel):
@@ -1944,7 +1945,7 @@ async def generate_chat_response(request: ChatRequest):
                 print(f"[generate_chat_response] Warning: Could not set voice '{request.voice}': {str(e)}")
         
         # Generate response using global chat_service instance
-        response_text = chat_service.generate_response(request.prompt, db=db)
+        response_text = chat_service.generate_response(request.prompt, request.temperature, db=db)
 
         # Parse response to extract embedded JSON from markdown code blocks
         text_content = response_text
@@ -1952,17 +1953,46 @@ async def generate_chat_response(request: ChatRequest):
         
         # Pattern to match JSON in markdown code blocks (```json ... ```)
         json_pattern = r'```json\s*\n(.*?)\n```'
-        match = re.search(json_pattern, response_text, re.DOTALL)
+        matches = re.findall(json_pattern, response_text, re.DOTALL)
         
-        if match:
-            json_str = match.group(1).strip()
-            try:
-                embedded_json = json.loads(json_str)
-                # Remove the JSON code block from the text content
+        if matches:
+            # Parse all JSON blocks and merge them
+            merged_json = {}
+            for json_str in matches:
+                try:
+                    parsed_json = json.loads(json_str.strip())
+
+
+
+                    # Merge: if keys conflict, later blocks override earlier ones
+                    # But preserve metadata keys (referenced_files, function_calls) separately
+                    if isinstance(parsed_json, dict):
+                        # If this block has metadata keys, merge them specially
+                        if "referenced_files" in parsed_json or "function_calls" in parsed_json:
+                            # This is metadata block - merge metadata keys
+                            if "referenced_files" in parsed_json:
+                                merged_json["referenced_files"] = parsed_json["referenced_files"]
+                            if "function_calls" in parsed_json:
+                                merged_json["function_calls"] = parsed_json["function_calls"]
+                            # Also merge other keys
+                            for key, value in parsed_json.items():
+                                if key not in ["referenced_files", "function_calls"]:
+                                    merged_json[key] = value
+                        else:
+                            # Regular JSON block - merge normally
+                            merged_json.update(parsed_json)
+                except json.JSONDecodeError as e:
+                    print(f"[generate_chat_response] Warning: Could not parse embedded JSON block: {str(e)}")
+                    continue
+            
+            if merged_json:
+                embedded_json = merged_json
+                # Remove all JSON code blocks from the text content
                 text_content = re.sub(json_pattern, '', response_text, flags=re.DOTALL).strip()
-            except json.JSONDecodeError as e:
-                print(f"[generate_chat_response] Warning: Could not parse embedded JSON: {str(e)}")
-                # If JSON parsing fails, keep the original text
+                merged_json["temperature"] = request.temperature
+                merged_json["prompt"] = request.prompt
+                merged_json["voice"] = chat_service.voice
+                merged_json["response_text"] = text_content
         
         return ChatResponse(
             response=text_content,

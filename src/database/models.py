@@ -286,3 +286,26 @@ class Contacts(Base):
     telegram = Column(Boolean, default=False, nullable=False)
     whatsapp = Column(Boolean, default=False, nullable=False)
     signal = Column(Boolean, default=False, nullable=False)
+
+
+class GeminiFile(Base):
+    """Gemini File mapping model - stores mapping between ReferenceDocument and Gemini uploaded files."""
+
+    __tablename__ = "gemini_files"
+
+    id = Column(Integer, primary_key=True)
+    reference_document_id = Column(Integer, ForeignKey("reference_documents.id", ondelete="CASCADE"), nullable=False, unique=True)
+    gemini_file_name = Column(String(500), nullable=False)  # Gemini file name/ID
+    gemini_file_uri = Column(String(1000), nullable=True)  # Gemini file URI if available
+    filename = Column(String(500), nullable=False)  # Original filename from ReferenceDocument
+    state = Column(String(50), nullable=False, default="ACTIVE")  # ACTIVE, EXPIRED, etc.
+    verified_at = Column(DateTime, default=utcnow)  # Last time file was verified with Gemini API
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    reference_document = relationship("ReferenceDocument", backref="gemini_file_mapping")
+
+    __table_args__ = (
+        Index('idx_gemini_file_reference_doc', 'reference_document_id'),
+        Index('idx_gemini_file_name', 'gemini_file_name'),
+    )

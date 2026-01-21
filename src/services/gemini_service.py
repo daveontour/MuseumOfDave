@@ -3,11 +3,13 @@
 import os
 import json
 import time
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 from io import BytesIO
-import google.generativeai as genai
+import google.genai as genai
+from google.genai import types
 from ..database import Database
-from ..database.models import ReferenceDocument, IMessage, Email
+from ..database.models import ReferenceDocument, IMessage, Email, GeminiFile
 from sqlalchemy import or_
 
 
@@ -27,8 +29,8 @@ class GeminiService:
         print(f"[GeminiService.__init__] Using model: {model_name}")
         print(f"[GeminiService.__init__] API key found: {api_key[:10]}...{api_key[-4:] if len(api_key) > 14 else '***'}")
         
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(model_name)
+        self.client = genai.Client(api_key=api_key)
+        self.model_name = model_name
         print("[GeminiService.__init__] Initialization complete")
 
     def summarize_conversation(self, messages_data: Dict[str, Any]) -> str:
@@ -127,7 +129,10 @@ Summary:"""
         
         try:
             # Call Gemini API
-            response = self.model.generate_content(prompt)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
             print("[GeminiService.summarize_conversation] Received response from Gemini API")
             
             if response and response.text:
@@ -240,8 +245,8 @@ class ChatService:
         print(f"[GeminiChatService.__init__] Using model: {model_name}")
         print(f"[GeminiChatService.__init__] API key found: {api_key[:10]}...{api_key[-4:] if len(api_key) > 14 else '***'}")
         
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(model_name)
+        self.client = genai.Client(api_key=api_key)
+        self.model_name = model_name
 
         self.voice_instructions_list = self._load_voice_instructions()
         self.voice = "expert"
@@ -249,7 +254,6 @@ class ChatService:
         self.system_prompt = self._load_system_prompt()
         self.session_turns = []  # List of {"user_input": str, "response_text": str}
         self.db = None  # Will be set when needed
-        self._uploaded_files_cache: Dict[int, Any] = {}  # Cache: doc_id -> File object or file info dict
 
         print("[GeminiChatService.__init__] Initialization complete")
 
@@ -270,69 +274,145 @@ class ChatService:
     def clear_session(self):
         """Clears the session turns list."""
         self.session_turns = []
-        # Optionally clear file cache when clearing session
-        # self._uploaded_files_cache.clear()
 
-    def _upload_file_to_gemini(self, doc: ReferenceDocument) -> Optional[Any]:
+    def _upload_file_to_gemini(self, doc: ReferenceDocument, db: Optional[Database] = None) -> Optional[Any]:
         """Upload a reference document to Gemini File API and return the File object.
+        
+        Uses database-backed caching to avoid re-uploading files that are already available on Gemini.
+        Checks database first, then verifies with Gemini API before uploading.
         
         Args:
             doc: ReferenceDocument instance
+            db: Optional Database instance. If not provided, uses self.db.
             
         Returns:
             File object if successful, None otherwise
         """
+        if db is None:
+            db = self.db
+        
+        if not db:
+            print("[ChatService._upload_file_to_gemini] ERROR: Database not available")
+            return None
+        
         try:
-            # Check cache first
-            if doc.id in self._uploaded_files_cache:
-                cached_file = self._uploaded_files_cache[doc.id]
-                # Verify file still exists (files expire after ~48 hours)
+            session = db.get_session()
+            try:
+                # Check database for existing Gemini file mapping
+                gemini_file_record = session.query(GeminiFile).filter(
+                    GeminiFile.reference_document_id == doc.id
+                ).first()
+                
+                if gemini_file_record:
+                    # Found existing mapping, verify file is still ACTIVE with Gemini API
+                    try:
+                        file_info = self.client.files.get(name=gemini_file_record.gemini_file_name)
+                        file_state = file_info.state.name if hasattr(file_info.state, 'name') else str(file_info.state)
+                        
+                        if file_state == "ACTIVE":
+                            # File is still active, update verification timestamp and return File object
+                            gemini_file_record.verified_at = datetime.now(timezone.utc)
+                            gemini_file_record.state = "ACTIVE"
+                            gemini_file_record.updated_at = datetime.now(timezone.utc)
+                            # Update URI if available and different
+                            if hasattr(file_info, 'uri') and file_info.uri:
+                                gemini_file_record.gemini_file_uri = file_info.uri
+                            session.commit()
+                            
+                            print(f"[ChatService._upload_file_to_gemini] Using existing Gemini file: {doc.filename} (verified)")
+                            return file_info  # Return the File object from Gemini
+                        else:
+                            # File is not ACTIVE, mark as expired and upload new one
+                            print(f"[ChatService._upload_file_to_gemini] Existing file {doc.filename} is not ACTIVE (state: {file_state}), uploading new file")
+                            gemini_file_record.state = file_state
+                            session.commit()
+                            # Continue to upload new file below
+                    except Exception as e:
+                        # File doesn't exist anymore in Gemini, delete record and upload new one
+                        print(f"[ChatService._upload_file_to_gemini] Existing file {doc.filename} no longer exists in Gemini: {str(e)}, uploading new file")
+                        session.delete(gemini_file_record)
+                        session.commit()
+                        # Continue to upload new file below
+                
+                # Upload file to Gemini (either no existing record or existing file is invalid)
+                print(f"[ChatService._upload_file_to_gemini] Uploading file: {doc.filename}")
+                # If the content type is application/json, change it to text/plain
+                # This is because Gemini does not support application/json files
+                content_type = doc.content_type
+                if content_type == "application/json" or "json" in content_type.lower():
+                    content_type = "text/plain"
+                
+                # Save BytesIO to a temporary file for upload (new SDK requires file path)
+                import tempfile
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{doc.filename}") as tmp_file:
+                    tmp_file.write(doc.data)
+                    tmp_file_path = tmp_file.name
+                
                 try:
-                    file_info = genai.get_file(cached_file.name)
-                    if file_info.state.name == "ACTIVE":
-                        return cached_file
+                    # Build config dict for file upload (new SDK uses config parameter)
+                    upload_config = {}
+                    if content_type:
+                        upload_config['mime_type'] = content_type
+                    if doc.title or doc.filename:
+                        upload_config['display_name'] = doc.title or doc.filename
+                    
+                    # Only pass config if we have values
+                    if upload_config:
+                        uploaded_file = self.client.files.upload(
+                            file=tmp_file_path,
+                            config=upload_config
+                        )
                     else:
-                        # File expired or not active, remove from cache
-                        del self._uploaded_files_cache[doc.id]
-                except Exception:
-                    # File doesn't exist anymore, remove from cache
-                    del self._uploaded_files_cache[doc.id]
-            
-            # Create a temporary file-like object from binary data
-            file_data = BytesIO(doc.data)
-            file_data.name = doc.filename
-            
-            # Upload file to Gemini
-            print(f"[ChatService._upload_file_to_gemini] Uploading file: {doc.filename}")
-            # If the content type is application/json, change it to text/plain
-            # This is because Gemini does not support application/json files
-            if doc.content_type == "application/json" or "json" in doc.content_type.lower():
-                doc.content_type = "text/plain"
-            uploaded_file = genai.upload_file(
-                path=file_data,
-                mime_type=doc.content_type,
-                display_name=doc.title or doc.filename
-            )
-            
-            # Wait for file to be processed (some file types need processing)
-            max_wait_time = 60  # seconds
-            wait_interval = 2  # seconds
-            elapsed = 0
-            
-            while uploaded_file.state.name != "ACTIVE" and elapsed < max_wait_time:
-                time.sleep(wait_interval)
-                elapsed += wait_interval
-                uploaded_file = genai.get_file(uploaded_file.name)
-                print(f"[ChatService._upload_file_to_gemini] File state: {uploaded_file.state.name}, waiting...")
-            
-            if uploaded_file.state.name == "ACTIVE":
-                # Cache the File object
-                self._uploaded_files_cache[doc.id] = uploaded_file
-                print(f"[ChatService._upload_file_to_gemini] File uploaded successfully: {doc.filename}")
-                return uploaded_file
-            else:
-                print(f"[ChatService._upload_file_to_gemini] File {doc.filename} did not become ACTIVE in time (state: {uploaded_file.state.name})")
-                return None
+                        uploaded_file = self.client.files.upload(file=tmp_file_path)
+                finally:
+                    # Clean up temporary file
+                    if os.path.exists(tmp_file_path):
+                        os.unlink(tmp_file_path)
+                
+                # Wait for file to be processed (some file types need processing)
+                max_wait_time = 60  # seconds
+                wait_interval = 2  # seconds
+                elapsed = 0
+                
+                while uploaded_file.state.name != "ACTIVE" and elapsed < max_wait_time:
+                    time.sleep(wait_interval)
+                    elapsed += wait_interval
+                    uploaded_file = self.client.files.get(name=uploaded_file.name)
+                    print(f"[ChatService._upload_file_to_gemini] File state: {uploaded_file.state.name}, waiting...")
+                
+                if uploaded_file.state.name == "ACTIVE":
+                    # Save or update database record
+                    file_name = uploaded_file.name if hasattr(uploaded_file, 'name') else None
+                    file_uri = uploaded_file.uri if hasattr(uploaded_file, 'uri') else None
+                    
+                    if gemini_file_record:
+                        # Update existing record
+                        gemini_file_record.gemini_file_name = file_name
+                        gemini_file_record.gemini_file_uri = file_uri
+                        gemini_file_record.state = "ACTIVE"
+                        gemini_file_record.verified_at = datetime.now(timezone.utc)
+                        gemini_file_record.updated_at = datetime.now(timezone.utc)
+                    else:
+                        # Create new record
+                        gemini_file_record = GeminiFile(
+                            reference_document_id=doc.id,
+                            gemini_file_name=file_name,
+                            gemini_file_uri=file_uri,
+                            filename=doc.filename,
+                            state="ACTIVE",
+                            verified_at=datetime.now(timezone.utc)
+                        )
+                        session.add(gemini_file_record)
+                    
+                    session.commit()
+                    print(f"[ChatService._upload_file_to_gemini] File uploaded successfully: {doc.filename}")
+                    return uploaded_file
+                else:
+                    print(f"[ChatService._upload_file_to_gemini] File {doc.filename} did not become ACTIVE in time (state: {uploaded_file.state.name})")
+                    return None
+                    
+            finally:
+                session.close()
                 
         except Exception as e:
             print(f"[ChatService._upload_file_to_gemini] Error uploading file {doc.filename}: {str(e)}")
@@ -583,9 +663,7 @@ class ChatService:
         Returns:
             List of Tool objects with function declarations
         """
-        from google.generativeai.types import FunctionDeclaration, Tool
-        
-        get_current_time_declaration = FunctionDeclaration(
+        get_current_time_declaration = types.FunctionDeclaration(
             name="get_current_time",
             description="Get the current date and time in ISO format. Useful when user asks about the current time or date.",
             parameters={
@@ -595,7 +673,7 @@ class ChatService:
             }
         )
         
-        get_imessages_declaration = FunctionDeclaration(
+        get_imessages_declaration = types.FunctionDeclaration(
             name="get_imessages_by_chat_session",
             description="Get all messages for WhatsApp, SMS, and iMessage and Facebook messages for a specific chat. Use this when the user asks about messages, conversations, or chats with a specific person or group.",
             parameters={
@@ -610,7 +688,7 @@ class ChatService:
             }
         )
         
-        get_emails_declaration = FunctionDeclaration(
+        get_emails_declaration = types.FunctionDeclaration(
             name="get_emails_by_contact",
             description="Get plain text of emails where the sender or receiver matches the specified name or email address. Use this when the user asks about emails with a specific person or contact.",
             parameters={
@@ -625,7 +703,7 @@ class ChatService:
             }
         )
         
-        return [Tool(function_declarations=[get_current_time_declaration, get_imessages_declaration, get_emails_declaration])]
+        return [types.Tool(function_declarations=[get_current_time_declaration, get_imessages_declaration, get_emails_declaration])]
 
     def _execute_function_call(self, function_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a function call by routing to the appropriate handler method.
@@ -664,7 +742,7 @@ class ChatService:
             traceback.print_exc()
             raise
 
-    def generate_response(self, user_input: str, db: Optional[Database] = None) -> str:
+    def generate_response(self, user_input: str, temperature: float = 0.0, db: Optional[Database] = None) -> str:
         """Generates a response to the prompt using the Gemini LLM API.
         
         Args:
@@ -681,6 +759,10 @@ class ChatService:
         # Build content parts for Gemini (can include files and text)
         content_parts = []
         
+        # Track files referenced and function calls for metadata
+        referenced_files = []  # List of file metadata
+        function_calls_made = []  # List of function calls with parameters
+        
         # Upload and include reference documents as files
         uploaded_files = []
         if db:
@@ -691,10 +773,33 @@ class ChatService:
                         ReferenceDocument.available_for_task == True
                     ).all()
                     
+                    # Process each document - _upload_file_to_gemini handles database checking and verification
                     for doc in documents:
-                        uploaded_file = self._upload_file_to_gemini(doc)
+                        uploaded_file = self._upload_file_to_gemini(doc, db=db)
                         if uploaded_file:
                             uploaded_files.append(uploaded_file)
+                            
+                            # Get Gemini file info from database for metadata
+                            gemini_file_record = session.query(GeminiFile).filter(
+                                GeminiFile.reference_document_id == doc.id
+                            ).first()
+                            
+                            file_metadata = {
+                                "id": doc.id,
+                                "filename": doc.filename,
+                                "title": doc.title,
+                                "source": "database" if gemini_file_record else "uploaded"
+                            }
+                            
+                            if gemini_file_record:
+                                file_metadata["gemini_file_name"] = gemini_file_record.gemini_file_name
+                                file_metadata["gemini_file_uri"] = gemini_file_record.gemini_file_uri
+                                file_metadata["state"] = gemini_file_record.state
+                            elif hasattr(uploaded_file, 'name'):
+                                file_metadata["gemini_file_name"] = uploaded_file.name
+                                file_metadata["gemini_file_uri"] = uploaded_file.uri if hasattr(uploaded_file, 'uri') else None
+                            
+                            referenced_files.append(file_metadata)
                             print(f"[ChatService.generate_response] Added file reference: {doc.filename}")
                 finally:
                     session.close()
@@ -706,7 +811,8 @@ class ChatService:
         # Build text prompt with voice instructions, conversation history, and user input
         prompt_parts = []
 
-        prompt_parts.append(self.system_prompt)
+        #should be in the configuration now
+        #prompt_parts.append(self.system_prompt)
         
         # Add voice instructions
         prompt_parts.append(self.voice_instructions["instructions"])
@@ -728,10 +834,10 @@ class ChatService:
         
         # Build contents list: files first, then text
         # According to Gemini API docs, files and text can be mixed in contents array
-        # But we need to structure it as a list where each item can be a string or File object
+        # In the new SDK, we can pass File objects directly or use file_uri strings
         contents = []
         
-        # Add file references - pass File objects directly
+        # Add file references - pass File objects directly (new SDK supports this)
         for uploaded_file in uploaded_files:
             contents.append(uploaded_file)
         
@@ -747,7 +853,13 @@ class ChatService:
             
             # Generate content with file references, text, and tools
             print(f"[ChatService.generate_response] Generating response with {len(uploaded_files)} file(s) and text prompt")
-            response = self.model.generate_content(contents, tools=tools)
+            # Tools are passed via config in the new SDK
+            config = types.GenerateContentConfig(tools=tools, system_instruction=self.system_prompt,temperature=temperature,)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=contents,
+                config=config
+            )
             
             # Handle function calling loop
             max_iterations = 5  # Prevent infinite loops
@@ -788,22 +900,22 @@ class ChatService:
                     func_args = dict(func_call.args) if hasattr(func_call, 'args') and func_call.args else {}
                     print(f"[ChatService.generate_response] Processing function call: {func_name} with args: {func_args}")
                     
+                    # Track this function call
+                    function_calls_made.append({
+                        "name": func_name,
+                        "arguments": func_args,
+                        "iteration": iteration
+                    })
+                    
                     try:
                         # Execute the function
                         result = self._execute_function_call(func_name, func_args)
                         
-                        # Create function response part using protos
-                        # Convert dict result to protobuf Struct
-                        from google.generativeai import protos
-                        from google.protobuf import struct_pb2
-                        
-                        response_struct = struct_pb2.Struct()
-                        response_struct.update(result)
-                        
+                        # Create function response using types (new SDK)
                         function_responses.append(
-                            protos.FunctionResponse(
+                            types.FunctionResponse(
                                 name=func_name,
-                                response=response_struct
+                                response=result  # result is already a dict
                             )
                         )
                     except ValueError as e:
@@ -813,16 +925,10 @@ class ChatService:
                     except Exception as e:
                         print(f"[ChatService.generate_response] Error executing function {func_name}: {str(e)}")
                         # Create error response only if we have a valid function name
-                        from google.generativeai import protos
-                        from google.protobuf import struct_pb2
-                        
-                        error_struct = struct_pb2.Struct()
-                        error_struct.update({"error": str(e)})
-                        
                         function_responses.append(
-                            protos.FunctionResponse(
+                            types.FunctionResponse(
                                 name=func_name,
-                                response=error_struct
+                                response={"error": str(e)}
                             )
                         )
                 
@@ -830,17 +936,20 @@ class ChatService:
                 if function_responses:
                     # Build follow-up contents: original contents + function responses as parts
                     # Function responses need to be wrapped in Part objects
-                    from google.generativeai import protos
-                    
                     follow_up_contents = contents.copy()
                     # Add function responses as parts
                     for func_response in function_responses:
-                        # Create a Part with function_response
-                        part = protos.Part(function_response=func_response)
+                        # Create a Part with function_response using types
+                        part = types.Part(function_response=func_response)
                         follow_up_contents.append(part)
                     
                     print(f"[ChatService.generate_response] Making follow-up call with {len(function_responses)} function response(s)")
-                    response = self.model.generate_content(follow_up_contents, tools=tools)
+                    config = types.GenerateContentConfig(tools=tools) if tools else None
+                    response = self.client.models.generate_content(
+                        model=self.model_name,
+                        contents=follow_up_contents,
+                        config=config
+                    )
             
             # Extract final text response
             if response.candidates and len(response.candidates) > 0:
@@ -865,6 +974,17 @@ class ChatService:
             if not response_text:
                 response_text = "I apologize, but I couldn't generate a response."
             
+            # Append metadata about files and function calls as JSON
+            # This will be parsed by the API endpoint and included in embedded_json
+            metadata_json = {
+                "referenced_files": referenced_files,
+                "function_calls": function_calls_made
+            }
+            
+            # Append metadata as a JSON block that will be parsed separately
+            metadata_json_str = json.dumps(metadata_json, indent=2)
+            response_text += f"\n\n```json\n{metadata_json_str}\n```"
+            
             # Track this turn in conversation history
             self.session_turns.append({
                 "user_input": user_input,
@@ -885,8 +1005,20 @@ class ChatService:
                 print("[ChatService.generate_response] Attempting fallback: generating response without file references")
                 try:
                     # Fallback: use text-only prompt (files may not be supported by this model/API version)
-                    response = self.model.generate_content(prompt_text)
+                    response = self.client.models.generate_content(
+                        model=self.model_name,
+                        contents=prompt_text
+                    )
                     response_text = response.text.strip()
+                    
+                    # Append metadata (files were attempted but failed, no function calls in fallback)
+                    metadata_json = {
+                        "referenced_files": referenced_files,  # Files were attempted
+                        "function_calls": function_calls_made,  # May have some calls before error
+                        "fallback_used": True
+                    }
+                    metadata_json_str = json.dumps(metadata_json, indent=2)
+                    response_text += f"\n\n```json\n{metadata_json_str}\n```"
                     
                     # Track this turn in conversation history
                     self.session_turns.append({
