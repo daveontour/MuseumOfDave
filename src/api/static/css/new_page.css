@@ -615,7 +615,7 @@ body {
     background-color: #a3d4f4;
 }
 
-#new-chat-btn { /* Specific styling for New Chat button, usually in sidebar/header */
+#resume-conversation-btn {
     background-color: #87CEEB;
     color: white;
     border: none;
@@ -631,61 +631,9 @@ body {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-#new-chat-btn:hover {
+#resume-conversation-btn:hover {
     background-color: #6CA6CD;
 }
-
-#change-user-id-btn {
-    background-color: #87CEEB;
-    color: white;
-    border: none;
-    padding: 9px 16px;
-    border-radius: 5px;
-    cursor: pointer;
-    white-space: nowrap;
-    font-size: 1.1em;
-    height: 38px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    margin-left: 10px;
-}
-
-#change-user-id-btn:hover {
-    background-color: #6CA6CD;
-}
-
-/* Change User ID Modal specific styling */
-#change-user-id-modal {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 2000;
-    justify-content: center;
-    align-items: center;
-    overflow-y: auto;
-}
-
-#change-user-id-modal[style*="display: flex"] {
-    display: flex !important;
-}
-
-#change-user-id-modal .modal-content {
-    animation: modal-pop-in 0.3s ease-out;
-    max-width: 500px;
-    width: 90vw;
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
-    padding: 2rem;
-    position: relative;
-}
-
 
 /* --- UI Elements --- */
 /* Loading Indicator (Original complex one) */

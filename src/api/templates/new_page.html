@@ -211,8 +211,8 @@
 
         <div class="chat-main">
             <div class="chat-header">
-                <button id="new-chat-btn">New Chat</button>
-                <button id="change-user-id-btn">Change User ID</button>
+                <button id="resume-conversation-btn">Resume Conversation</button>
+                <div id="conversation-indicator" style="display: none; margin-left: 1rem; padding: 0.5rem 1rem; background: #e3f2fd; border-radius: 4px; color: #1976d2; font-size: 0.9em;"></div>
             </div>
             <div id="chat-box">
                 <div id="info-box" class="info-box">
@@ -1713,6 +1713,60 @@
             </div>
         </div>
 
+        <!-- Conversation List Modal -->
+        <div id="conversation-list-modal" class="modal" style="display: none; position: fixed; z-index: 4000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center;">
+            <div class="modal-content" style="max-width: 800px; width: 90vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 2rem; position: relative; max-height: 80vh; overflow-y: auto;">
+                <button class="modal-close-btn" id="close-conversation-list-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer;">&times;</button>
+                <div style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+                    <h2 style="margin: 0; color: #233366; font-size: 1.5em;">Conversations</h2>
+                    <button type="button" id="new-conversation-btn" class="modal-btn modal-btn-primary">
+                        <i class="fas fa-plus"></i> New Conversation
+                    </button>
+                </div>
+                <div id="conversation-list-container" style="max-height: 500px; overflow-y: auto;">
+                    <!-- Conversations will be listed here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- New Conversation Modal -->
+        <div id="new-conversation-modal" class="modal" style="display: none; position: fixed; z-index: 4001; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center;">
+            <div class="modal-content" style="max-width: 500px; width: 90vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 2rem; position: relative;">
+                <button class="modal-close-btn" id="close-new-conversation-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer;">&times;</button>
+                <div style="margin-bottom: 1.5rem;">
+                    <h2 style="margin: 0 0 0.5rem 0; color: #233366; font-size: 1.5em;">New Conversation</h2>
+                    <p style="margin: 0; color: #666; font-size: 0.95em;">Create a new conversation to organize your chat history.</p>
+                </div>
+                <div style="margin-bottom: 1.5rem;">
+                    <label for="new-conversation-title-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Conversation Title:</label>
+                    <input type="text" id="new-conversation-title-input" placeholder="Enter conversation title..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
+                </div>
+                <div style="margin-bottom: 1.5rem;">
+                    <label for="new-conversation-voice-select" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Voice:</label>
+                    <select id="new-conversation-voice-select" style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;">
+                        <option value="dave">Dave's own voice</option>
+                        <option value="expert" selected>A dispassionate expert</option>
+                        <option value="male_friend">Dave's best male friend</option>
+                        <option value="female_friend">Dave's best female friend</option>
+                        <option value="psychologist">A psychologist</option>
+                        <option value="after_death">A friend speaking after Dave's death</option>
+                        <option value="irish">A Irish limmerick poet</option>
+                        <option value="secret_admirer">A admirer who remained anonymous to Dave</option>
+                        <option value="haiku">A Japanese haiku master</option>
+                        <option value="insult">An insult commedian</option>
+                        <option value="earthchild">A hippy earthchild</option>
+                        <option value="bar_girl">A Thai bar girl that Dave told his story to</option>
+                        <option value="parents">His mother and father</option>
+                        <option value="preacher">A fire and brimstone preacher who disapproves of all aspects of Dave's life</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" id="cancel-new-conversation-btn" class="modal-btn modal-btn-secondary">Cancel</button>
+                    <button type="button" id="create-conversation-btn" class="modal-btn modal-btn-primary">Create</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Reference Documents Modal -->
         <div id="reference-documents-modal" class="modal">
             <div class="modal-content reference-documents-modal-content">
@@ -1992,25 +2046,6 @@
             </div>
         </div>
 
-        <!-- Change User ID Modal -->
-        <div id="change-user-id-modal" class="modal">
-            <div class="modal-content" style="max-width: 500px; width: 90vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 2rem; position: relative;">
-                <button class="modal-close-btn" id="close-change-user-id-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer;">&times;</button>
-                <h2 style="margin-top: 0; color: #233366; font-size: 1.3em; text-align: center;">Change User ID</h2>
-                <div style="margin-bottom: 1.5em;">
-                    <label for="current-user-id" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Current User ID:</label>
-                    <input id="current-user-id" type="text" readonly style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em; background-color: #f8f9fa; color: #666;" />
-                </div>
-                <div style="margin-bottom: 1.5em;">
-                    <label for="new-user-id" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">New User ID:</label>
-                    <input id="new-user-id" type="text" placeholder="Enter new User ID..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
-                </div>
-                <div style="display: flex; justify-content: flex-end; gap: 0.7em;">
-                    <button type="button" id="change-user-id-cancel-btn" class="modal-btn modal-btn-secondary">Cancel</button>
-                    <button type="button" id="change-user-id-confirm-btn" class="modal-btn modal-btn-primary">Change User ID</button>
-                </div>
-            </div>
-        </div>
 
 
     </div>

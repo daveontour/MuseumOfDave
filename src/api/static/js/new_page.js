@@ -93,7 +93,6 @@ document.addEventListener('DOMContentLoaded', () => {
         userInput: document.getElementById('user-input'),
         sendButton: document.getElementById('send-button'),
         suggestionsBtn: document.getElementById('suggestions-btn'),
-        newChatButton: document.getElementById('new-chat-btn'),
         loadingIndicator: document.getElementById('loading-indicator'),
         errorDisplay: document.getElementById('error-display'),
         infoBox: document.getElementById('info-box'),
@@ -172,6 +171,18 @@ document.addEventListener('DOMContentLoaded', () => {
         referenceDocumentsNotificationList: document.getElementById('reference-documents-notification-list'),
         referenceDocumentsNotificationCancelBtn: document.getElementById('reference-documents-notification-cancel'),
         referenceDocumentsNotificationProceedBtn: document.getElementById('reference-documents-notification-proceed'),
+        // Conversation management elements
+        conversationListModal: document.getElementById('conversation-list-modal'),
+        closeConversationListModalBtn: document.getElementById('close-conversation-list-modal'),
+        conversationListContainer: document.getElementById('conversation-list-container'),
+        newConversationBtn: document.getElementById('new-conversation-btn'),
+        resumeConversationBtn: document.getElementById('resume-conversation-btn'),
+        conversationIndicator: document.getElementById('conversation-indicator'),
+        newConversationModal: document.getElementById('new-conversation-modal'),
+        closeNewConversationModalBtn: document.getElementById('close-new-conversation-modal'),
+        newConversationTitleInput: document.getElementById('new-conversation-title-input'),
+        newConversationVoiceSelect: document.getElementById('new-conversation-voice-select'),
+        createConversationBtn: document.getElementById('create-conversation-btn'),
         // Chat dictation elements
         chatStartDictationBtn: document.getElementById('chat-start-dictation-btn'),
         chatStopDictationBtn: document.getElementById('chat-stop-dictation-btn'),
@@ -222,14 +233,6 @@ document.addEventListener('DOMContentLoaded', () => {
         imageGalleryPdfViewer: document.getElementById('image-gallery-pdf-viewer'),
         imageGallerySearchBtn: document.getElementById('image-gallery-search-btn'),
         imageGalleryClearBtn: document.getElementById('image-gallery-clear-btn'),
-        // Change User ID Modal elements
-        changeUserIdBtn: document.getElementById('change-user-id-btn'),
-        changeUserIdModal: document.getElementById('change-user-id-modal'),
-        closeChangeUserIdModalBtn: document.getElementById('close-change-user-id-modal'),
-        changeUserIdCancelBtn: document.getElementById('change-user-id-cancel-btn'),
-        changeUserIdConfirmBtn: document.getElementById('change-user-id-confirm-btn'),
-        currentUserIdInput: document.getElementById('current-user-id'),
-        newUserIdInput: document.getElementById('new-user-id'),
         downloadImageGalleryBtn: document.getElementById('download-image-gallery-btn'),
         // Email Gallery Modal Elements
         emailGalleryModal: document.getElementById('email-gallery-modal'),
@@ -1375,6 +1378,17 @@ document.addEventListener('DOMContentLoaded', () => {
             updateLoadingIndicatorImage(); // Also set initial loading indicator image
         }
 
+        function setVoice(voiceName) {
+            if (!voiceName) return;
+            
+            if (DOM.voiceSelect) {
+                DOM.voiceSelect.value = voiceName;
+                // Manually dispatch change event to trigger all handlers
+                DOM.voiceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                highlightSelectedVoiceIcon(); // Update highlight
+            }
+        }
+
         function init() {
             setInitialState();
             // Add event listener for the voice select dropdown
@@ -1395,7 +1409,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
         }
-        return { init, getSelectedVoice, updateLoadingIndicatorImage, updateVoicePreview, updateSelectedVoiceImage };
+        return { init, getSelectedVoice, setVoice, updateLoadingIndicatorImage, updateVoicePreview, updateSelectedVoiceImage };
     })();
 
     // --- Modals ---
@@ -1733,6 +1747,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+            async function openAndSelectAlbum(albumId) {
+                // Open the Facebook Albums modal
+                Modals._openModal(DOM.fbAlbumsModal);
+                await loadAlbums();
+                await selectAlbum(albumId);
+                
+
+            }
+
 
             function close() { 
                 Modals._closeModal(DOM.fbAlbumsModal);
@@ -1842,40 +1865,56 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (DOM.refreshLocationsBtn) DOM.refreshLocationsBtn.addEventListener('click', refresh);
             }
 
-            function _createPhotoMarkers() {
-                let photoMarkers = [];
-                let photoShown = 0;
+            // function _createPhotoMarkers() {
+            //     let photoMarkers = [];
+            //     let photoShown = 0;
                 
-                // Generate a new random starting index
-                currentPhotoIndex = Math.floor(Math.random() * 8);
-                geoData.forEach(item => {
-                    if (!item.latitude || !item.longitude) {
-                        return;
-                    }
-                    if (item.source === 'Filesystem') {
-                        currentPhotoIndex++;
-                        if (currentPhotoIndex % 8 === 0 || geoData.length < 100) {  // Only show every 8th markers at a time
-                            photoShown++;
-                            try{
-                                const marker = L.marker([item.latitude, item.longitude])
-                                marker.file = item.source_reference; // Attach file info to marker
-                                marker.file_id = item.id;
-                                marker.taken = item.created_at;
-                                marker.lat = item.latitude;
-                                marker.long = item.longitude;
-                                // marker.on('click', function() {
-                                //     Modals.SingleImageDisplay.showSingleImageModal(item.file, item.file_id, item.taken, item.lat, item.long);
-                                // });
-                                photoMarkers.push(marker);
-                            } catch (e) {
-                                console.error('Error adding photo place marker:', e);
-                            }
-                        }
-                    }
-                });
+            //     // Generate a new random starting index
+            //     currentPhotoIndex = Math.floor(Math.random() * 8);
+            //     geoData.forEach(item => {
+            //         if (!item.latitude || !item.longitude) {
+            //             return;
+            //         }
+            //         let filesystemItems = [];
+            //         if (item.source === 'Filesystem') {
+            //             currentPhotoIndex++;
+            //             filesystemItems.push(item);
+            //             // if (currentPhotoIndex % 8 === 0 || geoData.length < 100) {  // Only show every 8th markers at a time
+            //             //     photoShown++;
+            //             //     try{
+            //             //         const marker = L.marker([item.latitude, item.longitude])
+            //             //         marker.file = item.source_reference; // Attach file info to marker
+            //             //         marker.file_id = item.id;
+            //             //         marker.taken = item.created_at;
+            //             //         marker.lat = item.latitude;
+            //             //         marker.long = item.longitude;
+            //             //         // marker.on('click', function() {
+            //             //         //     Modals.SingleImageDisplay.showSingleImageModal(item.file, item.file_id, item.taken, item.lat, item.long);
+            //             //         // });
+            //             //         photoMarkers.push(marker);
+            //             //     } catch (e) {
+            //             //         console.error('Error adding photo place marker:', e);
+            //             //     }
+            //             // }
+
+            //             //randomly select 200 items from throughout filesystemItems and add to randomPhotoMarkers
+            //             let randomPhotoItems = filesystemItems.sort(() => Math.random() - 0.5).slice(0, 200);
+            //             randomPhotoItems.forEach(item => {
+            //                 const marker = L.marker([item.latitude, item.longitude]);
+            //                 marker.file = item.source_reference;
+            //                 marker.file_id = item.id;
+            //                 marker.taken = item.created_at;
+            //                 marker.lat = item.latitude;
+            //                 marker.long = item.longitude;
+            //                 photoMarkers.push(marker);
+            //             });
+            //         }
+
+
+            //     });
                 
-                return { photoMarkers, photoShown, currentPhotoIndex };
-            }
+            //     return { photoMarkers, photoShown, currentPhotoIndex };
+            // }
 
             function shufflePhotoMarkers() {
                 if (!mapView || !photoMarkersLayer || !layerControl) return;
@@ -1887,7 +1926,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Create new photo markers with new random starting index
                 
                 //randomly select 200 markers from photoMarkers and add to activePhotoMarkers
-                activePhotoMarkers = [...photoMarkers].sort(() => Math.random() - 0.5).slice(0, 200);
+                                 // Fisher-Yates shuffle function for uniform random distribution
+                function shuffleArray(array) {
+                                    const shuffled = [...array]; // Create a copy to avoid mutating the original
+                                    for (let i = shuffled.length - 1; i > 0; i--) {
+                                        const j = Math.floor(Math.random() * (i + 1));
+                                        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                                    }
+                                    return shuffled;
+                }
+                //activePhotoMarkers = [...photoMarkers].sort(() => Math.random() - 0.5).slice(0, 200);
+                activePhotoMarkers = shuffleArray(photoMarkers).slice(0, 200);
                 
                 // Create new layer and add to map and layer control
                 photoMarkersLayer = L.layerGroup(activePhotoMarkers).addTo(mapView);
@@ -2131,8 +2180,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                  
-                 // Initialize activePhotoMarkers with first 200 markers (or all if less than 200)
-                 activePhotoMarkers = photoMarkers.slice(0, 200);
+                 // Fisher-Yates shuffle function for uniform random distribution
+                 function shuffleArray(array) {
+                     const shuffled = [...array]; // Create a copy to avoid mutating the original
+                     for (let i = shuffled.length - 1; i > 0; i--) {
+                         const j = Math.floor(Math.random() * (i + 1));
+                         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                     }
+                     return shuffled;
+                 }
+                 
+                 // Initialize activePhotoMarkers with random 200 markers using uniform shuffle
+                 activePhotoMarkers = shuffleArray(photoMarkers).slice(0, 200);
                  
                  photoMarkersLayer = L.layerGroup(activePhotoMarkers).addTo(mapView);
                  layerControl.addOverlay(photoMarkersLayer, 'GPS Photos Locations ('+photoMarkers.length+')');
@@ -5133,11 +5192,17 @@ ${textContent}
                                 console.error('No source_reference found for email attachment');
                                 alert('Unable to open email: No email reference found');
                             }
-                        } else if (sourceValue.toLowerCase() === 'message_attachment' || sourceValue.toLowerCase() === 'whatsapp') {
+                        } else if (sourceValue.toLowerCase() === 'message_attachment' || sourceValue.toLowerCase() === 'whatsapp' || sourceValue.toLowerCase() === 'facebook') {
                             //Open the SMS Messages modal and select the conversation
+                            Modals.NewImageGallery.close();
                             Modals.ImageDetailModal.close();
                             Modals.SMSMessages.openAndSelectConversation(image.source_reference);
-                        } 
+                        } else if (sourceValue.toLowerCase() === 'facebook_album') {
+                            //Open the Facebook Albums modal and select the album
+                            Modals.NewImageGallery.close();
+                            Modals.ImageDetailModal.close();
+                            Modals.FBAlbums.openAndSelectAlbum(image.source_reference);
+                        }
                         // Add other source types here as needed
                     };
                     DOM.newImageDetailSource.appendChild(openSourceButton);
@@ -6624,71 +6689,6 @@ ${textContent}
             return { init, open, close,openAndSelectConversation };
         })(),
 
-        ChangeUserId: (() => {
-            function init() {
-                // Show modal when button is clicked
-                if (DOM.changeUserIdBtn) {
-                    DOM.changeUserIdBtn.addEventListener('click', function() {
-                        // Get current user ID from localStorage or set default
-                        const currentUserId = localStorage.getItem('userId') || 'default';
-                        DOM.currentUserIdInput.value = currentUserId;
-                        DOM.newUserIdInput.value = '';
-                        DOM.changeUserIdModal.style.display = 'flex';
-                    });
-                }
-
-                // Close modal functions
-                function closeChangeUserIdModalFunc() {
-                    DOM.changeUserIdModal.style.display = 'none';
-                }
-
-                if (DOM.closeChangeUserIdModalBtn) {
-                    DOM.closeChangeUserIdModalBtn.addEventListener('click', closeChangeUserIdModalFunc);
-                }
-
-                if (DOM.changeUserIdCancelBtn) {
-                    DOM.changeUserIdCancelBtn.addEventListener('click', closeChangeUserIdModalFunc);
-                }
-
-                // Handle confirm button
-                if (DOM.changeUserIdConfirmBtn) {
-                    DOM.changeUserIdConfirmBtn.addEventListener('click', function() {
-                        const newUserId = DOM.newUserIdInput.value.trim();
-                        if (newUserId) {
-                            localStorage.setItem('userId', newUserId);
-                            closeChangeUserIdModalFunc();
-                            // Optionally reload the page to apply the new user ID
-                            // window.location.reload();
-                        } else {
-                            alert('Please enter a valid User ID');
-                        }
-                    });
-                }
-
-                // Close modal when clicking outside
-                if (DOM.changeUserIdModal) {
-                    DOM.changeUserIdModal.addEventListener('click', function(e) {
-                        if (e.target === DOM.changeUserIdModal) {
-                            closeChangeUserIdModalFunc();
-                        }
-                    });
-                }
-            }
-
-            function open() {
-                const currentUserId = localStorage.getItem('userId') || 'default';
-                DOM.currentUserIdInput.value = currentUserId;
-                DOM.newUserIdInput.value = '';
-                DOM.changeUserIdModal.style.display = 'flex';
-            }
-
-            function close() {
-                DOM.changeUserIdModal.style.display = 'none';
-            }
-
-            return { init, open, close };
-        })(),
-
         AddInterviewee: (() => {
             function init() {
                 // Event listeners are already set up in initEventListeners()
@@ -7691,6 +7691,450 @@ ${textContent}
             return { init, checkAndShow, reset };
         })(),
 
+        ConversationManager: (() => {
+            let currentConversationId = null;
+            let currentConversationTitle = null;
+
+            // Store conversation state
+            const CONVERSATION_STORAGE_KEY = 'current_conversation_id';
+            const CONVERSATION_TITLE_STORAGE_KEY = 'current_conversation_title';
+
+            async function fetchConversations() {
+                try {
+                    const response = await fetch('/chat/conversations');
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error(`HTTP error! status: ${response.status}, body: ${errorText}`);
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    console.log('Fetched conversations:', data);
+                    return data;
+                } catch (error) {
+                    console.error('Error fetching conversations:', error);
+                    return [];
+                }
+            }
+
+            async function createConversation(title, voice) {
+                try {
+                    const response = await fetch('/chat/conversations', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title, voice })
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error creating conversation:', error);
+                    throw error;
+                }
+            }
+
+            async function deleteConversation(conversationId) {
+                try {
+                    const response = await fetch(`/chat/conversations/${conversationId}`, {
+                        method: 'DELETE'
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error deleting conversation:', error);
+                    throw error;
+                }
+            }
+
+            async function updateConversationTitle(conversationId, newTitle) {
+                try {
+                    const response = await fetch(`/chat/conversations/${conversationId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title: newTitle })
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error updating conversation title:', error);
+                    throw error;
+                }
+            }
+
+            async function getConversation(conversationId) {
+                try {
+                    const response = await fetch(`/chat/conversations/${conversationId}`);
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error getting conversation:', error);
+                    throw error;
+                }
+            }
+
+            function renderConversationList(conversations) {
+                if (!DOM.conversationListContainer) {
+                    console.error('conversationListContainer not found in DOM');
+                    return;
+                }
+
+                console.log('Rendering conversations:', conversations);
+                DOM.conversationListContainer.innerHTML = '';
+
+                if (!conversations || conversations.length === 0) {
+                    const noConvsMsg = document.createElement('div');
+                    noConvsMsg.style.cssText = 'text-align: center; padding: 2rem; color: #666;';
+                    noConvsMsg.textContent = 'No conversations found. Create a new one to get started!';
+                    DOM.conversationListContainer.appendChild(noConvsMsg);
+                    return;
+                }
+
+                conversations.forEach(conv => {
+                    const convItem = document.createElement('div');
+                    convItem.style.cssText = 'padding: 1rem; margin-bottom: 0.75rem; border: 1px solid #ddd; border-radius: 8px; background: #fff; cursor: pointer; transition: background 0.2s;';
+                    convItem.style.cursor = 'pointer';
+                    convItem.onmouseover = () => convItem.style.background = '#f5f5f5';
+                    convItem.onmouseout = () => convItem.style.background = '#fff';
+
+                    const titleRow = document.createElement('div');
+                    titleRow.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;';
+
+                    const titleDiv = document.createElement('div');
+                    titleDiv.style.cssText = 'font-weight: 600; color: #233366; font-size: 1.05em;';
+                    titleDiv.textContent = conv.title;
+                    titleRow.appendChild(titleDiv);
+
+                    const actionsDiv = document.createElement('div');
+                    actionsDiv.style.cssText = 'display: flex; gap: 0.5rem;';
+
+                    // Edit title button
+                    const editBtn = document.createElement('button');
+                    editBtn.innerHTML = '<i class="fa-solid fa-pencil"></i>';
+                    editBtn.style.cssText = 'padding: 0.25rem 0.5rem; border: 1px solid #ddd; border-radius: 4px; background: #fff; cursor: pointer;';
+                    editBtn.title = 'Edit title';
+                    editBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        editConversationTitle(conv.id, conv.title);
+                    };
+                    actionsDiv.appendChild(editBtn);
+
+                    // Delete button
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+                    deleteBtn.style.cssText = 'padding: 0.25rem 0.5rem; border: 1px solid #dc3545; border-radius: 4px; background: #fff; color: #dc3545; cursor: pointer;';
+                    deleteBtn.title = 'Delete conversation';
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        deleteConversationWithConfirm(conv.id);
+                    };
+                    actionsDiv.appendChild(deleteBtn);
+
+                    titleRow.appendChild(actionsDiv);
+                    convItem.appendChild(titleRow);
+
+                    const detailsDiv = document.createElement('div');
+                    detailsDiv.style.cssText = 'font-size: 0.85em; color: #666; margin-top: 0.25rem;';
+                    const lastMsgDate = conv.last_message_at ? new Date(conv.last_message_at).toLocaleString() : 'No messages yet';
+                    detailsDiv.textContent = `${conv.turn_count} messages • ${lastMsgDate}`;
+                    convItem.appendChild(detailsDiv);
+
+                    // Resume conversation on click
+                    convItem.onclick = () => {
+                        resumeConversation(conv.id);
+                    };
+
+                    DOM.conversationListContainer.appendChild(convItem);
+                });
+            }
+
+            async function editConversationTitle(conversationId, currentTitle) {
+                const newTitle = prompt('Enter new conversation title:', currentTitle);
+                if (newTitle && newTitle.trim() && newTitle !== currentTitle) {
+                    try {
+                        await updateConversationTitle(conversationId, newTitle.trim());
+                        showConversationList(); // Refresh list
+                        if (currentConversationId === conversationId) {
+                            currentConversationTitle = newTitle.trim();
+                            updateConversationIndicator();
+                        }
+                    } catch (error) {
+                        alert(`Error updating title: ${error.message}`);
+                    }
+                }
+            }
+
+            async function deleteConversationWithConfirm(conversationId) {
+                if (!confirm('Are you sure you want to delete this conversation? This action cannot be undone.')) {
+                    return;
+                }
+
+                try {
+                    await deleteConversation(conversationId);
+                    if (currentConversationId === conversationId) {
+                        // If deleting current conversation, clear it
+                        currentConversationId = null;
+                        currentConversationTitle = null;
+                        updateConversationIndicator();
+                        Chat.clearChat();
+                    }
+                    showConversationList(); // Refresh list
+                } catch (error) {
+                    alert(`Error deleting conversation: ${error.message}`);
+                }
+            }
+
+            async function resumeConversation(conversationId) {
+                try {
+                    // Get conversation details with turns
+                    const conversation = await getConversation(conversationId);
+                    
+                    // Set current conversation
+                    currentConversationId = conversationId;
+                    currentConversationTitle = conversation.title;
+                    localStorage.setItem(CONVERSATION_STORAGE_KEY, conversationId.toString());
+                    localStorage.setItem(CONVERSATION_TITLE_STORAGE_KEY, conversation.title);
+                    
+                    // Clear chat display
+                    Chat.clearChat();
+                    
+                    // Load and display up to 30 messages
+                    const turns = conversation.turns || [];
+                    const displayTurns = turns.slice(-30); // Get last 30 turns
+                    
+                    displayTurns.forEach(turn => {
+                        Chat.addMessage('user', turn.user_input, false);
+                        Chat.addMessage('assistant', turn.response_text, true);
+                    });
+                    
+                    // Set voice if different
+                    if (conversation.voice && VoiceSelector) {
+                        VoiceSelector.setVoice(conversation.voice);
+                    }
+                    
+                    // Update conversation indicator
+                    updateConversationIndicator();
+                    
+                    // Close modal
+                    close();
+                    
+                    // Scroll to bottom
+                    UI.scrollToBottom();
+                } catch (error) {
+                    console.error('Error resuming conversation:', error);
+                    alert(`Error resuming conversation: ${error.message}`);
+                }
+            }
+
+            async function createNewConversation() {
+                if (!DOM.newConversationTitleInput || !DOM.newConversationVoiceSelect) {
+                    alert('New conversation form elements not found');
+                    return;
+                }
+
+                const title = DOM.newConversationTitleInput.value.trim();
+                const voice = DOM.newConversationVoiceSelect.value;
+
+                if (!title) {
+                    alert('Please enter a conversation title');
+                    return;
+                }
+
+                try {
+                    const conversation = await createConversation(title, voice);
+                    
+                    // Set as current conversation
+                    currentConversationId = conversation.id;
+                    currentConversationTitle = conversation.title;
+                    localStorage.setItem(CONVERSATION_STORAGE_KEY, conversation.id.toString());
+                    localStorage.setItem(CONVERSATION_TITLE_STORAGE_KEY, conversation.title);
+                    
+                    // Clear chat and update indicator
+                    Chat.clearChat();
+                    updateConversationIndicator();
+                    
+                    // Close modals
+                    close();
+                    if (DOM.newConversationModal) {
+                        Modals._closeModal(DOM.newConversationModal);
+                    }
+                    
+                    // Clear form
+                    DOM.newConversationTitleInput.value = '';
+                    
+                    // Refresh conversation list
+                    showConversationList();
+                } catch (error) {
+                    alert(`Error creating conversation: ${error.message}`);
+                }
+            }
+
+            function updateConversationIndicator() {
+                if (DOM.conversationIndicator) {
+                    if (currentConversationTitle) {
+                        DOM.conversationIndicator.textContent = `Conversation: ${currentConversationTitle}`;
+                        DOM.conversationIndicator.style.display = 'block';
+                    } else {
+                        DOM.conversationIndicator.style.display = 'none';
+                    }
+                }
+            }
+
+            function getCurrentConversationId() {
+                return currentConversationId;
+            }
+
+            function clearCurrentConversation() {
+                currentConversationId = null;
+                currentConversationTitle = null;
+                updateConversationIndicator();
+            }
+
+            function loadStoredConversation() {
+                const storedId = localStorage.getItem(CONVERSATION_STORAGE_KEY);
+                const storedTitle = localStorage.getItem(CONVERSATION_TITLE_STORAGE_KEY);
+                if (storedId) {
+                    currentConversationId = parseInt(storedId);
+                    currentConversationTitle = storedTitle;
+                    updateConversationIndicator();
+                }
+            }
+
+            async function showConversationList() {
+                if (!DOM.conversationListModal) {
+                    console.error('Conversation list modal not found');
+                    return;
+                }
+
+                Modals._openModal(DOM.conversationListModal);
+                
+                // Show loading
+                if (DOM.conversationListContainer) {
+                    DOM.conversationListContainer.innerHTML = '<div style="text-align: center; padding: 2rem;">Loading conversations...</div>';
+                }
+
+                try {
+                    const conversations = await fetchConversations();
+                    renderConversationList(conversations);
+                } catch (error) {
+                    console.error('Error loading conversations:', error);
+                    if (DOM.conversationListContainer) {
+                        DOM.conversationListContainer.innerHTML = `<div style="text-align: center; padding: 2rem; color: #dc3545;">Error loading conversations: ${error.message}</div>`;
+                    }
+                }
+            }
+
+            function showNewConversationModal(e) {
+                if (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                if (!DOM.newConversationModal) {
+                    console.error('New conversation modal not found');
+                    return;
+                }
+                Modals._openModal(DOM.newConversationModal);
+                
+                // Set default voice if available
+                if (DOM.newConversationVoiceSelect && VoiceSelector) {
+                    DOM.newConversationVoiceSelect.value = VoiceSelector.getSelectedVoice();
+                }
+            }
+
+            function close(e) {
+                if (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                if (DOM.conversationListModal) {
+                    Modals._closeModal(DOM.conversationListModal);
+                }
+            }
+
+            function init() {
+                // Load stored conversation on init
+                loadStoredConversation();
+
+                // Set up event listeners
+                if (DOM.closeConversationListModalBtn) {
+                    DOM.closeConversationListModalBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        close(e);
+                    });
+                }
+
+                if (DOM.newConversationBtn) {
+                    DOM.newConversationBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        showNewConversationModal(e);
+                    });
+                }
+
+                if (DOM.createConversationBtn) {
+                    DOM.createConversationBtn.addEventListener('click', createNewConversation);
+                }
+
+                if (DOM.closeNewConversationModalBtn) {
+                    DOM.closeNewConversationModalBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (DOM.newConversationModal) {
+                            Modals._closeModal(DOM.newConversationModal);
+                        }
+                    });
+                }
+
+                // Cancel button in new conversation modal footer
+                const cancelNewConversationBtn = document.getElementById('cancel-new-conversation-btn');
+                if (cancelNewConversationBtn) {
+                    cancelNewConversationBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (DOM.newConversationModal) {
+                            Modals._closeModal(DOM.newConversationModal);
+                        }
+                    });
+                }
+
+                if (DOM.conversationListModal) {
+                    DOM.conversationListModal.addEventListener('click', (e) => {
+                        if (e.target === DOM.conversationListModal) {
+                            close();
+                        }
+                    });
+                }
+
+                if (DOM.newConversationModal) {
+                    DOM.newConversationModal.addEventListener('click', (e) => {
+                        if (e.target === DOM.newConversationModal) {
+                            Modals._closeModal(DOM.newConversationModal);
+                        }
+                    });
+                }
+            }
+
+            return { 
+                init, 
+                showConversationList, 
+                resumeConversation, 
+                createNewConversation,
+                getCurrentConversationId,
+                updateConversationIndicator,
+                clearCurrentConversation
+            };
+        })(),
+
         initAll: () => {
             Modals.Suggestions.init();
             Modals.FBAlbums.init();
@@ -7706,10 +8150,10 @@ ${textContent}
             Modals.SingleImageDisplay.init();
             Modals.ReferenceDocuments.init();
             Modals.ConfirmationModal.init();
-            Modals.ChangeUserId.init();
             Modals.ConversationSummary.init();
             Modals.AddInterviewee.init();
             Modals.ReferenceDocumentsNotification.init();
+            Modals.ConversationManager.init();
         },
 
         closeAll: () => {
@@ -7745,10 +8189,6 @@ ${textContent}
             try {
                 if (Modals.SMSMessages && Modals.SMSMessages.close) Modals.SMSMessages.close();
             } catch (e) { console.debug('Error closing SMSMessages modal:', e); }
-            
-            try {
-                if (Modals.ChangeUserId && Modals.ChangeUserId.close) Modals.ChangeUserId.close();
-            } catch (e) { console.debug('Error closing ChangeUserId modal:', e); }
             
             try {
                 if (Modals.AddInterviewee && Modals.AddInterviewee.close) Modals.AddInterviewee.close();
@@ -8692,6 +9132,9 @@ ${textContent}
                     DOM.userInput.value = '';
 
                     const currentUserId = localStorage.getItem('userId') || 'default';
+                    // Get current conversation ID if available
+                    const conversationId = Modals.ConversationManager ? Modals.ConversationManager.getCurrentConversationId() : null;
+                    
                     const response = await ApiService.fetchChat({
                         prompt: finalMessage,
                         voice: selectedVoice,
@@ -8700,6 +9143,7 @@ ${textContent}
                         companionMode: DOM.companionModeCheckbox ? DOM.companionModeCheckbox.checked : false,
                         supplementary_prompt: supplementary_prompt,
                         temperature: parseFloat(DOM.creativityLevel ? DOM.creativityLevel.value : '0'),
+                        conversation_id: conversationId,
                         clientId: AppState.clientId,
                         userId:currentUserId
                     });
@@ -8721,30 +9165,6 @@ ${textContent}
             });
         }
 
-        async function handleNewChat() {
-            UI.clearError();
-            UI.showLoadingIndicator();
-            try {
-                const data = await ApiService.fetchNewChat();
-                if (data.status === 'ok') {
-                    Chat.clearChat();
-                    // Reset voice to expert and trigger its change logic
-                    if (DOM.voiceSelect) {
-                        DOM.voiceSelect.value = 'expert';
-                        DOM.voiceSelect.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-
-                } else {
-                    UI.displayError('Failed to start new chat on server.');
-                }
-            } catch (error) {
-                console.error('New chat error:', error);
-                UI.displayError(error.message || 'Could not start new chat.');
-            } finally {
-                UI.hideLoadingIndicator();
-            }
-        }
-
         function initEventListeners() {
             DOM.chatForm.addEventListener('submit', (event) => {
                 event.preventDefault();
@@ -8752,8 +9172,13 @@ ${textContent}
                 if (!userPrompt) return;
                 processFormSubmit(userPrompt);
             });
-
-            DOM.newChatButton.addEventListener('click', handleNewChat);
+            
+            // Resume Conversation button
+            if (DOM.resumeConversationBtn) {
+                DOM.resumeConversationBtn.addEventListener('click', () => {
+                    Modals.ConversationManager.showConversationList();
+                });
+            }
 
             DOM.userInput.addEventListener('keydown', (event) => {
                 if (event.key === 'Enter' && !event.shiftKey) {
@@ -11810,7 +12235,7 @@ ${textContent}
             }
              window.onbeforeunload = () => { SSE.close(); };
         }
-        return { init, processFormSubmit, handleNewChat };
+        return { init, processFormSubmit };
     })();
 
     App.init();

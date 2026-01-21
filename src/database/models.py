@@ -309,3 +309,44 @@ class GeminiFile(Base):
         Index('idx_gemini_file_reference_doc', 'reference_document_id'),
         Index('idx_gemini_file_name', 'gemini_file_name'),
     )
+
+
+class ChatConversation(Base):
+    """Chat Conversation model - stores conversation metadata."""
+
+    __tablename__ = "chat_conversations"
+
+    id = Column(Integer, primary_key=True)
+    title = Column(String(500), nullable=False)  # User-provided conversation title
+    voice = Column(String(100), nullable=False)  # Voice used for the conversation
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    last_message_at = Column(DateTime, nullable=True)  # Timestamp of last message for sorting
+
+    turns = relationship("ChatTurn", back_populates="conversation", cascade="all, delete-orphan", order_by="ChatTurn.turn_number")
+
+    __table_args__ = (
+        Index('idx_chat_conv_last_message', 'last_message_at'),
+    )
+
+
+class ChatTurn(Base):
+    """Chat Turn model - stores individual conversation turns."""
+
+    __tablename__ = "chat_turns"
+
+    id = Column(Integer, primary_key=True)
+    conversation_id = Column(Integer, ForeignKey("chat_conversations.id", ondelete="CASCADE"), nullable=False)
+    user_input = Column(Text, nullable=False)
+    response_text = Column(Text, nullable=False)
+    voice = Column(String(100), nullable=True)  # Voice used for this turn (may differ from conversation default)
+    temperature = Column(Float, nullable=True)  # Temperature used for this turn
+    turn_number = Column(Integer, nullable=False)  # Sequential turn number within conversation
+    created_at = Column(DateTime, default=utcnow)
+
+    conversation = relationship("ChatConversation", back_populates="turns")
+
+    __table_args__ = (
+        Index('idx_chat_turn_conv_turn', 'conversation_id', 'turn_number'),
+        Index('idx_chat_turn_conv_created', 'conversation_id', 'created_at'),
+    )

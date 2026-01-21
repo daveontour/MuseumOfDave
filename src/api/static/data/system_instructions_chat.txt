@@ -55,6 +55,11 @@ For example:
     "args": []
   }
 
+To show images of a person, include the following as part of the embedded json 
+  "browser_action": {
+    "functionName": "showTaggedImages",
+    "args": ["person's name"]
+  }
 
 To display the Image Gallery with  images that meet a certain criteria.
 For example:

@@ -2,6 +2,7 @@
 
 import os
 import json
+import re
 import time
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
@@ -9,7 +10,7 @@ from io import BytesIO
 import google.genai as genai
 from google.genai import types
 from ..database import Database
-from ..database.models import ReferenceDocument, IMessage, Email, GeminiFile
+from ..database.models import ReferenceDocument, IMessage, Email, GeminiFile, ChatConversation, ChatTurn
 from sqlalchemy import or_
 
 
@@ -254,6 +255,7 @@ class ChatService:
         self.system_prompt = self._load_system_prompt()
         self.session_turns = []  # List of {"user_input": str, "response_text": str}
         self.db = None  # Will be set when needed
+        self.current_conversation_id = None  # Current active conversation ID
 
         print("[GeminiChatService.__init__] Initialization complete")
 
@@ -272,8 +274,83 @@ class ChatService:
         self.db = db
 
     def clear_session(self):
-        """Clears the session turns list."""
+        """Clears the session turns list and conversation context."""
         self.session_turns = []
+        self.current_conversation_id = None
+
+    def load_conversation_turns(self, conversation_id: int, limit: int = 30, db: Optional[Database] = None) -> List[Dict[str, Any]]:
+        """Load conversation turns from database and populate session_turns.
+        
+        Args:
+            conversation_id: ID of the conversation to load
+            limit: Maximum number of turns to load (default 30)
+            db: Optional Database instance. If not provided, uses self.db.
+            
+        Returns:
+            List of turn dictionaries in format {"user_input": str, "response_text": str}
+        """
+        if db is None:
+            db = self.db
+        
+        if not db:
+            print("[ChatService.load_conversation_turns] ERROR: Database not available")
+            return []
+        
+        from ..services.chat_conversation_service import ChatConversationService
+        conversation_service = ChatConversationService(db=db)
+        
+        try:
+            turns = conversation_service.get_conversation_turns(conversation_id, limit=limit)
+            session_turns = []
+            for turn in turns:
+                session_turns.append({
+                    "user_input": turn.user_input,
+                    "response_text": turn.response_text
+                })
+            
+            self.session_turns = session_turns
+            self.current_conversation_id = conversation_id
+            print(f"[ChatService.load_conversation_turns] Loaded {len(session_turns)} turns for conversation {conversation_id}")
+            return session_turns
+        except Exception as e:
+            print(f"[ChatService.load_conversation_turns] Error loading conversation turns: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    def save_turn(self, conversation_id: int, user_input: str, response_text: str, voice: str, temperature: float, db: Optional[Database] = None) -> bool:
+        """Save a conversation turn to the database.
+        
+        Args:
+            conversation_id: ID of the conversation
+            user_input: User's input message
+            response_text: Assistant's response
+            voice: Voice used for this turn
+            temperature: Temperature used for this turn
+            db: Optional Database instance. If not provided, uses self.db.
+            
+        Returns:
+            True if saved successfully, False otherwise
+        """
+        if db is None:
+            db = self.db
+        
+        if not db:
+            print("[ChatService.save_turn] ERROR: Database not available")
+            return False
+        
+        from ..services.chat_conversation_service import ChatConversationService
+        conversation_service = ChatConversationService(db=db)
+        
+        try:
+            conversation_service.save_turn(conversation_id, user_input, response_text, voice, temperature)
+            print(f"[ChatService.save_turn] Saved turn for conversation {conversation_id}")
+            return True
+        except Exception as e:
+            print(f"[ChatService.save_turn] Error saving turn: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return False
 
     def _upload_file_to_gemini(self, doc: ReferenceDocument, db: Optional[Database] = None) -> Optional[Any]:
         """Upload a reference document to Gemini File API and return the File object.
@@ -742,11 +819,13 @@ class ChatService:
             traceback.print_exc()
             raise
 
-    def generate_response(self, user_input: str, temperature: float = 0.0, db: Optional[Database] = None) -> str:
+    def generate_response(self, user_input: str, temperature: float = 0.0, conversation_id: Optional[int] = None, db: Optional[Database] = None) -> str:
         """Generates a response to the prompt using the Gemini LLM API.
         
         Args:
             user_input: The user's input message
+            temperature: Temperature for generation (default 0.0)
+            conversation_id: Optional conversation ID. If provided, loads conversation context and saves turn.
             db: Optional Database instance. If not provided, uses self.db.
             
         Returns:
@@ -756,12 +835,27 @@ class ChatService:
         if db is None:
             db = self.db
         
+        # Load conversation context if conversation_id is provided and different from current
+        if conversation_id is not None and conversation_id != self.current_conversation_id:
+            if db:
+                self.load_conversation_turns(conversation_id, limit=30, db=db)
+            else:
+                print("[ChatService.generate_response] Warning: conversation_id provided but database not available")
+        
+        # Update current conversation ID
+        if conversation_id is not None:
+            self.current_conversation_id = conversation_id
+        
         # Build content parts for Gemini (can include files and text)
         content_parts = []
         
         # Track files referenced and function calls for metadata
         referenced_files = []  # List of file metadata
         function_calls_made = []  # List of function calls with parameters
+
+        input_tokens = 0
+        output_tokens = 0
+        total_tokens = 0
         
         # Upload and include reference documents as files
         uploaded_files = []
@@ -854,7 +948,11 @@ class ChatService:
             # Generate content with file references, text, and tools
             print(f"[ChatService.generate_response] Generating response with {len(uploaded_files)} file(s) and text prompt")
             # Tools are passed via config in the new SDK
-            config = types.GenerateContentConfig(tools=tools, system_instruction=self.system_prompt,temperature=temperature,)
+            config = types.GenerateContentConfig(
+                tools=tools, 
+                system_instruction=self.system_prompt,
+                temperature=temperature)
+                
             response = self.client.models.generate_content(
                 model=self.model_name,
                 contents=contents,
@@ -952,6 +1050,10 @@ class ChatService:
                     )
             
             # Extract final text response
+            input_tokens = response.usage_metadata.prompt_token_count
+            output_tokens = response.usage_metadata.candidates_token_count
+            total_tokens = response.usage_metadata.total_token_count
+
             if response.candidates and len(response.candidates) > 0:
                 candidate = response.candidates[0]
                 if hasattr(candidate, 'content') and candidate.content:
@@ -978,24 +1080,37 @@ class ChatService:
             # This will be parsed by the API endpoint and included in embedded_json
             metadata_json = {
                 "referenced_files": referenced_files,
-                "function_calls": function_calls_made
+                "function_calls": function_calls_made,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens
             }
+            
+
+
+            plain_text = response_text
+            #strip out the json block
+            plain_text = re.sub(r'```json\s*\n(.*?)\n```', '', response_text, flags=re.DOTALL).strip()
+
+                        # Save turn to database if conversation_id is provided
+            if conversation_id is not None and db:
+                self.save_turn(conversation_id, user_input, plain_text, self.voice, temperature, db=db)
+            # Track this turn in conversation history (in-memory)
+            self.session_turns.append({
+                "user_input": user_input,
+                "response_text": plain_text
+            })
+            
+            # Keep only last 50 turns in memory (for context)
+            if len(self.session_turns) > 50:
+                self.session_turns = self.session_turns[-50:]
             
             # Append metadata as a JSON block that will be parsed separately
             metadata_json_str = json.dumps(metadata_json, indent=2)
-            response_text += f"\n\n```json\n{metadata_json_str}\n```"
+           # response_text += f"\n\n```json\n{metadata_json_str}\n```"
+        
             
-            # Track this turn in conversation history
-            self.session_turns.append({
-                "user_input": user_input,
-                "response_text": response_text
-            })
-            
-            # Keep only last 20 turns
-            if len(self.session_turns) > 20:
-                self.session_turns = self.session_turns[-20:]
-            
-            return response_text
+            return response_text, metadata_json_str
         except Exception as e:
             error_msg = str(e)
             print(f"[ChatService.generate_response] Error: {error_msg}")
@@ -1018,7 +1133,7 @@ class ChatService:
                         "fallback_used": True
                     }
                     metadata_json_str = json.dumps(metadata_json, indent=2)
-                    response_text += f"\n\n```json\n{metadata_json_str}\n```"
+                    #response_text += f"\n\n```json\n{metadata_json_str}\n```"
                     
                     # Track this turn in conversation history
                     self.session_turns.append({
@@ -1030,8 +1145,12 @@ class ChatService:
                     if len(self.session_turns) > 20:
                         self.session_turns = self.session_turns[-20:]
                     
+                    # Save turn to database if conversation_id is provided
+                    if conversation_id is not None and db:
+                        self.save_turn(conversation_id, user_input, response_text, self.voice, temperature, db=db)
+                    
                     print("[ChatService.generate_response] Fallback successful - response generated without files")
-                    return response_text
+                    return response_text, metadata_json_str
                 except Exception as fallback_error:
                     print(f"[ChatService.generate_response] Fallback also failed: {str(fallback_error)}")
                     import traceback
