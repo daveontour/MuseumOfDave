@@ -99,7 +99,7 @@
             
             <!-- More Options Section -->
             <div class="more-options-section">
-                <h3>Explore Dave's World</h3>
+                <h3 id="explore-dave-world-heading">Explore Dave's World</h3>
                 <div class="more-options-buttons">
                     <button type="button" class="more-options-btn" id="sms-messages-sidebar-btn">
                         <i class="fas fa-comment-dots"></i> Messages and Chats
@@ -472,6 +472,17 @@
             </div>
             <div class="config-content" style="height:calc(100vh - 170px)">
                 <div class="config-tab-content active" id="settings-tab">
+                    <section class="config-section">
+                        <h3>Subject Configuration</h3>
+                        <div class="setting-group">
+                            <p style="color: #666; margin-bottom: 10px;">
+                                Configure the subject name and system instructions used for chat conversations.
+                            </p>
+                            <button type="button" id="edit-subject-config-btn" class="modal-btn modal-btn-primary">
+                                <i class="fas fa-edit"></i> Edit Subject Configuration
+                            </button>
+                        </div>
+                    </section>
                     <section class="config-section">
                         <h3>Chat Settings</h3>
                         <div class="setting-group">
@@ -2048,6 +2059,27 @@
 
 
 
+    </div>
+
+    <!-- Subject Configuration Modal -->
+    <div id="subject-configuration-modal" class="modal" style="z-index: 10000;">
+        <div class="modal-content" style="max-width: 800px; width: 90vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 2rem; position: relative;">
+            <button class="modal-close-btn" id="close-subject-config-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer;">&times;</button>
+            <h2 style="margin-top: 0; color: #233366; font-size: 1.5em; text-align: center; margin-bottom: 1.5rem;">Subject Configuration</h2>
+            <div style="margin-bottom: 1.5em;">
+                <label for="subject-name-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Subject Name:</label>
+                <input id="subject-name-input" type="text" placeholder="Enter subject name..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" required />
+            </div>
+            <div style="margin-bottom: 1.5em;">
+                <label for="system-instructions-textarea" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">System Instructions:</label>
+                <textarea id="system-instructions-textarea" rows="20" placeholder="Enter system instructions..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em; font-family: monospace; resize: vertical;" required></textarea>
+                <small style="color: #666; display: block; margin-top: 0.5em;">You can use {SUBJECT_NAME} as a placeholder for the subject name.</small>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 0.7em;">
+                <button type="button" id="cancel-subject-config-btn" class="modal-btn modal-btn-secondary">Cancel</button>
+                <button type="button" id="save-subject-config-btn" class="modal-btn modal-btn-primary">Save</button>
+            </div>
+        </div>
     </div>
 
     <script src="/static/js/new_page.js"></script>

@@ -350,3 +350,15 @@ class ChatTurn(Base):
         Index('idx_chat_turn_conv_turn', 'conversation_id', 'turn_number'),
         Index('idx_chat_turn_conv_created', 'conversation_id', 'created_at'),
     )
+
+
+class SubjectConfiguration(Base):
+    """Subject Configuration model - stores subject name and system instructions (singleton)."""
+
+    __tablename__ = "subject_configuration"
+
+    id = Column(Integer, primary_key=True)
+    subject_name = Column(String(500), nullable=False)
+    system_instructions = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

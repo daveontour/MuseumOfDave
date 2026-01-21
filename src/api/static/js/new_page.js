@@ -179,6 +179,13 @@ document.addEventListener('DOMContentLoaded', () => {
         resumeConversationBtn: document.getElementById('resume-conversation-btn'),
         conversationIndicator: document.getElementById('conversation-indicator'),
         newConversationModal: document.getElementById('new-conversation-modal'),
+        // Subject Configuration Modal elements
+        subjectConfigurationModal: document.getElementById('subject-configuration-modal'),
+        closeSubjectConfigModalBtn: document.getElementById('close-subject-config-modal'),
+        subjectNameInput: document.getElementById('subject-name-input'),
+        systemInstructionsTextarea: document.getElementById('system-instructions-textarea'),
+        saveSubjectConfigBtn: document.getElementById('save-subject-config-btn'),
+        cancelSubjectConfigBtn: document.getElementById('cancel-subject-config-btn'),
         closeNewConversationModalBtn: document.getElementById('close-new-conversation-modal'),
         newConversationTitleInput: document.getElementById('new-conversation-title-input'),
         newConversationVoiceSelect: document.getElementById('new-conversation-voice-select'),
@@ -8135,6 +8142,289 @@ ${textContent}
             };
         })(),
 
+        SubjectConfiguration: (() => {
+            let currentSubjectName = null;
+            let configurationLoaded = false;
+
+            async function loadConfiguration() {
+                try {
+                    const response = await fetch('/api/subject-configuration');
+                    if (response.ok) {
+                        const config = await response.json();
+                        currentSubjectName = config.subject_name;
+                        configurationLoaded = true;
+                        return config;
+                    } else if (response.status === 404) {
+                        // Configuration doesn't exist yet
+                        configurationLoaded = false;
+                        return null;
+                    } else {
+                        throw new Error(`Failed to load configuration: ${response.statusText}`);
+                    }
+                } catch (error) {
+                    console.error('Error loading subject configuration:', error);
+                    configurationLoaded = false;
+                    return null;
+                }
+            }
+
+            async function saveConfiguration(subjectName, systemInstructions) {
+                try {
+                    const response = await fetch('/api/subject-configuration', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            subject_name: subjectName,
+                            system_instructions: systemInstructions
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.detail || 'Failed to save configuration');
+                    }
+
+                    const config = await response.json();
+                    currentSubjectName = config.subject_name;
+                    configurationLoaded = true;
+                    return config;
+                } catch (error) {
+                    console.error('Error saving subject configuration:', error);
+                    throw error;
+                }
+            }
+
+            function getSubjectName() {
+                return currentSubjectName;
+            }
+
+            function updatePageReferences(subjectName) {
+                if (!subjectName) return;
+
+                // Update page title
+                document.title = `Let's Talk About ${subjectName}`;
+
+                // Update header
+                const header = document.querySelector('.header-container h2');
+                if (header) {
+                    header.textContent = `Let's Talk About ${subjectName}`;
+                }
+
+                const exploreDaveWorldHeading = document.getElementById('explore-dave-world-heading');
+                if (exploreDaveWorldHeading) {
+                    exploreDaveWorldHeading.textContent = `Explore ${subjectName}'s World`;
+                }
+
+                // Update info box references
+                const infoBox = document.getElementById('info-box');
+                if (infoBox) {
+                    const text = infoBox.innerHTML;
+                    // Replace common references
+                    const updatedText = text
+                        .replace(/Dave/g, subjectName)
+                        .replace(/Dave's/g, `${subjectName}'s`)
+                        .replace(/David Burton/g, subjectName);
+                    infoBox.innerHTML = updatedText;
+                }
+
+                // Update voice descriptions dynamically
+                const voiceIcons = document.querySelectorAll('.voice-icon-wrapper');
+                voiceIcons.forEach(icon => {
+                    const description = icon.getAttribute('data-description');
+                    if (description && description.includes('Dave')) {
+                        const updatedDescription = description
+                            .replace(/Dave/g, subjectName)
+                            .replace(/Dave's/g, `${subjectName}'s`);
+                        icon.setAttribute('data-description', updatedDescription);
+                        const title = icon.querySelector('.voice-icon-title');
+                        if (title) {
+                            title.textContent = updatedDescription;
+                        }
+                    }
+                });
+
+                // Update voice select dropdown options
+                const voiceSelect = DOM.voiceSelect || document.getElementById('voice-select');
+                if (voiceSelect) {
+                    const options = voiceSelect.querySelectorAll('option');
+                    options.forEach(option => {
+                        if (option.textContent.includes('Dave')) {
+                            option.textContent = option.textContent
+                                .replace(/Dave/g, subjectName)
+                                .replace(/Dave's/g, `${subjectName}'s`);
+                        }
+                    });
+                }
+            }
+
+            async function checkAndShow() {
+                if (configurationLoaded && currentSubjectName) {
+                    updatePageReferences(currentSubjectName);
+                    return;
+                }
+
+                const config = await loadConfiguration();
+                if (!config) {
+                    // No configuration exists, show modal
+                    showModal();
+                } else {
+                    // Configuration exists, update references
+                    updatePageReferences(config.subject_name);
+                }
+            }
+
+            let isInitialSetup = false;
+
+            async function showModal(loadExisting = false) {
+                if (!DOM.subjectConfigurationModal) {
+                    console.error('Subject configuration modal not found');
+                    return;
+                }
+
+                // Track if this is initial setup (non-dismissible) or editing (dismissible)
+                isInitialSetup = !loadExisting;
+
+                // Load existing configuration if requested (for editing)
+                if (loadExisting) {
+                    try {
+                        const config = await loadConfiguration();
+                        if (config) {
+                            if (DOM.subjectNameInput) {
+                                DOM.subjectNameInput.value = config.subject_name || '';
+                            }
+                            if (DOM.systemInstructionsTextarea) {
+                                DOM.systemInstructionsTextarea.value = config.system_instructions || '';
+                            }
+                        } else {
+                            // No config exists, load default from file
+                            await loadDefaultInstructions();
+                        }
+                    } catch (error) {
+                        console.error('Error loading configuration:', error);
+                        await loadDefaultInstructions();
+                    }
+                } else {
+                    // First time setup - load default instructions from file
+                    await loadDefaultInstructions();
+                }
+
+                Modals._openModal(DOM.subjectConfigurationModal);
+            }
+
+            async function loadDefaultInstructions() {
+                if (DOM.systemInstructionsTextarea && !DOM.systemInstructionsTextarea.value) {
+                    try {
+                        const response = await fetch('/static/data/system_instructions_chat.txt');
+                        if (response.ok) {
+                            const text = await response.text();
+                            if (DOM.systemInstructionsTextarea) {
+                                DOM.systemInstructionsTextarea.value = text;
+                            }
+                        }
+                    } catch (err) {
+                        console.debug('Could not load default system instructions:', err);
+                    }
+                }
+            }
+
+            function closeModal() {
+                if (DOM.subjectConfigurationModal) {
+                    Modals._closeModal(DOM.subjectConfigurationModal);
+                }
+            }
+
+            async function handleSave() {
+                const subjectName = DOM.subjectNameInput ? DOM.subjectNameInput.value.trim() : '';
+                const systemInstructions = DOM.systemInstructionsTextarea ? DOM.systemInstructionsTextarea.value.trim() : '';
+
+                if (!subjectName) {
+                    alert('Please enter a subject name');
+                    return;
+                }
+
+                if (!systemInstructions) {
+                    alert('Please enter system instructions');
+                    return;
+                }
+
+                try {
+                    await saveConfiguration(subjectName, systemInstructions);
+                    updatePageReferences(subjectName);
+                    closeModal();
+                    
+                    // Show success message
+                    alert('Subject configuration saved successfully!');
+                    
+                    // Reload page to ensure all references are updated
+                    window.location.reload();
+                } catch (error) {
+                    alert(`Error saving configuration: ${error.message}`);
+                }
+            }
+
+            function init() {
+                // Set up event listeners
+                if (DOM.saveSubjectConfigBtn) {
+                    DOM.saveSubjectConfigBtn.addEventListener('click', handleSave);
+                }
+
+                if (DOM.cancelSubjectConfigBtn) {
+                    DOM.cancelSubjectConfigBtn.addEventListener('click', () => {
+                        if (!isInitialSetup) {
+                            // Only allow cancel if not initial setup
+                            closeModal();
+                        }
+                    });
+                }
+
+                if (DOM.closeSubjectConfigModalBtn) {
+                    DOM.closeSubjectConfigModalBtn.addEventListener('click', () => {
+                        if (!isInitialSetup) {
+                            // Only allow close if not initial setup
+                            closeModal();
+                        }
+                    });
+                }
+
+                // Button in Settings tab to edit configuration
+                const editSubjectConfigBtn = document.getElementById('edit-subject-config-btn');
+                if (editSubjectConfigBtn) {
+                    editSubjectConfigBtn.addEventListener('click', () => {
+                        showModal(true); // Load existing configuration
+                    });
+                }
+
+                // Prevent closing modal by clicking outside only during initial setup
+                if (DOM.subjectConfigurationModal) {
+                    DOM.subjectConfigurationModal.addEventListener('click', (e) => {
+                        if (e.target === DOM.subjectConfigurationModal && isInitialSetup) {
+                            // Don't close - modal is non-dismissible during initial setup
+                            e.stopPropagation();
+                        } else if (e.target === DOM.subjectConfigurationModal && !isInitialSetup) {
+                            // Allow closing when editing
+                            closeModal();
+                        }
+                    });
+                }
+
+                // Check and show modal on page load if needed
+                checkAndShow();
+            }
+
+            return {
+                init,
+                checkAndShow,
+                loadConfiguration,
+                saveConfiguration,
+                getSubjectName,
+                updatePageReferences,
+                showModal,
+                close: closeModal
+            };
+        })(),
+
         initAll: () => {
             Modals.Suggestions.init();
             Modals.FBAlbums.init();
@@ -8154,6 +8444,7 @@ ${textContent}
             Modals.AddInterviewee.init();
             Modals.ReferenceDocumentsNotification.init();
             Modals.ConversationManager.init();
+            Modals.SubjectConfiguration.init();
         },
 
         closeAll: () => {

@@ -249,19 +249,32 @@ class ChatService:
         self.client = genai.Client(api_key=api_key)
         self.model_name = model_name
 
-        self.voice_instructions_list = self._load_voice_instructions()
+        self.voice_instructions_list = None  # Will be loaded when database is set
         self.voice = "expert"
-        self.voice_instructions = self.voice_instructions_list[self.voice]
-        self.system_prompt = self._load_system_prompt()
+        self.voice_instructions = None  # Will be loaded when database is set
+        self.system_prompt = None  # Will be loaded when database is set
         self.session_turns = []  # List of {"user_input": str, "response_text": str}
         self.db = None  # Will be set when needed
         self.current_conversation_id = None  # Current active conversation ID
+        self.subject_name = None  # Subject name from configuration
+        
+        # Load voice instructions initially (without subject name replacement)
+        # They will be reloaded with subject name when database is set
+        try:
+            self.voice_instructions_list = self._load_voice_instructions()
+            if self.voice_instructions_list and self.voice in self.voice_instructions_list:
+                self.voice_instructions = self.voice_instructions_list[self.voice]
+        except Exception as e:
+            print(f"[GeminiChatService.__init__] Error loading voice instructions: {e}")
 
         print("[GeminiChatService.__init__] Initialization complete")
 
     def set_voice(self, voice: str):
         """Sets the voice for the session."""
         self.voice = voice
+        if not self.voice_instructions_list:
+            # Reload voice instructions if not loaded yet
+            self.voice_instructions_list = self._load_voice_instructions()
         try:
             self.voice_instructions = self.voice_instructions_list[voice]
         except KeyError:
@@ -272,6 +285,10 @@ class ChatService:
     def set_database(self, db: Database):
         """Set the database instance for retrieving reference documents."""
         self.db = db
+        # Load system prompt and subject name when database is set
+        self.reload_system_prompt(db=db)
+        # Load system prompt and subject name when database is set
+        self.reload_system_prompt(db=db)
 
     def clear_session(self):
         """Clears the session turns list and conversation context."""
@@ -499,12 +516,21 @@ class ChatService:
         
 
     def _load_voice_instructions(self):
-        """Loads voice instructions from the JSON file."""
+        """Loads voice instructions from the JSON file and replaces placeholders."""
         try:
             # Print the full path of the current directory
             print(f"[ChatService._load_voice_instructions] Current directory: {os.getcwd()}")
-            with open('src/api/static/data/voice_instructions.json', 'r') as file:
+            with open('src/api/static/data/voice_instructions.json', 'r', encoding='utf-8') as file:
                 voice_data = json.load(file)
+                
+                # Replace placeholders with subject name if available
+                if self.subject_name:
+                    for voice_key, voice_info in voice_data.items():
+                        if isinstance(voice_info, dict):
+                            for key, value in voice_info.items():
+                                if isinstance(value, str):
+                                    voice_info[key] = value.replace('{SUBJECT_NAME}', self.subject_name)
+                
                 print(f"ChatService._load_voice_instructions] Loaded {len(voice_data)} voice instructions")
                 return voice_data
         except FileNotFoundError:
@@ -517,17 +543,69 @@ class ChatService:
                 }
             }
 
+    def reload_system_prompt(self, db: Database = None):
+        """Reload system prompt from database with file fallback.
+        
+        Args:
+            db: Database instance (optional, uses self.db if not provided)
+        """
+        if db is None:
+            db = self.db
+        
+        if db:
+            try:
+                from .subject_configuration_service import SubjectConfigurationService
+                config_service = SubjectConfigurationService(db=db)
+                
+                # Get subject name
+                self.subject_name = config_service.get_subject_name()
+                
+                # Reload voice instructions with subject name replacement
+                self.voice_instructions_list = self._load_voice_instructions()
+                if self.voice_instructions_list and self.voice in self.voice_instructions_list:
+                    self.voice_instructions = self.voice_instructions_list[self.voice]
+                
+                # Get system instructions from database (with file fallback)
+                instructions = config_service.get_system_instructions()
+                
+                # Replace placeholders in instructions with actual subject name
+                if self.subject_name:
+                    instructions = instructions.replace('{SUBJECT_NAME}', self.subject_name)
+                    # Also replace common variations for backward compatibility
+                    instructions = instructions.replace('Dave', self.subject_name)
+                    instructions = instructions.replace('Dave\'s', f"{self.subject_name}'s")
+                    instructions = instructions.replace('David Burton', self.subject_name)
+                
+                self.system_prompt = instructions
+                print(f"[ChatService.reload_system_prompt] Loaded system instructions from database ({len(instructions)} chars)")
+                return
+            except Exception as e:
+                print(f"[ChatService.reload_system_prompt] Error loading from database: {e}")
+                # Fall through to file loading
+        
+        # Fallback to file loading
+        self.system_prompt = self._load_system_prompt_from_file()
+        # Try to load voice instructions even without database
+        if not self.voice_instructions_list:
+            self.voice_instructions_list = self._load_voice_instructions()
+            if self.voice_instructions_list and self.voice in self.voice_instructions_list:
+                self.voice_instructions = self.voice_instructions_list[self.voice]
+
     def _load_system_prompt(self):
+        """Loads system prompt from a text file (fallback method)."""
+        return self._load_system_prompt_from_file()
+
+    def _load_system_prompt_from_file(self):
         """Loads system prompt from a text file."""
         try:
             # Print the full path of the current directory
-            print(f"[ChatService._load_voice_instructions] Current directory: {os.getcwd()}")
-            with open('src/api/static/data/system_instructions_chat.txt', 'r') as file:
+            print(f"[ChatService._load_system_prompt] Current directory: {os.getcwd()}")
+            with open('src/api/static/data/system_instructions_chat.txt', 'r', encoding='utf-8') as file:
                 instructions = file.read()
-                print(f"[ChatService._load_voice_instructions] Loaded {len(instructions)} system instructions")
+                print(f"[ChatService._load_system_prompt] Loaded {len(instructions)} system instructions from file")
                 return instructions
         except FileNotFoundError:
-            print("[ChatService._load_voice_instructions] system_instructions_chat.txt not found. Using default instructions.")
+            print("[ChatService._load_system_prompt] system_instructions_chat.txt not found. Using default instructions.")
             return """You are an expert on life in general
                 Always answer confidently, don't be afraid to say you don't know and that you might have to do deeper research. 
                 If not much information is available, prompt the user to ask for more information. 

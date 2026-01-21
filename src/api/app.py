@@ -32,6 +32,7 @@ from ..database.storage import EmailStorage, ImageStorage
 from ..services import ImageService, EmailService, ReferenceDocumentService, MessageService, ImportService
 from ..services.gemini_service import ChatService, GeminiService
 from ..services.chat_conversation_service import ChatConversationService
+from ..services.subject_configuration_service import SubjectConfigurationService
 from ..services.exceptions import ServiceException, ValidationError, NotFoundError, ConflictError
 from ..services.dto import (
     ImageSearchFilters,
@@ -2225,6 +2226,80 @@ async def delete_conversation(conversation_id: int):
         print(f"Error in delete_conversation: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error deleting conversation: {str(e)}")
+
+
+# Subject Configuration Endpoints
+
+class SubjectConfigurationRequest(BaseModel):
+    """Request model for subject configuration."""
+    subject_name: str
+    system_instructions: str
+
+
+@app.get("/api/subject-configuration")
+async def get_subject_configuration():
+    """Get current subject configuration.
+    
+    Returns:
+        Dictionary with subject configuration or 404 if not set
+    """
+    try:
+        config_service = SubjectConfigurationService(db=db)
+        configuration = config_service.get_configuration()
+        
+        if not configuration:
+            raise HTTPException(status_code=404, detail="Subject configuration not found")
+        
+        return {
+            "id": configuration.id,
+            "subject_name": configuration.subject_name,
+            "system_instructions": configuration.system_instructions,
+            "created_at": configuration.created_at.isoformat() if configuration.created_at else None,
+            "updated_at": configuration.updated_at.isoformat() if configuration.updated_at else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Error in get_subject_configuration: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error getting subject configuration: {str(e)}")
+
+
+@app.post("/api/subject-configuration")
+async def create_or_update_subject_configuration(request: SubjectConfigurationRequest):
+    """Create or update subject configuration.
+    
+    Args:
+        request: SubjectConfigurationRequest with subject_name and system_instructions
+        
+    Returns:
+        Dictionary with created/updated configuration
+    """
+    try:
+        config_service = SubjectConfigurationService(db=db)
+        configuration = config_service.create_or_update_configuration(
+            subject_name=request.subject_name,
+            system_instructions=request.system_instructions
+        )
+        
+        # Reload system prompt in chat service to use new configuration
+        chat_service.reload_system_prompt(db=db)
+        
+        return {
+            "id": configuration.id,
+            "subject_name": configuration.subject_name,
+            "system_instructions": configuration.system_instructions,
+            "created_at": configuration.created_at.isoformat() if configuration.created_at else None,
+            "updated_at": configuration.updated_at.isoformat() if configuration.updated_at else None
+        }
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+        print(f"Error in create_or_update_subject_configuration: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error saving subject configuration: {str(e)}")
 
 
 @app.get("/chat/conversations/{conversation_id}/turns")
