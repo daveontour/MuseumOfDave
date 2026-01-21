@@ -33,16 +33,16 @@ document.addEventListener('DOMContentLoaded', () => {
             'dave_sm': 'dave_sm.png', 'irish_sm': 'irish_sm.png', 'haiku_sm': 'haiku_sm.png',
             'insult_sm': 'insult_sm.png', 'earthchild_sm': 'earthchild_sm.png',
         },
-        FUNCTION_NAMES: Object.freeze({
-            FirstFunction: "testFunction",
-            SecondFunction: "showFBMessengerOptions",
-            ThirdFunction: "showFBAlbumsOptions",
-            FourthFunction: "openGeoModal",
-            FifthFunction: "showLocationInfo",
-            SixthFunction: "showImageGallery",
-            SeventhFunction: "testEmail",
-            EighthFunction: "showEmailGallery"
-        }),
+        // FUNCTION_NAMES: Object.freeze({
+        //     FirstFunction: "testFunction",
+        //     SecondFunction: "showFBMessengerOptions",
+        //     ThirdFunction: "showFBAlbumsOptions",
+        //     FourthFunction: "openGeoModal",
+        //     FifthFunction: "showLocationInfo",
+        //     SixthFunction: "showImageGallery",
+        //     SeventhFunction: "testEmail",
+        //     EighthFunction: "showEmailGallery"
+        // }),
         VOICE_DESCRIPTIONS: {
             'expert': 'a knowledgeable expert who provides accurate, factual information',
             'psychologist': 'a compassionate therapist offering psychological insights',
@@ -1803,210 +1803,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         })(),
         
-        // HaveYourSay: (() => {
-        //     function open() {
-        //         Modals._openModal(DOM.haveYourSayModal);
-        //         DOM.haveYourSayTextarea.value = '';
-        //         DOM.dictationStatus.textContent = '';
-        //         // DOM.haveYourSayTextarea.focus(); // Can be disruptive
-        //     }
-        //     function close() {
-        //         Modals._closeModal(DOM.haveYourSayModal);
-        //         stopDictation();
-        //     }
 
-        //     function startDictation() {
-        //         if (!AppState.dictationRecognition) return;
-        //         if (AppState.isDictationListening) {
-        //             stopDictation();
-        //             return;
-        //         }
-        //         AppState.finalDictationTranscript = '';
-        //         DOM.haveYourSayTextarea.value = '';
-        //         AppState.dictationRecognition.start();
-        //         DOM.startDictationBtn.style.display = 'none';
-        //         DOM.stopDictationBtn.style.display = 'block';
-        //     }
-
-        //     function stopDictation() {
-        //         if (AppState.dictationRecognition && AppState.isDictationListening) {
-        //             AppState.dictationRecognition.stop();
-        //             // isListening will be set to false by onend
-        //         }
-        //         // Explicitly ensure button state is correct even if onend is delayed
-        //         DOM.dictationStatus.textContent = 'Dictation stopped.';
-        //         DOM.stopDictationBtn.style.display = 'none';
-        //         DOM.startDictationBtn.style.display = 'block';
-        //         AppState.isDictationListening = false;
-        //     }
-            
-        //     function handleSubmit() {
-        //         const text = DOM.haveYourSayTextarea.value.trim();
-        //         const name = DOM.haveYourSayName.value.trim();
-        //         const relationship = DOM.haveYourSayRelationship.value.trim();
-        //         let prefix = '';
-        //         if (name && relationship) prefix = `${name} (${relationship}): `;
-        //         else if (name) prefix = `${name}: `;
-        //         else if (relationship) prefix = `(${relationship}): `;
-                
-        //         if (text) {
-        //             // DOM.userInput.value = prefix + text;
-        //             // close();
-        //             // DOM.userInput.focus();
-                   
-        //         fetch(CONSTANTS.API_PATHS.HAVE_YOUR_SAY, {
-        //             method: 'POST',
-        //             headers: {
-        //                 'Content-Type': 'application/json',
-        //             },
-        //             body: JSON.stringify({
-        //                 content: text,
-        //                 name: name,
-        //                 relationship: relationship
-        //             })
-        //         })
-        //         .then(response => {
-        //             if (response.ok) {
-        //                 DOM.dictationStatus.textContent = 'Thank you for your submission!';
-        //                 close();
-        //                 DOM.userInput.focus();
-        //             } else {
-        //                 DOM.dictationStatus.textContent = 'Error submitting. Please try again.';
-        //             }
-        //         })
-        //         .catch(error => {
-        //             console.error('Error:', error);
-        //             DOM.dictationStatus.textContent = 'Error submitting. Please try again.';
-        //         });
-        //         } else {
-        //             DOM.dictationStatus.textContent = 'Please enter or dictate some text.';
-        //         }
-        //     }
-
-        //     function initSpeechRecognition() {
-        //         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        //         if (SpeechRecognition) {
-        //             AppState.dictationRecognition = new SpeechRecognition();
-        //             AppState.dictationRecognition.lang = 'en-US';
-        //             AppState.dictationRecognition.interimResults = true;
-        //             AppState.dictationRecognition.continuous = true;
-
-        //             AppState.dictationRecognition.onstart = () => { AppState.isDictationListening = true; DOM.dictationStatus.textContent = 'Listening...'; };
-        //             AppState.dictationRecognition.onerror = (event) => { DOM.dictationStatus.textContent = 'Dictation error: ' + event.error; AppState.isDictationListening = false; stopDictation(); };
-        //             AppState.dictationRecognition.onend = () => { AppState.isDictationListening = false; if (DOM.dictationStatus.textContent === 'Listening...') DOM.dictationStatus.textContent = 'Dictation stopped.'; stopDictation();}; // Ensure stop UI updates
-        //             AppState.dictationRecognition.onresult = (event) => {
-        //                 let interimTranscript = '';
-        //                 for (let i = event.resultIndex; i < event.results.length; ++i) {
-        //                     if (event.results[i].isFinal) AppState.finalDictationTranscript += event.results[i][0].transcript;
-        //                     else interimTranscript += event.results[i][0].transcript;
-        //                 }
-        //                 DOM.haveYourSayTextarea.value = AppState.finalDictationTranscript + interimTranscript;
-        //             };
-        //         } else {
-        //             DOM.startDictationBtn.disabled = true;
-        //             DOM.dictationStatus.textContent = 'Speech recognition not supported.';
-        //         }
-        //     }
-
-        //     // Chat dictation functions
-        //     function startChatDictation() {
-        //         if (!AppState.chatDictationRecognition) return;
-        //         if (AppState.isChatDictationListening) {
-        //             stopChatDictation();
-        //             return;
-        //         }
-        //         AppState.finalChatDictationTranscript = '';
-        //         DOM.userInput.value = '';
-        //         AppState.chatDictationRecognition.start();
-        //         DOM.chatStartDictationBtn.style.display = 'none';
-        //         DOM.chatStopDictationBtn.style.display = 'block';
-        //     }
-
-        //     function stopChatDictation() {
-        //         // Prevent double execution by checking if already stopped
-        //         if (!AppState.isChatDictationListening) {
-        //             return;
-        //         }
-                
-        //         if (AppState.chatDictationRecognition) {
-        //             AppState.chatDictationRecognition.stop();
-        //         }
-        //         DOM.chatStopDictationBtn.style.display = 'none';
-        //         DOM.chatStartDictationBtn.style.display = 'block';
-        //         AppState.isChatDictationListening = false;
-                
-        //         // Auto-submit the entered text if there's content
-        //         const userInput = DOM.userInput.value.trim();
-        //         if (userInput) {
-        //             // Trigger the form submission
-        //             // const chatForm = document.getElementById('chat-form');
-        //             // if (chatForm) {
-        //             //     chatForm.dispatchEvent(new Event('submit', { bubbles: true }));
-        //             // }
-        //             App.processFormSubmit(userInput);
-        //         }
-        //     }
-
-        //     function initChatSpeechRecognition() {
-        //         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        //         if (SpeechRecognition) {
-        //             AppState.chatDictationRecognition = new SpeechRecognition();
-        //             AppState.chatDictationRecognition.lang = 'en-US';
-        //             AppState.chatDictationRecognition.interimResults = true;
-        //             AppState.chatDictationRecognition.continuous = true;
-
-        //             AppState.chatDictationRecognition.onstart = () => { 
-        //                 AppState.isChatDictationListening = true; 
-        //             };
-        //             AppState.chatDictationRecognition.onerror = (event) => { 
-        //                 DOM.chatDictationStatus.textContent = 'Dictation error: ' + event.error; 
-        //                 AppState.isChatDictationListening = false; 
-        //                 stopChatDictation(); 
-        //             };
-        //             AppState.chatDictationRecognition.onend = () => { 
-        //                 // Only call stopChatDictation if we're still listening
-        //                 // This prevents double execution when manually stopping
-        //                 if (AppState.isChatDictationListening) {
-        //                     stopChatDictation(); 
-        //                 }
-        //             };
-        //             AppState.chatDictationRecognition.onresult = (event) => {
-        //                 let interimTranscript = '';
-        //                 for (let i = event.resultIndex; i < event.results.length; ++i) {
-        //                     if (event.results[i].isFinal) {
-        //                         AppState.finalChatDictationTranscript += event.results[i][0].transcript;
-        //                     } else {
-        //                         interimTranscript += event.results[i][0].transcript;
-        //                     }
-        //                 }
-        //                 DOM.userInput.value = AppState.finalChatDictationTranscript + interimTranscript;
-        //             };
-        //         } else {
-        //             if (DOM.chatStartDictationBtn) {
-        //                 DOM.chatStartDictationBtn.disabled = true;
-        //                 DOM.chatDictationStatus.textContent = 'Speech recognition not supported.';
-        //             }
-        //         }
-        //     }
-
-        //     function init() {
-        //         if (DOM.haveYourSayBtn) DOM.haveYourSayBtn.addEventListener('click', open);
-        //         if (DOM.closeHaveYourSayModalBtn) DOM.closeHaveYourSayModalBtn.addEventListener('click', close);
-        //         if (DOM.cancelHaveYourSayBtn) DOM.cancelHaveYourSayBtn.addEventListener('click', close);
-        //         if (DOM.haveYourSayModal) DOM.haveYourSayModal.addEventListener('click', (e) => { if (e.target === DOM.haveYourSayModal) close(); });
-                
-        //         initSpeechRecognition();
-        //         if (DOM.startDictationBtn) DOM.startDictationBtn.addEventListener('click', startDictation);
-        //         if (DOM.stopDictationBtn) DOM.stopDictationBtn.addEventListener('click', stopDictation);
-        //         if (DOM.submitHaveYourSayBtn) DOM.submitHaveYourSayBtn.addEventListener('click', handleSubmit);
-
-        //         // Initialize chat dictation
-        //         initChatSpeechRecognition();
-        //         if (DOM.chatStartDictationBtn) DOM.chatStartDictationBtn.addEventListener('click', startChatDictation);
-        //         if (DOM.chatStopDictationBtn) DOM.chatStopDictationBtn.addEventListener('click', stopChatDictation);
-        //     }
-        //     return { init,open };
-        // })(),
 
         Locations: (() => {
 
@@ -7704,6 +7501,8 @@ ${textContent}
 
         ReferenceDocumentsNotification: (() => {
             let proceedCallback = null;
+            let hasShownBefore = false;
+            let numberOfCalls = 0;
             const STORAGE_KEY = 'reference_documents_notification_shown';
             const STORAGE_KEY_DOCS_HASH = 'reference_documents_hash';
 
@@ -7805,6 +7604,7 @@ ${textContent}
             }
 
             async function checkAndShow(callback) {
+                debugger;
                 proceedCallback = callback;
                 
                 // Check if we should show the notification
@@ -7812,19 +7612,22 @@ ${textContent}
                 
                 const currentHash = getDocumentsHash(documents);
                 const storedHash = localStorage.getItem(STORAGE_KEY_DOCS_HASH);
-                const hasShownBefore = localStorage.getItem(STORAGE_KEY) === 'true';
+                //const hasShownBefore = localStorage.getItem(STORAGE_KEY) === 'true';
                 
                 // Show if:
                 // 1. User hasn't seen it before, OR
                 // 2. Documents have changed (hash differs)
-                const shouldShow = !hasShownBefore || (storedHash !== currentHash);
+                const shouldShow = !hasShownBefore || (storedHash !== currentHash || numberOfCalls > 15);
                 
                 if (shouldShow) {
                     renderDocumentsList(documents);
                     open();
                     // Update hash after showing
                     localStorage.setItem(STORAGE_KEY_DOCS_HASH, currentHash);
+                    hasShownBefore = true;
+                    numberOfCalls = 0;
                 } else {
+                    numberOfCalls++;
                     // No need to show, proceed directly
                     if (callback) callback();
                 }
@@ -7846,10 +7649,11 @@ ${textContent}
             function proceed() {
                 // Mark as shown
                 localStorage.setItem(STORAGE_KEY, 'true');
-                close();
+                
                 if (proceedCallback) {
                     proceedCallback();
                 }
+                close();
             }
 
             function cancel() {
@@ -7992,110 +7796,6 @@ ${textContent}
         }
     };
 
-    // --- SSE Module ---
-    // const SSE = (() => {
-    //     const browserFunctions = { // Functions Gemini can ask the browser to execute
-    //         showAlert: function(message) {
-    //             alert(message);
-    //             _logToChatbox(`Browser: Executed showAlert: "${message}"`);
-    //         },
-    //         changeBackgroundColor: function(color) {
-    //             document.body.style.backgroundColor = color;
-    //             _logToChatbox(`Browser: Executed changeBackgroundColor to "${color}"`);
-    //         },
-    //         showLocationInfo: function() {
-    //             Modals.ConfirmationModal.open('Location Info', 'Would you like to see the location information mapped out?', () => {
-    //                 Modals.Locations.openMapView();
-    //             });
-    //         },
-    //         showFacebookAlbums: function() {
-    //             Modals.ConfirmationModal.open('Facebook Albums', 'Would you like to choose the Facebook Albums to display?', () => {
-    //                 Modals.FBAlbums.open();
-    //             });
-    //         },
-    //         showImageGallery: function() {
-    //             Modals.ConfirmationModal.open('Image Gallery', 'Would you like to choose the Image Gallery to display?', () => {
-    //                 Modals.ImageGallery.open();
-    //             });
-    //         },
-    //         showEmailGallery: function() {
-    //             Modals.ConfirmationModal.open('Email Gallery', 'Would you like to browse through emails?', () => {
-    //                 Modals.EmailGallery.open();
-    //             });
-    //         },
-    //         showFacebookAlbum: function(albumTitle) {
-    //             Modals.FBAlbums.openAlbum(albumTitle);
-    //         },
-    //         showContactEmailGallery: function(contactName) {
-    //             Modals.EmailGallery.openContact(contactName);
-    //         },
-    //         testEmail: function() {
-    //             const emailData = {
-    //                 from: "sender@example.com",
-    //                 to: "recipient@example.com",
-    //                 subject: "Important Meeting Tomorrow",
-    //                 date: "2024-01-15 14:30:00",
-    //                 body_text: "Hi there,\n\nJust a reminder about our meeting tomorrow at 10 AM.\n\nBest regards,\nJohn",
-    //                 attachments: [
-    //                     { filename: "meeting_notes.pdf", size: 1024000 },
-    //                     { filename: "agenda.docx", size: 512000 }
-    //                 ]
-    //             };
-                
-    //             Chat.addEmail(emailData);
-    //         },
-    //         // Add more functions here
-    //     };
-
-    //     function _logToChatbox(message) { // SSE specific logging, could be Chat.addMessage('system', ...)
-    //         const p = document.createElement('p');
-    //         p.textContent = message;
-    //         DOM.chatBox.appendChild(p);
-    //         UI.scrollToBottom();
-    //     }
-
-    //     function setup() {
-    //         if (AppState.sseEventSource) AppState.sseEventSource.close(); // Close existing before opening new
-
-    //         AppState.sseEventSource = new EventSource(`${CONSTANTS.API_PATHS.EVENTS}?clientId=${AppState.clientId}`);
-    //         AppState.sseEventSource.onopen = () => {  console.log("SSE Connection Opened with clientId:", AppState.clientId);};
-    //         AppState.sseEventSource.onmessage = (event) => {
-    //             console.log("SSE Message Received:", event.data);
-       
-    //             try {
-    //                 const data = JSON.parse(event.data);
-    //                 if (data.action === "execute_js" && data.functionName && browserFunctions[data.functionName]) {
-    //                     //_logToChatbox(`Browser: Received command to execute ${data.functionName}`);
-    //                     browserFunctions[data.functionName].apply(null, Array.isArray(data.args) ? data.args : (data.args != null ? [data.args] : []));
-    //                 } else {
-    //                    // _logToChatbox(`Browser: Unknown function or invalid action requested: ${data.functionName}`);
-    //                     console.warn("Unknown function or invalid action requested by backend:", data);
-    //                 }
-    //             } catch (e) {
-    //                 console.error("Error parsing SSE message or executing function:", e);
-    //                 //_logToChatbox(`Browser: Error processing command from server.`);
-    //             }
-    //         };
-    //         AppState.sseEventSource.onerror = (err) => {
-    //             //_logToChatbox("SSE Error. Connection may be closed.");
-    //             console.error("EventSource failed:", err);
-    //             // EventSource attempts to reconnect automatically.
-    //         };
-    //     }
-        
-    //     function close() {
-    //         if (AppState.sseEventSource) {
-    //             AppState.sseEventSource.close();
-    //             console.log("SSE Connection Closed.");
-    //         }
-    //     }
-
-    //     function init() {
-    //       //  _logToChatbox(`Client ID: ${AppState.clientId}`);
-    //         setup();
-    //     }
-    //     return { init, close, browserFunctions }; // Expose browserFunctions if needed elsewhere
-    // })();
 
     // --- Global Interviewee Management Functions ---
     async function loadInterviewees() {
@@ -8956,12 +8656,12 @@ ${textContent}
                 UI.hideLoadingIndicator();
             }
         },
-        [CONSTANTS.FUNCTION_NAMES.ThirdFunction]: () => Modals.FBAlbums.open(),    // showFBAlbumsOptions
-        [CONSTANTS.FUNCTION_NAMES.FourthFunction]: () => Modals.Locations.open(), // showGeoMetadataOptions
-        [CONSTANTS.FUNCTION_NAMES.FifthFunction]: () => SSE.browserFunctions.showLocationInfo(), // showTileAlbumOptions
-        [CONSTANTS.FUNCTION_NAMES.SixthFunction]: () => Modals.ImageGallery.open(),
-        [CONSTANTS.FUNCTION_NAMES.SeventhFunction]: () => SSE.browserFunctions.testEmail(), // showImageGalleryOptions
-        [CONSTANTS.FUNCTION_NAMES.EighthFunction]: () => Modals.EmailGallery.open() // showEmailGalleryOptions
+        // [CONSTANTS.FUNCTION_NAMES.ThirdFunction]: () => Modals.FBAlbums.open(),    // showFBAlbumsOptions
+        // [CONSTANTS.FUNCTION_NAMES.FourthFunction]: () => Modals.Locations.open(), // showGeoMetadataOptions
+        // [CONSTANTS.FUNCTION_NAMES.FifthFunction]: () => SSE.browserFunctions.showLocationInfo(), // showTileAlbumOptions
+        // [CONSTANTS.FUNCTION_NAMES.SixthFunction]: () => Modals.ImageGallery.open(),
+        // [CONSTANTS.FUNCTION_NAMES.SeventhFunction]: () => SSE.browserFunctions.testEmail(), // showImageGalleryOptions
+        // [CONSTANTS.FUNCTION_NAMES.EighthFunction]: () => Modals.EmailGallery.open() // showEmailGalleryOptions
 
     };
     window.customObject = AppActions; // Expose for Suggestions.json if it relies on global `customObject`
