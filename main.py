@@ -19,6 +19,12 @@ def main():
     db.create_tables()
     print("Database tables created/verified.")
     
+    # Initialize subject configuration from files
+    from src.services.subject_configuration_service import SubjectConfigurationService
+    config_service = SubjectConfigurationService(db=db)
+    config_service.initialize_from_files()
+    print("Subject configuration initialized from files.")
+    
     # Start the API server
     print("Starting API server on http://0.0.0.0:8000")
     print("API documentation available at http://localhost:8000/docs")

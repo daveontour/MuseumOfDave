@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'bar_girl': 'a friendly Thai bar girl called Lucky offering conversation and advice',
             'parents': 'caring parental figures providing guidance and support',
             'preacher': 'a spiritual advisor who is extremely pious and judgemental',
-            'dave': 'Dave in his own voice',
+            'dave': '{SUBJECT_NAME} in their own voice',
             'irish': 'a cheerful Irish comedian who is very funny and has a great sense of humour and responds in limmericks',
             'haiku': 'a poetic soul who responds in haiku form',
             'insult': 'a comedic roaster delivering playful burns',
@@ -183,7 +183,10 @@ document.addEventListener('DOMContentLoaded', () => {
         subjectConfigurationModal: document.getElementById('subject-configuration-modal'),
         closeSubjectConfigModalBtn: document.getElementById('close-subject-config-modal'),
         subjectNameInput: document.getElementById('subject-name-input'),
+        subjectGenderSelect: document.getElementById('subject-gender-select'),
         systemInstructionsTextarea: document.getElementById('system-instructions-textarea'),
+        coreSystemInstructionsTextarea: document.getElementById('core-system-instructions-textarea'),
+        subjectConfigTabs: document.querySelectorAll('.subject-config-tab'),
         saveSubjectConfigBtn: document.getElementById('save-subject-config-btn'),
         cancelSubjectConfigBtn: document.getElementById('cancel-subject-config-btn'),
         closeNewConversationModalBtn: document.getElementById('close-new-conversation-modal'),
@@ -575,7 +578,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 messageElement.classList.add(`voice-${selectedVoice}`);
                 const voiceImageSmall = document.createElement('img');
                 voiceImageSmall.className = 'message-voice-image';
-                voiceImageSmall.src = `/static/images/${CONSTANTS.VOICE_IMAGES[selectedVoice + '_sm']}`;
+
+                let selector = selectedVoice + '_sm';
+                let imgSrc = `/static/images/${CONSTANTS.VOICE_IMAGES[selector]}`;
+                voiceImageSmall.src = imgSrc;
                 voiceImageSmall.alt = `${selectedVoice} character`;
                 messageElement.appendChild(voiceImageSmall);
             }
@@ -1286,17 +1292,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function updateVoicePreview(voiceName) {
-
-            if (DOM.voicePreviewImg) {
+            // Re-query DOM elements to ensure we have fresh references
+            const voicePreviewImg = document.querySelector('.preview-image');
+            const voicePreviewDesc = document.querySelector('.preview-description');
+            
+            if (voicePreviewImg) {
                 const imageName = CONSTANTS.VOICE_IMAGES[voiceName];
  
                 if (imageName) {
                     const imagePath = `/static/images/${imageName}`;
-                    DOM.voicePreviewImg.src = imagePath;
-                    DOM.voicePreviewImg.alt = `${voiceName} character`;
+                    voicePreviewImg.src = imagePath;
+                    voicePreviewImg.alt = `${voiceName} character`;
                     
 
-                    DOM.voicePreviewImg.onerror = () => {
+                    voicePreviewImg.onerror = () => {
                         console.error('Failed to load voice preview image:', imagePath);
                     };
                 } else {
@@ -1305,8 +1314,27 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 console.error('voicePreviewImg element not found!');
             }
-            if (DOM.voicePreviewDesc) {
-                DOM.voicePreviewDesc.textContent = CONSTANTS.VOICE_DESCRIPTIONS[voiceName] || '';
+            
+            if (voicePreviewDesc) {
+                let description = CONSTANTS.VOICE_DESCRIPTIONS[voiceName] || '';
+                
+                // Try to get description from voice icon wrapper's data-description attribute first
+                const voiceWrapper = document.querySelector(`.voice-icon-wrapper[data-voice="${voiceName}"]`);
+                if (voiceWrapper && voiceWrapper.dataset.description) {
+                    description = voiceWrapper.dataset.description;
+                }
+                
+                // Replace subject name placeholders if subject name is available
+                if (Modals && Modals.SubjectConfiguration && Modals.SubjectConfiguration.getSubjectName) {
+                    const subjectName = Modals.SubjectConfiguration.getSubjectName();
+                    if (subjectName) {
+                        description = description.replace(/Dave/g, subjectName);
+                        description = description.replace(/Dave's/g, `${subjectName}'s`);
+                        description = description.replace(/{SUBJECT_NAME}/g, subjectName);
+                    }
+                }
+                
+                voicePreviewDesc.textContent = description;
             } else {
                 console.error('voicePreviewDesc element not found!');
             }
@@ -1358,10 +1386,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function highlightSelectedVoiceIcon() {
             const selectedVoice = getSelectedVoice();
-            DOM.voiceIcons.forEach(img => {
-                const alt = img.alt.toLowerCase().replace(/[-_]/g, '');
-                const val = selectedVoice.toLowerCase().replace(/[-_]/g, '');
-                img.style.border = (alt === val) ? '3px solid blue' : 'none';
+            
+            // Re-query voiceIconWrappers to ensure we have fresh references (in case DOM was updated)
+            const voiceIconWrappers = document.querySelectorAll('.voice-icon-wrapper');
+            
+            voiceIconWrappers.forEach(wrapper => {
+                const wrapperVoice = wrapper.dataset.voice;
+                const img = wrapper.querySelector('.voice-icon');
+                if (img) {
+                    if(wrapperVoice === selectedVoice) {
+                        // Add 'selected' class for highlighting
+                        img.classList.add('selected');
+                    } else {
+                        // Remove 'selected' class
+                        img.classList.remove('selected');
+                    }
+                }
             });
         }
         
@@ -8068,8 +8108,8 @@ ${textContent}
             }
 
             function init() {
-                // Load stored conversation on init
-                loadStoredConversation();
+                // Do not load stored conversation on page reload
+                // loadStoredConversation();
 
                 // Set up event listeners
                 if (DOM.closeConversationListModalBtn) {
@@ -8144,6 +8184,7 @@ ${textContent}
 
         SubjectConfiguration: (() => {
             let currentSubjectName = null;
+            let currentGender = null;
             let configurationLoaded = false;
 
             async function loadConfiguration() {
@@ -8152,6 +8193,7 @@ ${textContent}
                     if (response.ok) {
                         const config = await response.json();
                         currentSubjectName = config.subject_name;
+                        currentGender = config.gender || 'Male';
                         configurationLoaded = true;
                         return config;
                     } else if (response.status === 404) {
@@ -8168,7 +8210,33 @@ ${textContent}
                 }
             }
 
-            async function saveConfiguration(subjectName, systemInstructions) {
+            function switchTab(tabName) {
+                // Hide all tab contents
+                const tabContents = document.querySelectorAll('.subject-config-tab-content');
+                tabContents.forEach(content => {
+                    content.style.display = 'none';
+                });
+
+                // Remove active class from all tabs
+                const tabs = document.querySelectorAll('.subject-config-tab');
+                tabs.forEach(tab => {
+                    tab.classList.remove('active');
+                });
+
+                // Show selected tab content
+                const selectedContent = document.getElementById(`${tabName}-tab-content`);
+                if (selectedContent) {
+                    selectedContent.style.display = 'block';
+                }
+
+                // Add active class to selected tab
+                const selectedTab = document.querySelector(`.subject-config-tab[data-tab="${tabName}"]`);
+                if (selectedTab) {
+                    selectedTab.classList.add('active');
+                }
+            }
+
+            async function saveConfiguration(subjectName, systemInstructions, gender) {
                 try {
                     const response = await fetch('/api/subject-configuration', {
                         method: 'POST',
@@ -8177,7 +8245,8 @@ ${textContent}
                         },
                         body: JSON.stringify({
                             subject_name: subjectName,
-                            system_instructions: systemInstructions
+                            system_instructions: systemInstructions,
+                            gender: gender || 'Male'
                         })
                     });
 
@@ -8188,6 +8257,7 @@ ${textContent}
 
                     const config = await response.json();
                     currentSubjectName = config.subject_name;
+                    currentGender = config.gender || 'Male';
                     configurationLoaded = true;
                     return config;
                 } catch (error) {
@@ -8200,7 +8270,7 @@ ${textContent}
                 return currentSubjectName;
             }
 
-            function updatePageReferences(subjectName) {
+            function updatePageReferences(subjectName, newGender) {
                 if (!subjectName) return;
 
                 // Update page title
@@ -8212,31 +8282,83 @@ ${textContent}
                     header.textContent = `Let's Talk About ${subjectName}`;
                 }
 
+                if (CONSTANTS.VOICE_DESCRIPTIONS["dave"]) {
+                    CONSTANTS.VOICE_DESCRIPTIONS["dave"] = CONSTANTS.VOICE_DESCRIPTIONS["dave"].replace('{SUBJECT_NAME}', subjectName);
+                }
+
                 const exploreDaveWorldHeading = document.getElementById('explore-dave-world-heading');
                 if (exploreDaveWorldHeading) {
                     exploreDaveWorldHeading.textContent = `Explore ${subjectName}'s World`;
                 }
 
+                debugger;
+
+                const daveImage = document.querySelector('.voice-icon[alt="dave"]');
+                const admireImage = document.querySelector('.voice-icon[alt="secret-admirer"]');
+ 
+                if (newGender === 'Female') {
+                    // set the image source of the image with class voice-icon and  alt="dave" to /static/images/secret-admirer_sm.png
+
+                    CONSTANTS.VOICE_IMAGES["dave"] = "secret-admirer.png";
+                    CONSTANTS.VOICE_IMAGES["dave_sm"] = "secret-admirer_sm.png";
+                    CONSTANTS.VOICE_IMAGES["secret_admirer"] = "dave.png";
+                    CONSTANTS.VOICE_IMAGES["secret_admirer_sm"] = "dave_sm.png";
+
+
+
+                    if (daveImage) {
+                        daveImage.src = '/static/images/secret-admirer_sm.png';
+                    }
+                    
+                    if (admireImage) {
+                        admireImage.src = '/static/images/dave_sm.png';
+                    }
+
+                } else {
+
+                    
+                    CONSTANTS.VOICE_IMAGES["dave"] = "dave.png";
+                    CONSTANTS.VOICE_IMAGES["dave_sm"] = "dave_sm.png";
+                    CONSTANTS.VOICE_IMAGES["secret_admirer"] = "secret-admirer.png";
+                    CONSTANTS.VOICE_IMAGES["secret_admirer_sm"] = "secret-admirer_sm.png";
+
+                    if (admireImage) {
+                        admireImage.src = '/static/images/secret-admirer_sm.png';
+                    }
+                    
+                    if (daveImage) {
+                        daveImage.src = '/static/images/dave_sm.png';
+                    }
+                }
+                console.log("Images Updated");
+
                 // Update info box references
                 const infoBox = document.getElementById('info-box');
                 if (infoBox) {
-                    const text = infoBox.innerHTML;
+                    let text = infoBox.innerHTML;
                     // Replace common references
-                    const updatedText = text
+                    text = text
                         .replace(/Dave/g, subjectName)
                         .replace(/Dave's/g, `${subjectName}'s`)
                         .replace(/David Burton/g, subjectName);
-                    infoBox.innerHTML = updatedText;
+                    // Apply pronoun replacements if gender changed
+                    //text = applyPronounReplacements(text);
+                    infoBox.innerHTML = text;
                 }
 
                 // Update voice descriptions dynamically
                 const voiceIcons = document.querySelectorAll('.voice-icon-wrapper');
                 voiceIcons.forEach(icon => {
                     const description = icon.getAttribute('data-description');
-                    if (description && description.includes('Dave')) {
-                        const updatedDescription = description
-                            .replace(/Dave/g, subjectName)
-                            .replace(/Dave's/g, `${subjectName}'s`);
+                    if (description) {
+                        let updatedDescription = description;
+                        if (description.includes('Dave')) {
+                            updatedDescription = updatedDescription
+                                .replace(/Dave/g, subjectName)
+                                .replace(/Dave's/g, `${subjectName}'s`);
+                        }
+                        // Apply pronoun replacements if gender changed
+                        //updatedDescription = applyPronounReplacements(updatedDescription);
                         icon.setAttribute('data-description', updatedDescription);
                         const title = icon.querySelector('.voice-icon-title');
                         if (title) {
@@ -8250,18 +8372,27 @@ ${textContent}
                 if (voiceSelect) {
                     const options = voiceSelect.querySelectorAll('option');
                     options.forEach(option => {
-                        if (option.textContent.includes('Dave')) {
-                            option.textContent = option.textContent
+                        let text = option.textContent;
+                        if (text.includes('Dave')) {
+                            text = text
                                 .replace(/Dave/g, subjectName)
                                 .replace(/Dave's/g, `${subjectName}'s`);
                         }
+                        // Apply pronoun replacements if gender changed
+                        //text = applyPronounReplacements(text);
+                        option.textContent = text;
                     });
+                }
+
+                // Update current gender state after processing
+                if (newGender) {
+                    currentGender = newGender;
                 }
             }
 
             async function checkAndShow() {
                 if (configurationLoaded && currentSubjectName) {
-                    updatePageReferences(currentSubjectName);
+                    updatePageReferences(currentSubjectName, currentGender);
                     return;
                 }
 
@@ -8271,7 +8402,7 @@ ${textContent}
                     showModal();
                 } else {
                     // Configuration exists, update references
-                    updatePageReferences(config.subject_name);
+                    updatePageReferences(config.subject_name, config.gender || 'Male');
                 }
             }
 
@@ -8294,8 +8425,14 @@ ${textContent}
                             if (DOM.subjectNameInput) {
                                 DOM.subjectNameInput.value = config.subject_name || '';
                             }
+                            if (DOM.subjectGenderSelect) {
+                                DOM.subjectGenderSelect.value = config.gender || 'Male';
+                            }
                             if (DOM.systemInstructionsTextarea) {
                                 DOM.systemInstructionsTextarea.value = config.system_instructions || '';
+                            }
+                            if (DOM.coreSystemInstructionsTextarea) {
+                                DOM.coreSystemInstructionsTextarea.value = config.core_system_instructions || '';
                             }
                         } else {
                             // No config exists, load default from file
@@ -8310,10 +8447,30 @@ ${textContent}
                     await loadDefaultInstructions();
                 }
 
+                // Reset to first tab
+                switchTab('system-instructions');
+                
                 Modals._openModal(DOM.subjectConfigurationModal);
             }
 
             async function loadDefaultInstructions() {
+                // Try to load from API first (in case initialization already happened)
+                try {
+                    const config = await loadConfiguration();
+                    if (config) {
+                        if (DOM.systemInstructionsTextarea) {
+                            DOM.systemInstructionsTextarea.value = config.system_instructions || '';
+                        }
+                        if (DOM.coreSystemInstructionsTextarea) {
+                            DOM.coreSystemInstructionsTextarea.value = config.core_system_instructions || '';
+                        }
+                        return;
+                    }
+                } catch (err) {
+                    console.debug('Could not load configuration from API:', err);
+                }
+
+                // Fallback to loading from files
                 if (DOM.systemInstructionsTextarea && !DOM.systemInstructionsTextarea.value) {
                     try {
                         const response = await fetch('/static/data/system_instructions_chat.txt');
@@ -8327,6 +8484,20 @@ ${textContent}
                         console.debug('Could not load default system instructions:', err);
                     }
                 }
+
+                if (DOM.coreSystemInstructionsTextarea && !DOM.coreSystemInstructionsTextarea.value) {
+                    try {
+                        const response = await fetch('/static/data/system_instructions_core.txt');
+                        if (response.ok) {
+                            const text = await response.text();
+                            if (DOM.coreSystemInstructionsTextarea) {
+                                DOM.coreSystemInstructionsTextarea.value = text;
+                            }
+                        }
+                    } catch (err) {
+                        console.debug('Could not load default core system instructions:', err);
+                    }
+                }
             }
 
             function closeModal() {
@@ -8337,6 +8508,7 @@ ${textContent}
 
             async function handleSave() {
                 const subjectName = DOM.subjectNameInput ? DOM.subjectNameInput.value.trim() : '';
+                const gender = DOM.subjectGenderSelect ? DOM.subjectGenderSelect.value : 'Male';
                 const systemInstructions = DOM.systemInstructionsTextarea ? DOM.systemInstructionsTextarea.value.trim() : '';
 
                 if (!subjectName) {
@@ -8350,8 +8522,8 @@ ${textContent}
                 }
 
                 try {
-                    await saveConfiguration(subjectName, systemInstructions);
-                    updatePageReferences(subjectName);
+                    await saveConfiguration(subjectName, systemInstructions, gender);
+                    updatePageReferences(subjectName, gender);
                     closeModal();
                     
                     // Show success message
@@ -8385,6 +8557,18 @@ ${textContent}
                             // Only allow close if not initial setup
                             closeModal();
                         }
+                    });
+                }
+
+                // Tab switching logic
+                if (DOM.subjectConfigTabs && DOM.subjectConfigTabs.length > 0) {
+                    DOM.subjectConfigTabs.forEach(tab => {
+                        tab.addEventListener('click', () => {
+                            const tabName = tab.getAttribute('data-tab');
+                            if (tabName) {
+                                switchTab(tabName);
+                            }
+                        });
                     });
                 }
 

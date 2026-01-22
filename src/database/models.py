@@ -359,6 +359,8 @@ class SubjectConfiguration(Base):
 
     id = Column(Integer, primary_key=True)
     subject_name = Column(String(500), nullable=False)
+    gender = Column(String(20), nullable=False, default="Male")
     system_instructions = Column(Text, nullable=False)
+    core_system_instructions = Column(Text, nullable=False)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

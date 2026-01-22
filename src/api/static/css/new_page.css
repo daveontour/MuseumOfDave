@@ -1471,7 +1471,7 @@ body {
 }
 .voice-icon-wrapper {
     width: 70px;
-    cursor: pointer;
+    /* cursor: pointer; */
     transition: transform 0.2s ease;
 }
 .voice-icon { /* The small clickable image */
@@ -1484,6 +1484,9 @@ body {
 .voice-icon:hover {
     transform: scale(1.1);
     filter: brightness(1.1);
+}
+.voice-icon.selected {
+    border: 3px solid blue !important;
 }
 /* JS will add 'border: 3px solid blue;' for selected */
 
@@ -1565,6 +1568,51 @@ body {
 .modal-btn-secondary:hover { background: #d1e2f7; }
 .modal-btn-danger { background: #dc3545; color: #fff; }
 .modal-btn-danger:hover { background: #c82333; }
+
+/* Subject Configuration Modal Tabs */
+.subject-config-tabs {
+    display: flex;
+    border-bottom: 2px solid #bfc9da;
+    margin-bottom: 0.5em;
+}
+
+.subject-config-tab {
+    flex: 1;
+    padding: 0.7em 1em;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    font-size: 1em;
+    color: #666;
+    transition: all 0.2s;
+}
+
+.subject-config-tab:hover {
+    color: #233366;
+    background-color: #f5f5f5;
+}
+
+.subject-config-tab.active {
+    color: #233366;
+    border-bottom-color: #4a90e2;
+    font-weight: bold;
+}
+
+.subject-config-tab-content {
+    display: none;
+}
+
+.subject-config-tab-content:first-of-type {
+    display: block;
+}
+
+/* Read-only textarea styling */
+#core-system-instructions-textarea {
+    background-color: #f5f5f5 !important;
+    cursor: not-allowed !important;
+    color: #666 !important;
+}
 
 @keyframes modal-pop-in { /* Common modal animation */
     0% { transform: scale(0.95) translateY(30px); opacity: 0; }

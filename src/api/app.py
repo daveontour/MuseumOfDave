@@ -1912,6 +1912,8 @@ class ChatRequest(BaseModel):
     voice: Optional[str] = None
     temperature: Optional[float] = None
     conversation_id: Optional[int] = None
+    mood: Optional[str] = None
+    companionMode: Optional[bool] = False
 
 
 class ChatResponse(BaseModel):
@@ -1946,6 +1948,13 @@ async def generate_chat_response(request: ChatRequest):
                 chat_service.set_voice(request.voice)
             except Exception as e:
                 print(f"[generate_chat_response] Warning: Could not set voice '{request.voice}': {str(e)}")
+            
+            if request.voice == "dave":
+                try:
+                    print(f"[generate_chat_response] Setting mood to '{request.mood}'")
+                    chat_service.set_mood(request.mood)
+                except Exception as e:
+                    print(f"[generate_chat_response] Warning: Could not set voice 'secret_admirer': {str(e)}")
         
         # Generate response using global chat_service instance
         temperature = request.temperature if request.temperature is not None else 0.0
@@ -1953,7 +1962,8 @@ async def generate_chat_response(request: ChatRequest):
             request.prompt, 
             temperature=temperature,
             conversation_id=request.conversation_id,
-            db=db
+            db=db,
+            companionMode=request.companionMode
         )
 
         # Parse response to extract embedded JSON from markdown code blocks
@@ -2234,6 +2244,7 @@ class SubjectConfigurationRequest(BaseModel):
     """Request model for subject configuration."""
     subject_name: str
     system_instructions: str
+    gender: Optional[str] = "Male"
 
 
 @app.get("/api/subject-configuration")
@@ -2253,7 +2264,9 @@ async def get_subject_configuration():
         return {
             "id": configuration.id,
             "subject_name": configuration.subject_name,
+            "gender": configuration.gender,
             "system_instructions": configuration.system_instructions,
+            "core_system_instructions": configuration.core_system_instructions,
             "created_at": configuration.created_at.isoformat() if configuration.created_at else None,
             "updated_at": configuration.updated_at.isoformat() if configuration.updated_at else None
         }
@@ -2280,7 +2293,8 @@ async def create_or_update_subject_configuration(request: SubjectConfigurationRe
         config_service = SubjectConfigurationService(db=db)
         configuration = config_service.create_or_update_configuration(
             subject_name=request.subject_name,
-            system_instructions=request.system_instructions
+            system_instructions=request.system_instructions,
+            gender=request.gender
         )
         
         # Reload system prompt in chat service to use new configuration
@@ -2289,7 +2303,9 @@ async def create_or_update_subject_configuration(request: SubjectConfigurationRe
         return {
             "id": configuration.id,
             "subject_name": configuration.subject_name,
+            "gender": configuration.gender,
             "system_instructions": configuration.system_instructions,
+            "core_system_instructions": configuration.core_system_instructions,
             "created_at": configuration.created_at.isoformat() if configuration.created_at else None,
             "updated_at": configuration.updated_at.isoformat() if configuration.updated_at else None
         }

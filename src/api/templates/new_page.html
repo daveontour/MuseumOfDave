@@ -49,8 +49,8 @@
                         <option value="haiku">A Japanese haiku master</option>
                         <option value="insult">An insult commedian</option>
                         <option value="earthchild">A hippy earthchild</option>
-                        <option value="bar_girl">A Thai bar girl that Dave told his story to</option>
-                        <option value="parents">His mother and father</option>
+                        <option value="bar_girl">A Thai bar girl that knows Dave's complete story</option>
+                        <option value="parents">Dave's mother and father</option>
                         <option value="preacher">A fire and brimstone preacher who disapproves of all aspects of Dave's life</option>
                     </select>
                 </div>
@@ -58,7 +58,7 @@
                 <!-- Mood Selector (for Dave voice) -->
                 <div id="mood-selector" style="display: none; margin-top: 10px;">
                     <select id="dave-mood" name="dave-mood">
-                        <option value="neutral">Neutral - Just Regular Dave</option>
+                        <option value="neutral">Neutral - Just Regular</option>
                         <option value="reflective">Reflective - Thoughtful and Contemplative</option>
                         <option value="excited">Excited - Enthusiastic and Energetic</option>
                         <option value="melancholic">Melancholic - Wistful and Nostalgic</option>
@@ -211,7 +211,7 @@
 
         <div class="chat-main">
             <div class="chat-header">
-                <button id="resume-conversation-btn">Resume Conversation</button>
+                <button id="resume-conversation-btn">Select or Start a Conversation</button>
                 <div id="conversation-indicator" style="display: none; margin-left: 1rem; padding: 0.5rem 1rem; background: #e3f2fd; border-radius: 4px; color: #1976d2; font-size: 0.9em;"></div>
             </div>
             <div id="chat-box">
@@ -2071,9 +2071,32 @@
                 <input id="subject-name-input" type="text" placeholder="Enter subject name..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" required />
             </div>
             <div style="margin-bottom: 1.5em;">
-                <label for="system-instructions-textarea" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">System Instructions:</label>
-                <textarea id="system-instructions-textarea" rows="20" placeholder="Enter system instructions..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em; font-family: monospace; resize: vertical;" required></textarea>
-                <small style="color: #666; display: block; margin-top: 0.5em;">You can use {SUBJECT_NAME} as a placeholder for the subject name.</small>
+                <label for="subject-gender-select" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Gender:</label>
+                <select id="subject-gender-select" style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;">
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                </select>
+            </div>
+            <div style="margin-bottom: 1.5em;">
+                <label style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">System Instructions:</label>
+                
+                <!-- Tab buttons -->
+                <div class="subject-config-tabs" style="display: flex; border-bottom: 2px solid #bfc9da; margin-bottom: 0.5em;">
+                    <button type="button" class="subject-config-tab active" data-tab="system-instructions" style="flex: 1; padding: 0.7em 1em; background: none; border: none; border-bottom: 3px solid transparent; cursor: pointer; font-size: 1em; color: #666; transition: all 0.2s;">System Instructions</button>
+                    <button type="button" class="subject-config-tab" data-tab="core-instructions" style="flex: 1; padding: 0.7em 1em; background: none; border: none; border-bottom: 3px solid transparent; cursor: pointer; font-size: 1em; color: #666; transition: all 0.2s;">Core System Instructions</button>
+                </div>
+                
+                <!-- Tab content: System Instructions (editable) -->
+                <div id="system-instructions-tab-content" class="subject-config-tab-content" style="display: block;">
+                    <textarea id="system-instructions-textarea" rows="20" placeholder="Enter system instructions..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em; font-family: monospace; resize: vertical;" required></textarea>
+                    <small style="color: #666; display: block; margin-top: 0.5em;">You can use {SUBJECT_NAME} as a placeholder for the subject name.</small>
+                </div>
+                
+                <!-- Tab content: Core System Instructions (read-only) -->
+                <div id="core-instructions-tab-content" class="subject-config-tab-content" style="display: none;">
+                    <textarea id="core-system-instructions-textarea" rows="20" readonly style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em; font-family: monospace; resize: vertical; background-color: #f5f5f5; cursor: not-allowed;"></textarea>
+                    <small style="color: #666; display: block; margin-top: 0.5em;">Core system instructions are loaded from system_instructions_core.txt at startup and cannot be edited.</small>
+                </div>
             </div>
             <div style="display: flex; justify-content: flex-end; gap: 0.7em;">
                 <button type="button" id="cancel-subject-config-btn" class="modal-btn modal-btn-secondary">Cancel</button>

@@ -251,6 +251,8 @@ class ChatService:
 
         self.voice_instructions_list = None  # Will be loaded when database is set
         self.voice = "expert"
+
+        self.mood = "neutral"
         self.voice_instructions = None  # Will be loaded when database is set
         self.system_prompt = None  # Will be loaded when database is set
         self.session_turns = []  # List of {"user_input": str, "response_text": str}
@@ -281,6 +283,11 @@ class ChatService:
             print(f"[GeminiChatService.set_voice] Voice '{voice}' not found. Using default voice 'expert'.")
             self.voice = "expert"
             self.voice_instructions = self.voice_instructions_list[self.voice]
+        
+    def set_mood(self, mood: str):
+        """Sets the mood for the session."""
+        self.mood = mood
+
 
     def set_database(self, db: Database):
         """Set the database instance for retrieving reference documents."""
@@ -565,8 +572,14 @@ class ChatService:
                 if self.voice_instructions_list and self.voice in self.voice_instructions_list:
                     self.voice_instructions = self.voice_instructions_list[self.voice]
                 
-                # Get system instructions from database (with file fallback)
-                instructions = config_service.get_system_instructions()
+                # Get system instructions and core system instructions from database (with file fallback)
+                system_instructions = config_service.get_system_instructions()
+                core_instructions = config_service.get_core_system_instructions()
+                
+                # Concatenate: system_instructions + core_system_instructions
+                instructions = system_instructions
+                if core_instructions:
+                    instructions = instructions + "\n\n" + core_instructions
                 
                 # Replace placeholders in instructions with actual subject name
                 if self.subject_name:
@@ -897,7 +910,7 @@ class ChatService:
             traceback.print_exc()
             raise
 
-    def generate_response(self, user_input: str, temperature: float = 0.0, conversation_id: Optional[int] = None, db: Optional[Database] = None) -> str:
+    def generate_response(self, user_input: str, temperature: float = 0.0, conversation_id: Optional[int] = None, db: Optional[Database] = None, companionMode: Optional[bool] = False) -> str:
         """Generates a response to the prompt using the Gemini LLM API.
         
         Args:
@@ -988,6 +1001,17 @@ class ChatService:
         
         # Add voice instructions
         prompt_parts.append(self.voice_instructions["instructions"])
+
+        if self.voice == "dave":
+            prompt_parts.append(f"IMPORTANT:Your current mood is {self.mood}")
+        
+        if companionMode:
+                prompt_parts.append(f"""IMPORTANT:You are in companion mode. You are talking to a user who is your friend and companion. 
+                You are not talking to a customer or a user who is asking you for help. You are talking to a friend who is asking you about your life and your thoughts and feelings. 
+                Respond conversationally, as if you are talking to a friend. Ask questions, make comments as well as answering questions. Do not automatically validate the user's input. Just respond to the user's input as if you are talking to a friend.
+                Present opposing views if necessary. Set a snarky tone if necessary. Use humor if appropriate. Use sarcasm if appropriate. 
+                Use irony if appropriate. Use word play if appropriate. Use puns if appropriate. Use play on words if appropriate. 
+                Use word games if appropriate. Use word puzzles if appropriate.""")
         
         # Include conversation history (last 20 turns)
         if self.session_turns:
@@ -1003,6 +1027,8 @@ class ChatService:
         prompt_parts.append("\nResponse:")
         
         prompt_text = "\n".join(prompt_parts)
+
+        print(f"[ChatService.generate_response] Prompt text: {prompt_text}")
         
         # Build contents list: files first, then text
         # According to Gemini API docs, files and text can be mixed in contents array
