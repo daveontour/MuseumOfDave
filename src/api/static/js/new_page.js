@@ -9910,6 +9910,7 @@ ${textContent}
                 const filesystemImportDirectory = document.getElementById('filesystem-import-directory');
                 const filesystemImportMaxImages = document.getElementById('filesystem-import-max-images');
                 const filesystemImportCreateThumbnail = document.getElementById('filesystem-import-create-thumbnail');
+                const filesystemImportProcessLocation = document.getElementById('filesystem-import-process-location');
                 if (filesystemImportDirectory) {
                     filesystemImportDirectory.addEventListener('change', (e) => {
                         saveControlValue('filesystem_import_directory', e.target.value);
@@ -9929,6 +9930,11 @@ ${textContent}
                 if (filesystemImportCreateThumbnail) {
                     filesystemImportCreateThumbnail.addEventListener('change', (e) => {
                         saveControlValue('filesystem_import_create_thumbnail', e.target.checked);
+                    });
+                }
+                if (filesystemImportProcessLocation) {
+                    filesystemImportProcessLocation.addEventListener('change', (e) => {
+                        saveControlValue('filesystem_import_process_location', e.target.checked);
                     });
                 }
             }
@@ -12285,6 +12291,7 @@ ${textContent}
             const filesystemImportDirectoryPath = document.getElementById('filesystem-import-directory');
             const filesystemImportMaxImages = document.getElementById('filesystem-import-max-images');
             const filesystemImportCreateThumbnail = document.getElementById('filesystem-import-create-thumbnail');
+            const filesystemImportProcessLocation = document.getElementById('filesystem-import-process-location');
             let filesystemImportInProgress = false;
             let filesystemEventSource = null;
 
@@ -12532,7 +12539,8 @@ ${textContent}
                         
                         const requestBody = {
                             root_directory: directoryPaths.join(';'),
-                            create_thumbnail: filesystemImportCreateThumbnail?.checked || false
+                            create_thumbnail: filesystemImportCreateThumbnail?.checked || false,
+                            process_location: filesystemImportProcessLocation?.checked !== false  // Default to true if checkbox exists
                         };
                         
                         // Add optional max_images if provided

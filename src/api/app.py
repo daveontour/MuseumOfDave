@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from sqlalchemy import or_, func, and_, extract, Integer
+from sqlalchemy import or_, func, and_, extract, Integer, text
 from sqlalchemy.orm import joinedload
 from PIL import Image
 
@@ -27,7 +27,7 @@ except ImportError:
     HEIF_SUPPORT = False
 
 from ..database import Database,  Email, IMessage, FacebookAlbum, ReferenceDocument
-from ..database.models import MediaMetadata, MediaBlob, MessageAttachment, Attachment, AlbumMedia
+from ..database.models import MediaMetadata, MediaBlob, MessageAttachment, Attachment, AlbumMedia, Locations
 from ..database.storage import EmailStorage, ImageStorage
 from ..services import ImageService, EmailService, ReferenceDocumentService, MessageService, ImportService
 from ..services.gemini_service import ChatService, GeminiService
@@ -270,6 +270,24 @@ thumbnail_processing_progress: Dict[str, Any] = {
 
 thumbnail_processing_sse_clients: List[asyncio.Queue] = []
 thumbnail_processing_sse_clients_lock = threading.Lock()
+
+# ImageMagick processing state management
+magick_processing_lock = threading.Lock()
+magick_processing_cancelled = threading.Event()
+magick_processing_in_progress = False
+
+# Progress state for ImageMagick processing
+magick_processing_progress: Dict[str, Any] = {
+    "images_found": 0,
+    "images_processed": 0,
+    "images_created": 0,
+    "images_updated": 0,
+    "errors": 0,
+    "error_messages": [],
+    "current_image": None,
+    "status": "idle",  # idle, in_progress, completed, cancelled, error
+    "error_message": None
+}
 
 
 def update_imessage_progress_state(**kwargs):
@@ -818,6 +836,7 @@ class ImportFilesystemImagesRequest(BaseModel):
     root_directory: str
     max_images: Optional[int] = None
     create_thumbnail: bool = False
+    process_location: bool = True
 
 
 class ImportFilesystemImagesResponse(BaseModel):
@@ -3552,6 +3571,7 @@ def import_filesystem_images_background(
     directory_paths: List[str],
     max_images: Optional[int],
     create_thumbnail: bool,
+    process_location: bool,
     result_dict: dict
 ):
     """Background function to import images from filesystem.
@@ -3560,6 +3580,7 @@ def import_filesystem_images_background(
         directory_paths: List of directory paths to import from
         max_images: Maximum total number of images to import across all directories (None for all)
         create_thumbnail: Whether to create thumbnails
+        process_location: Whether to extract GPS/location data from EXIF
         result_dict: Dictionary to store results
     """
     global filesystem_import_in_progress
@@ -3647,6 +3668,7 @@ def import_filesystem_images_background(
                 root_directory=directory_path,
                 max_images=directory_max_images,
                 should_create_thumbnail=create_thumbnail,
+                process_location=process_location,
                 progress_callback=progress_callback,
                 cancelled_check=cancelled_check,
                 exclude_patterns=exclude_patterns
@@ -3900,6 +3922,7 @@ async def import_filesystem_images(
         validated_paths,
         request.max_images,
         request.create_thumbnail,
+        request.process_location,
         result_dict
     )
     
@@ -5994,13 +6017,18 @@ async def get_image_content(
     image_service = ImageService(db=db)
     try:
         # Get image content using service
+        # image_content = image_service.get_image_content(
+        #     image_id=image_id,
+        #     id_type=type,
+        #     preview=preview,
+        #     convert_heic=convert_heic_to_jpg
+        # )
         image_content = image_service.get_image_content(
             image_id=image_id,
             id_type=type,
             preview=preview,
             convert_heic=convert_heic_to_jpg
-        )
-        
+        )       
         # Set Content-Disposition header
         safe_filename = image_content.filename.replace('"', '\\"')
         headers = {
@@ -6060,6 +6088,209 @@ async def bulk_update_images(update_data: Dict[str, Any]):
             status_code=500,
             detail=f"Error bulk updating images: {str(e)}"
         )
+
+
+class ProcessImagesWithMagickResponse(BaseModel):
+    """Response model for processing images with ImageMagick."""
+    success: bool
+    message: str
+    images_processed: Optional[int] = None
+    errors: List[str] = []
+
+
+def process_images_with_magick_background(result_dict: dict):
+    """Background function to process images with ImageMagick.
+    
+    Args:
+        result_dict: Dictionary to store results
+    """
+    global magick_processing_in_progress
+    
+    # Mark processing as started
+    with magick_processing_lock:
+        magick_processing_in_progress = True
+        magick_processing_cancelled.clear()
+    
+    # Initialize progress state
+    magick_processing_progress.update({
+        "images_found": 0,
+        "images_processed": 0,
+        "images_created": 0,
+        "images_updated": 0,
+        "errors": 0,
+        "error_messages": [],
+        "current_image": None,
+        "status": "in_progress",
+        "error_message": None
+    })
+    
+    try:
+        image_service = ImageService(db=db)
+        
+        # Get count of unprocessed images
+        session = db.get_session()
+        try:
+            images_metadata = session.query(MediaMetadata).filter(
+                MediaMetadata.image_processed == False,
+                MediaMetadata.media_type.like('image/%')
+            ).all()
+            unprocessed_count = len(images_metadata)
+            magick_processing_progress["images_found"] = unprocessed_count
+        finally:
+            session.close()
+        
+        if not images_metadata:
+            magick_processing_progress["status"] = "completed"
+            result_dict["success"] = True
+            result_dict["message"] = "No unprocessed images found"
+            result_dict["images_processed"] = 0
+            result_dict["errors"] = []
+            return
+        
+        images_processed = 0
+        images_created = 0
+        images_updated = 0
+        errors = []
+        
+        # Process each image
+        for idx, image_metadata in enumerate(images_metadata):
+            # Check for cancellation
+            if magick_processing_cancelled.is_set():
+                magick_processing_progress["status"] = "cancelled"
+                result_dict["success"] = False
+                result_dict["message"] = "Processing was cancelled by user"
+                return
+            
+            magick_processing_progress["current_image"] = f"Image {image_metadata.id}"
+            magick_processing_progress["images_processed"] = idx + 1
+            
+            try:
+                image = image_service.storage.get_image_by_metadata_id(image_metadata.id)
+                if not image:
+                    error_msg = f"Image blob not found for metadata ID {image_metadata.id}"
+                    errors.append(error_msg)
+                    magick_processing_progress["errors"] += 1
+                    magick_processing_progress["error_messages"].append(error_msg)
+                    continue
+                
+                print(f"Processing image {image_metadata.id}. Description: {image_metadata.description} with Magick")
+                thumbnail_data = ImageService.create_thumbnail_from_bytes(image.image_data)
+                
+                if thumbnail_data:
+                    # Check if thumbnail already exists
+                    session = db.get_session()
+                    try:
+                        media_blob = session.query(MediaBlob).filter(MediaBlob.id == image_metadata.media_blob_id).first()
+                        if media_blob and media_blob.thumbnail_data:
+                            images_updated += 1
+                        else:
+                            images_created += 1
+                    finally:
+                        session.close()
+                    
+                    image_service.storage.update_image_thumbnail(image_id=image_metadata.id, thumbnail_data=thumbnail_data)
+                    images_processed += 1
+                    print(f"Done Processing image {image_metadata.id}. Description: {image_metadata.description} with Magick")
+                else:
+                    error_msg = f"Failed to create thumbnail for image {image_metadata.id}"
+                    errors.append(error_msg)
+                    magick_processing_progress["errors"] += 1
+                    magick_processing_progress["error_messages"].append(error_msg)
+                    
+            except Exception as e:
+                error_msg = f"Error processing image {image_metadata.id}: {str(e)}"
+                print(f"Error processing image {image_metadata.id}. Description: {image_metadata.description} with Magick: {e}")
+                errors.append(error_msg)
+                magick_processing_progress["errors"] += 1
+                magick_processing_progress["error_messages"].append(error_msg)
+                import traceback
+                traceback.print_exc()
+                continue
+        
+        # Update final progress state
+        magick_processing_progress["images_processed"] = images_processed
+        magick_processing_progress["images_created"] = images_created
+        magick_processing_progress["images_updated"] = images_updated
+        magick_processing_progress["status"] = "completed"
+        
+        result_dict["success"] = True
+        result_dict["message"] = f"Processing completed. Processed {images_processed} image(s)"
+        result_dict["images_processed"] = images_processed
+        result_dict["images_created"] = images_created
+        result_dict["images_updated"] = images_updated
+        result_dict["errors"] = errors
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        magick_processing_progress["status"] = "error"
+        magick_processing_progress["error_message"] = str(e)
+        result_dict["success"] = False
+        result_dict["message"] = f"Error processing images: {str(e)}"
+        result_dict["errors"] = [str(e)]
+    finally:
+        with magick_processing_lock:
+            magick_processing_in_progress = False
+
+
+@app.post("/images/process-with-magick", response_model=ProcessImagesWithMagickResponse)
+async def process_images_with_magick(background_tasks: BackgroundTasks):
+    """Process unprocessed images with ImageMagick to create thumbnails (background task).
+    
+    Finds all images where image_processed=False and media_type starts with "image/",
+    then processes them using ImageMagick to create thumbnails in the background.
+    
+    Args:
+        background_tasks: FastAPI background tasks
+        
+    Returns:
+        ProcessImagesWithMagickResponse indicating task has started
+        
+    Raises:
+        HTTPException: 400 if processing is already in progress, 500 on error
+    """
+    global magick_processing_in_progress
+    
+    # Check if processing is already in progress
+    with magick_processing_lock:
+        if magick_processing_in_progress:
+            raise HTTPException(
+                status_code=400,
+                detail="ImageMagick processing is already in progress"
+            )
+    
+    # Get count of unprocessed images
+    session = db.get_session()
+    try:
+        unprocessed_count = session.query(MediaMetadata).filter(
+            MediaMetadata.image_processed == False,
+            MediaMetadata.media_type.like('image/%')
+        ).count()
+    finally:
+        session.close()
+    
+    # Prepare result dictionary for background task
+    result_dict = {
+        "success": False,
+        "message": "",
+        "images_processed": 0,
+        "images_created": 0,
+        "images_updated": 0,
+        "errors": []
+    }
+    
+    # Start background processing task
+    background_tasks.add_task(
+        process_images_with_magick_background,
+        result_dict
+    )
+    
+    return ProcessImagesWithMagickResponse(
+        success=True,
+        message=f"ImageMagick processing started. Found {unprocessed_count} unprocessed image(s)",
+        images_processed=unprocessed_count,
+        errors=[]
+    )
 
 
 @app.get("/images/{image_id}/metadata", response_model=MediaMetadataResponse)
@@ -6757,3 +6988,192 @@ async def empty_media_tables():
         raise HTTPException(status_code=500, detail=f"Error emptying tables: {str(e)}")
     finally:
         session.close()
+
+
+class ImportFacebookPlacesRequest(BaseModel):
+    """Request model for importing Facebook places from JSON file."""
+    file_path: str
+
+
+class ImportFacebookPlacesResponse(BaseModel):
+    """Response model for Facebook places import."""
+    success: bool
+    places_imported: int
+    places_created: int
+    places_updated: int
+    errors: List[str]
+
+
+def extract_places_from_data(data, places_list):
+    """Recursively extract all 'place' elements from nested data structures.
+    
+    Args:
+        data: The data structure to search (dict, list, or primitive)
+        places_list: List to append found places to
+    """
+    if isinstance(data, dict):
+        # Check if this dict has a 'place' key
+        if 'place' in data and isinstance(data['place'], dict):
+            places_list.append(data['place'])
+        # Recursively search all values
+        for value in data.values():
+            extract_places_from_data(value, places_list)
+    elif isinstance(data, list):
+        # Recursively search all items in the list
+        for item in data:
+            extract_places_from_data(item, places_list)
+
+
+@app.post("/facebook/import-places", response_model=ImportFacebookPlacesResponse)
+async def import_facebook_places(request: ImportFacebookPlacesRequest):
+    """Import places from a Facebook posts JSON file.
+    
+    Extracts all 'place' elements from the JSON file and stores them in the database
+    using the Locations model.
+    
+    Args:
+        request: ImportFacebookPlacesRequest with file_path
+        
+    Returns:
+        ImportFacebookPlacesResponse with import statistics
+        
+    Raises:
+        HTTPException: If file doesn't exist or can't be parsed
+    """
+    file_path = Path(request.file_path)
+    
+    # Validate file exists
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"File not found: {request.file_path}"
+        )
+    
+    if not file_path.is_file():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Path is not a file: {request.file_path}"
+        )
+    
+    places_imported = 0
+    places_created = 0
+    places_updated = 0
+    errors = []
+    
+    try:
+        # Read and parse JSON file
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Extract all places from the data structure
+        places_list = []
+        extract_places_from_data(data, places_list)
+        
+        places_imported = len(places_list)
+        
+        # Process each place
+        session = db.get_session()
+        try:
+            for place_data in places_list:
+                try:
+                    # Extract place information
+                    name = place_data.get('name', '').strip()
+                    if not name:
+                        errors.append(f"Skipped place with empty name: {place_data}")
+                        continue
+                    
+                    # Extract coordinates
+                    coordinate = place_data.get('coordinate', {})
+                    latitude = coordinate.get('latitude') if coordinate else None
+                    longitude = coordinate.get('longitude') if coordinate else None
+                    
+                    # Extract address
+                    address = place_data.get('address', '').strip() or None
+                    
+                    # Extract URL (can be used as source_reference)
+                    url = place_data.get('url', '').strip() or None
+                    
+                    # Check if place already exists (by name and coordinates if available)
+                    if latitude is not None and longitude is not None:
+                        # Use a small tolerance for coordinate matching (0.0001 degrees ≈ 11 meters)
+                        query = session.query(Locations).filter(
+                            Locations.name == name,
+                            func.abs(Locations.latitude - latitude) < 0.0001,
+                            func.abs(Locations.longitude - longitude) < 0.0001
+                        )
+                    else:
+                        # If no coordinates, match by name only (and places without coordinates)
+                        query = session.query(Locations).filter(
+                            Locations.name == name,
+                            Locations.latitude.is_(None),
+                            Locations.longitude.is_(None)
+                        )
+                    
+                    existing_location = query.first()
+                    
+                    if existing_location:
+                        # Update existing location
+                        existing_location.address = address or existing_location.address
+                        existing_location.latitude = latitude if latitude is not None else existing_location.latitude
+                        existing_location.longitude = longitude if longitude is not None else existing_location.longitude
+                        existing_location.source = 'facebook'
+                        existing_location.source_reference = url or existing_location.source_reference
+                        existing_location.updated_at = datetime.now()
+                        places_updated += 1
+                    else:
+                        # Create new location
+                        new_location = Locations(
+                            name=name,
+                            address=address,
+                            latitude=latitude,
+                            longitude=longitude,
+                            source='facebook',
+                            source_reference=url
+                        )
+                        session.add(new_location)
+                        places_created += 1
+                    
+                except Exception as e:
+                    error_msg = f"Error processing place {place_data.get('name', 'unknown')}: {str(e)}"
+                    errors.append(error_msg)
+                    print(f"[import_facebook_places] {error_msg}")
+                    import traceback
+                    traceback.print_exc()
+                    continue
+            
+            # Commit all changes
+            session.commit()
+
+            # Update location regions using the database function
+            # Execute using the engine connection directly
+            with db.engine.connect() as conn:
+                conn.execute(text("SELECT update_location_regions()"))
+                conn.commit()
+            
+        except Exception as e:
+            session.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error: {str(e)}"
+            )
+        finally:
+            session.close()
+            
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid JSON file: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error reading file: {str(e)}"
+        )
+    
+    return ImportFacebookPlacesResponse(
+        success=True,
+        places_imported=places_imported,
+        places_created=places_created,
+        places_updated=places_updated,
+        errors=errors
+    )

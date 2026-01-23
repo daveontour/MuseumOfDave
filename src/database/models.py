@@ -241,7 +241,7 @@ class MediaBlob(Base):
 class Places(Base):
     """Places model."""
 
-    __tablename__ = "locations"
+    __tablename__ = "places"
 
     id = Column(Integer, primary_key=True)
     name = Column(String(500), nullable=False)
@@ -362,5 +362,23 @@ class SubjectConfiguration(Base):
     gender = Column(String(20), nullable=False, default="Male")
     system_instructions = Column(Text, nullable=False)
     core_system_instructions = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+class Locations(Base):
+    """Locations model."""
+
+    __tablename__ = "locations"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+    address = Column(Text, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    region=Column(String(255), nullable=True)
+    altitude = Column(Float, nullable=True)
+    source=Column(String(255), nullable=True)
+    source_reference=Column(String(500), nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

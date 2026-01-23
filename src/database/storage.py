@@ -864,3 +864,38 @@ class ImageStorage:
             raise
         finally:
             session.close()
+
+    def update_image_thumbnail(self, image_id: int, thumbnail_data: bytes) -> bool:
+        """Update image thumbnail.
+        
+        Args:
+            image_id: The metadata ID of the image to update
+            thumbnail_data: The thumbnail data to update
+            
+        Returns:
+            True if update was successful, False if image not found
+        """
+        session = self.db.get_session()
+        try:
+            # Get MediaMetadata
+            media_metadata = session.query(MediaMetadata).filter(MediaMetadata.id == image_id).first()
+            if not media_metadata:
+                return False
+            
+            # Get the associated MediaBlob
+            media_blob = session.query(MediaBlob).filter(MediaBlob.id == media_metadata.media_blob_id).first()
+            if not media_blob:
+                return False
+            
+            # Update thumbnail_data in MediaBlob
+            media_blob.thumbnail_data = thumbnail_data
+            media_blob.updated_at = utcnow()
+            media_metadata.image_processed = True
+            session.commit()
+
+            return True
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()

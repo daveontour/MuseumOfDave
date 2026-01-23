@@ -8,8 +8,10 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Callable, List
 from io import BytesIO
 
-from PIL import Image
+from PIL import Image, ImageFilter
 from PIL.ExifTags import TAGS, GPSTAGS
+
+from src.services.image_service import ImageService
 
 # Try to register HEIF/HEIC support if pillow-heif is available
 try:
@@ -227,9 +229,12 @@ def create_thumbnail(image_data: bytes, max_size: int = 100) -> Optional[bytes]:
         # Calculate thumbnail size maintaining aspect ratio
         img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
         
+        # Apply Unsharp Mask filter to enhance thumbnail sharpness
+        img = img.filter(ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3))
+        
         # Save to bytes as JPEG
         thumbnail_bytes = BytesIO()
-        img.save(thumbnail_bytes, format="JPEG", quality=85)
+        img.save(thumbnail_bytes, format="JPEG", quality=95, optimize=True)
         thumbnail_bytes.seek(0)
         
         return thumbnail_bytes.getvalue()
@@ -269,6 +274,7 @@ def import_images_from_filesystem(
     root_directory: str,
     max_images: Optional[int] = None,
     should_create_thumbnail: bool = False,
+    process_location: bool = True,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     cancelled_check: Optional[Callable[[], bool]] = None,
     exclude_patterns: Optional[List[str]] = None
@@ -279,6 +285,7 @@ def import_images_from_filesystem(
         root_directory: Root directory to search for images
         max_images: Maximum number of images to import (None for all)
         should_create_thumbnail: Whether to generate thumbnails
+        process_location: Whether to extract GPS/location data from EXIF (default True)
         progress_callback: Optional callback function called after each image is processed
         cancelled_check: Optional function to check if import should be cancelled
         exclude_patterns: Optional list of directory patterns to exclude (supports wildcards * and ?)
@@ -286,6 +293,8 @@ def import_images_from_filesystem(
     Returns:
         Dictionary with import statistics
     """
+
+    image_service = ImageService(db=Database())
     root_path = Path(root_directory)
     if not root_path.exists() or not root_path.is_dir():
         raise ValueError(f"Directory does not exist or is not a directory: {root_directory}")
@@ -393,21 +402,24 @@ def import_images_from_filesystem(
             if not mime_type:
                 mime_type = f"image/{file_path.suffix[1:].lower()}"
             
-            # Extract EXIF data
-            exif_data = extract_exif_data(file_path)
+            # Extract EXIF data only if process_location is enabled
+            exif_data2 = {}
+            if process_location:
+                exif_data2 = ImageService.extract_exif_data_from_file(str(file_path))
+                # Ensure exif_data2 is not None and has the expected structure
+                if exif_data2 is None:
+                    exif_data2 = {}
+                       
+            # Generate directory tags
+            tags = generate_directory_tags(file_path, root_path)
             
-            # Generate thumbnail if requested
-            thumbnail_data = None
+            thumbnail_data = None         #Use the ImageService to create the thumbnail
             if should_create_thumbnail:
                 try:
-                    thumbnail_data = create_thumbnail(image_data)
+                    thumbnail_data = ImageService.create_thumbnail_from_bytes(image_data)
                 except Exception as thumb_error:
                     # If thumbnail creation fails, log but continue without thumbnail
                     print(f"Warning: Could not create thumbnail for {file_path}: {thumb_error}")
-                    thumbnail_data = None
-            
-            # Generate directory tags
-            tags = generate_directory_tags(file_path, root_path)
             
             # Save or update image
             metadata, is_update = storage.save_image(
@@ -416,16 +428,19 @@ def import_images_from_filesystem(
                 thumbnail_data=thumbnail_data,
                 media_type=mime_type,
                 title=file_path.stem,
-                description=exif_data.get('description'),
+                description=exif_data2.get('description') if exif_data2 else None,
                 tags=tags,
-                year=exif_data.get('year'),
-                month=exif_data.get('month'),
-                latitude=exif_data.get('latitude'),
-                longitude=exif_data.get('longitude'),
-                altitude=exif_data.get('altitude'),
-                has_gps=exif_data.get('has_gps', False),
+                year=exif_data2.get('year') if exif_data2 else None,
+                month=exif_data2.get('month') if exif_data2 else None,
+                latitude=exif_data2.get('latitude') if exif_data2 else None,
+                longitude=exif_data2.get('longitude') if exif_data2 else None,
+                # altitude=exif_data2.get('altitude') if exif_data2 else None,
+                has_gps=exif_data2.get('has_gps', False) if exif_data2 else False,
                 source="Filesystem"
             )
+
+            
+
             
             if is_update:
                 stats['images_updated'] += 1

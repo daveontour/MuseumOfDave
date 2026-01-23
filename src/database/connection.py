@@ -114,6 +114,60 @@ class Database:
 
                             -- Update the region field
                             UPDATE locations
+                            SET region = region_text, location_processed = TRUE
+                            WHERE id = loc.id;
+                        END LOOP;
+                    END;
+                    $$ LANGUAGE plpgsql;
+                """))
+                conn.commit()
+                print("Created/updated update_location_regions() function.")
+        except Exception as e:
+            # Log error but don't fail - function creation is optional
+            print(f"Warning: Could not create update_location_regions() function: {e}")
+            pass
+
+        # Create update_location_regions function
+        try:
+            with self.engine.connect() as conn:
+                conn.execute(text("""
+                    CREATE OR REPLACE FUNCTION update_image_location_regions()
+                    RETURNS void AS $$
+                    DECLARE
+                        loc RECORD;
+                        region_text TEXT;
+                    BEGIN
+                        FOR loc IN SELECT id, latitude, longitude FROM media_items WHERE latitude IS NOT NULL AND longitude IS NOT NULL LOOP
+                            -- Basic logic to determine region
+                    
+                            IF loc.latitude BETWEEN -44 AND -10 AND loc.longitude BETWEEN 110 AND 152 THEN
+                                region_text := 'aus';
+                            ELSIF loc.latitude BETWEEN 24 AND 26 AND loc.longitude BETWEEN 54 AND 56 THEN
+                                region_text := 'dxb';
+                            ELSIF loc.latitude BETWEEN 35 AND 70 AND loc.longitude BETWEEN -10 AND 30 THEN
+                                region_text := 'eur';
+                            ELSIF loc.latitude BETWEEN 20 AND 50 AND loc.longitude BETWEEN -128 AND -65 THEN
+                                region_text := 'usa';
+                            ELSIF loc.latitude BETWEEN -40 AND 35 AND loc.longitude BETWEEN -20 AND 50 THEN
+                                region_text := 'af';
+                            ELSIF loc.latitude BETWEEN 10 AND 40 AND loc.longitude BETWEEN 30 AND 60 THEN
+                                region_text := 'me';
+                            ELSIF loc.latitude BETWEEN -12 AND 54 AND loc.longitude BETWEEN 68 AND 152 THEN
+                                region_text := 'asia';
+                            ELSIF loc.latitude BETWEEN 9 AND 26 AND loc.longitude BETWEEN -76 AND -116 THEN
+                                region_text := 'central_america';        
+                            ELSIF loc.latitude BETWEEN 12 AND 25 AND loc.longitude BETWEEN -58 AND -85 THEN
+                                region_text := 'carribean';        
+                            ELSIF loc.latitude BETWEEN -47 AND -34 AND loc.longitude BETWEEN 163 AND 179 THEN
+                                region_text := 'nz';        
+                            ELSIF loc.latitude BETWEEN -56 AND 12 AND loc.longitude BETWEEN -99 AND -26 THEN
+                                region_text := 'south_america'; 
+                            ELSE
+                                region_text := 'oth';
+                            END IF;
+
+                            -- Update the region field
+                            UPDATE media_items
                             SET region = region_text
                             WHERE id = loc.id;
                         END LOOP;
