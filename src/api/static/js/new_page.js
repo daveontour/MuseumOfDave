@@ -1878,6 +1878,7 @@ document.addEventListener('DOMContentLoaded', () => {
         Locations: (() => {
 
             let geoData = [];
+            let fbData =[];
             let photoPlacesData = [];
             let mapViewInitialized = false;
 
@@ -1912,56 +1913,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (DOM.refreshLocationsBtn) DOM.refreshLocationsBtn.addEventListener('click', refresh);
             }
 
-            // function _createPhotoMarkers() {
-            //     let photoMarkers = [];
-            //     let photoShown = 0;
-                
-            //     // Generate a new random starting index
-            //     currentPhotoIndex = Math.floor(Math.random() * 8);
-            //     geoData.forEach(item => {
-            //         if (!item.latitude || !item.longitude) {
-            //             return;
-            //         }
-            //         let filesystemItems = [];
-            //         if (item.source === 'Filesystem') {
-            //             currentPhotoIndex++;
-            //             filesystemItems.push(item);
-            //             // if (currentPhotoIndex % 8 === 0 || geoData.length < 100) {  // Only show every 8th markers at a time
-            //             //     photoShown++;
-            //             //     try{
-            //             //         const marker = L.marker([item.latitude, item.longitude])
-            //             //         marker.file = item.source_reference; // Attach file info to marker
-            //             //         marker.file_id = item.id;
-            //             //         marker.taken = item.created_at;
-            //             //         marker.lat = item.latitude;
-            //             //         marker.long = item.longitude;
-            //             //         // marker.on('click', function() {
-            //             //         //     Modals.SingleImageDisplay.showSingleImageModal(item.file, item.file_id, item.taken, item.lat, item.long);
-            //             //         // });
-            //             //         photoMarkers.push(marker);
-            //             //     } catch (e) {
-            //             //         console.error('Error adding photo place marker:', e);
-            //             //     }
-            //             // }
-
-            //             //randomly select 200 items from throughout filesystemItems and add to randomPhotoMarkers
-            //             let randomPhotoItems = filesystemItems.sort(() => Math.random() - 0.5).slice(0, 200);
-            //             randomPhotoItems.forEach(item => {
-            //                 const marker = L.marker([item.latitude, item.longitude]);
-            //                 marker.file = item.source_reference;
-            //                 marker.file_id = item.id;
-            //                 marker.taken = item.created_at;
-            //                 marker.lat = item.latitude;
-            //                 marker.long = item.longitude;
-            //                 photoMarkers.push(marker);
-            //             });
-            //         }
-
-
-            //     });
-                
-            //     return { photoMarkers, photoShown, currentPhotoIndex };
-            // }
 
             function shufflePhotoMarkers() {
                 if (!mapView || !photoMarkersLayer || !layerControl) return;
@@ -2002,7 +1953,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     fetch('/getLocations').then(r => r.json()).then(data => {
                         geoData = data.locations || [];
                         mapViewInitialized = false;
-                         _initMapView();
+                        fetch('/facebook/places').then(r => r.json()).then(data => {
+                            fbData = data.places || [];
+                            _initMapView();
+                        });
                     });
                 } else {
                     if (geoData.length > 0) _selectLocation(selectedIdx >= 0 ? selectedIdx : 0);
@@ -2135,8 +2089,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
 
-  
-
                 // Helper function to handle marker click - fetch full image data and open detail modal
                 async function handleMarkerClick(item, allowRedirects = false) {
                     try {
@@ -2201,12 +2153,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     marker.bindPopup(item.destination);
                     biographyMarkers.push(marker);
                 });
-                fbItems.forEach(item => {
+                fbData.forEach(item => {
+                    if (!item.latitude || !item.longitude) return; // Skip items without coordinates
                     const marker = L.marker([item.latitude, item.longitude], {icon: darkBlueMarker});
-                    marker.on('click', function() {
-                        handleMarkerClick(item);
-                    });
-                    marker.bindPopup(item.destination);
+                    // marker.on('click', function() {
+                    //     handleMarkerClick(item);
+                    // });
+                    marker.bindPopup(item.name || 'Facebook Place');
                     fbMarkers.push(marker);
                 });
                 otherItems.forEach(item => {
@@ -2250,8 +2203,8 @@ document.addEventListener('DOMContentLoaded', () => {
                  layerControl.addOverlay(messageMarkersLayer, 'Message Locations ('+messageMarkers.length+')');
                  var biographyMarkersLayer = L.layerGroup(biographyMarkers).addTo(mapView);
                  layerControl.addOverlay(biographyMarkersLayer, 'Biography Locations ('+biographyMarkers.length+')');
-                 var fbMarkersLayer = L.layerGroup(fbMarkers).addTo(mapView);
-                 layerControl.addOverlay(fbMarkersLayer, 'Facebook Locations ('+fbMarkers.length+')');
+                var fbMarkersLayer = L.layerGroup(fbMarkers).addTo(mapView);
+                layerControl.addOverlay(fbMarkersLayer, 'Facebook Locations ('+fbMarkers.length+')');
                  var otherMarkersLayer = L.layerGroup(otherMarkers).addTo(mapView);
                  layerControl.addOverlay(otherMarkersLayer, 'Other Locations ('+otherMarkers.length+')');
 
@@ -5261,8 +5214,6 @@ ${textContent}
                 DOM.newImageDetailRegion.textContent = image.region || 'N/A';
                 DOM.newImageDetailAvailableForTask.textContent = image.available_for_task ? 'Yes' : 'No';
                 DOM.newImageDetailProcessed.textContent = image.processed ? 'Yes' : 'No';
-                DOM.newImageDetailLocationProcessed.textContent = image.location_processed ? 'Yes' : 'No';
-                DOM.newImageDetailImageProcessed.textContent = image.image_processed ? 'Yes' : 'No';
                 DOM.newImageDetailCreatedAt.textContent = formatDateTime(image.created_at);
                 DOM.newImageDetailUpdatedAt.textContent = formatDateTime(image.updated_at);
                 
@@ -9909,8 +9860,7 @@ ${textContent}
                 // Filesystem Image Import
                 const filesystemImportDirectory = document.getElementById('filesystem-import-directory');
                 const filesystemImportMaxImages = document.getElementById('filesystem-import-max-images');
-                const filesystemImportCreateThumbnail = document.getElementById('filesystem-import-create-thumbnail');
-                const filesystemImportProcessLocation = document.getElementById('filesystem-import-process-location');
+                const filesystemImportCreateThumbAndExif = document.getElementById('filesystem-import-create-thumb-and-exif');
                 if (filesystemImportDirectory) {
                     filesystemImportDirectory.addEventListener('change', (e) => {
                         saveControlValue('filesystem_import_directory', e.target.value);
@@ -9927,14 +9877,9 @@ ${textContent}
                         saveControlValue('filesystem_import_max_images', e.target.value);
                     });
                 }
-                if (filesystemImportCreateThumbnail) {
-                    filesystemImportCreateThumbnail.addEventListener('change', (e) => {
-                        saveControlValue('filesystem_import_create_thumbnail', e.target.checked);
-                    });
-                }
-                if (filesystemImportProcessLocation) {
-                    filesystemImportProcessLocation.addEventListener('change', (e) => {
-                        saveControlValue('filesystem_import_process_location', e.target.checked);
+                if (filesystemImportCreateThumbAndExif) {
+                    filesystemImportCreateThumbAndExif.addEventListener('change', (e) => {
+                        saveControlValue('filesystem_import_create_thumb_and_exif', e.target.checked);
                     });
                 }
             }
@@ -10128,7 +10073,13 @@ ${textContent}
                 
                 const phase = data.phase || 'Unknown';
                 const phase1Info = `Phase 1: Scanned ${data.phase1_scanned || 0}, Updated ${data.phase1_updated || 0}`;
-                const phase2Info = `Phase 2: Scanned ${data.phase2_scanned || 0}, Processed ${data.phase2_processed || 0}, Errors ${data.phase2_errors || 0}`;
+                const phase2Total = data.phase2_total || 0;
+                const phase2Scanned = data.phase2_scanned || 0;
+                const phase2Processed = data.phase2_processed || 0;
+                const phase2Errors = data.phase2_errors || 0;
+                const phase2Info = phase2Total > 0 
+                    ? `Phase 2: ${phase2Scanned} of ${phase2Total} scanned, ${phase2Processed} processed, ${phase2Errors} errors`
+                    : `Phase 2: Scanned ${phase2Scanned}, Processed ${phase2Processed}, Errors ${phase2Errors}`;
                 
                 let details = '';
                 if (phase === '1') {
@@ -12262,6 +12213,89 @@ ${textContent}
                 });
             }
 
+            // Facebook Places Import Controls
+            const startFacebookPlacesImportBtn = document.getElementById('start-facebook-places-import-btn');
+            const facebookPlacesImportFile = document.getElementById('facebook-places-import-file');
+            const facebookPlacesImportStatus = document.getElementById('facebook-places-import-status');
+            const facebookPlacesImportStatusMessage = document.getElementById('facebook-places-import-status-message');
+            const facebookPlacesImportStatusDetails = document.getElementById('facebook-places-import-status-details');
+            let facebookPlacesImportInProgress = false;
+
+            // Show Facebook Places import status
+            function showFacebookPlacesImportStatus(type, title, message, details = '') {
+                if (!facebookPlacesImportStatus || !facebookPlacesImportStatusMessage) return;
+                
+                facebookPlacesImportStatus.style.display = 'block';
+                facebookPlacesImportStatusMessage.innerHTML = `<strong>${title}</strong>: ${message}`;
+                facebookPlacesImportStatusMessage.style.color = type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#333';
+                
+                if (facebookPlacesImportStatusDetails && details) {
+                    facebookPlacesImportStatusDetails.innerHTML = details;
+                }
+            }
+
+            // Start Facebook Places import
+            if (startFacebookPlacesImportBtn) {
+                startFacebookPlacesImportBtn.addEventListener('click', async () => {
+                    const filePath = facebookPlacesImportFile?.value?.trim();
+                    
+                    if (!filePath) {
+                        showFacebookPlacesImportStatus('error', 'File path required', 'Please enter a file path to the Facebook posts JSON file.');
+                        return;
+                    }
+                    
+                    if (facebookPlacesImportInProgress) {
+                        showFacebookPlacesImportStatus('error', 'Import already in progress', 'Please wait for the current import to complete.');
+                        return;
+                    }
+                    
+                    try {
+                        facebookPlacesImportInProgress = true;
+                        startFacebookPlacesImportBtn.disabled = true;
+                        showFacebookPlacesImportStatus('info', 'Importing places...', 'Processing Facebook posts JSON file...');
+                        
+                        const requestBody = {
+                            file_path: filePath
+                        };
+                        
+                        const response = await fetch('/facebook/import-places', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(requestBody)
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (response.ok) {
+                            const details = `
+                                <div style="margin-top: 10px;">
+                                    <strong>Places Imported:</strong> ${result.places_imported || 0}<br>
+                                    <strong>Places Created:</strong> ${result.places_created || 0}<br>
+                                    <strong>Places Updated:</strong> ${result.places_updated || 0}<br>
+                                    ${result.errors && result.errors.length > 0 ? `<strong style="color: #dc3545;">Errors:</strong> ${result.errors.length}<br>` : ''}
+                                </div>
+                                ${result.errors && result.errors.length > 0 ? `<div style="margin-top: 10px; color: #dc3545; font-size: 0.9em;">${result.errors.map(e => `• ${e}`).join('<br>')}</div>` : ''}
+                            `;
+                            showFacebookPlacesImportStatus('success', 'Import completed', `Successfully imported ${result.places_imported || 0} places.`, details);
+                            
+                            new Notification('Facebook Places Import Complete', {
+                                body: `Imported ${result.places_imported || 0} places (${result.places_created || 0} created, ${result.places_updated || 0} updated)`
+                            });
+                        } else {
+                            showFacebookPlacesImportStatus('error', 'Import failed', result.detail || 'Failed to import Facebook places.');
+                        }
+                    } catch (error) {
+                        console.error('Error importing Facebook places:', error);
+                        showFacebookPlacesImportStatus('error', 'Import error', `An error occurred: ${error.message}`);
+                    } finally {
+                        facebookPlacesImportInProgress = false;
+                        startFacebookPlacesImportBtn.disabled = false;
+                    }
+                });
+            }
+
             // Cancel Facebook Albums import
             if (cancelFacebookAlbumsImportBtn) {
                 cancelFacebookAlbumsImportBtn.addEventListener('click', async () => {
@@ -12290,8 +12324,7 @@ ${textContent}
             const filesystemImportProgressContainer = document.getElementById('filesystem-import-progress-container');
             const filesystemImportDirectoryPath = document.getElementById('filesystem-import-directory');
             const filesystemImportMaxImages = document.getElementById('filesystem-import-max-images');
-            const filesystemImportCreateThumbnail = document.getElementById('filesystem-import-create-thumbnail');
-            const filesystemImportProcessLocation = document.getElementById('filesystem-import-process-location');
+            const filesystemImportCreateThumbAndExif = document.getElementById('filesystem-import-create-thumb-and-exif');
             let filesystemImportInProgress = false;
             let filesystemEventSource = null;
 
@@ -12539,8 +12572,7 @@ ${textContent}
                         
                         const requestBody = {
                             root_directory: directoryPaths.join(';'),
-                            create_thumbnail: filesystemImportCreateThumbnail?.checked || false,
-                            process_location: filesystemImportProcessLocation?.checked !== false  // Default to true if checkbox exists
+                            create_thumb_and_get_exif: filesystemImportCreateThumbAndExif?.checked !== false  // Default to true if checkbox exists
                         };
                         
                         // Add optional max_images if provided

@@ -406,19 +406,25 @@ class IMessageStorage:
                     # Create thumbnail if it's an image
                     thumbnail_data = None
                     exif_data = {}
+
+                    
                     if attachment_type and attachment_type.startswith('image/'):
-                        try:
-                            from ..imageimport.filesystemimport import create_thumbnail
-                            thumbnail_data = create_thumbnail(attachment_data)
-                        except Exception as e:
-                            print(f"Warning: Could not create thumbnail for message attachment: {e}")
+                        # Import here to avoid circular import
+                        from src.services.process_images_service import ProcessImagesService
+                        process_images_service = ProcessImagesService()
+                        thumbnail_data, exif_data = process_images_service.create_thumb_and_get_exif(attachment_data, process_thunbnail=True, process_exif=True, width=200)
+                        # try:
+                        #     from ..imageimport.filesystemimport import create_thumbnail
+                        #     thumbnail_data = create_thumbnail(attachment_data)
+                        # except Exception as e:
+                        #     print(f"Warning: Could not create thumbnail for message attachment: {e}")
                         
-                        # Extract EXIF data including GPS location
-                        try:
-                            exif_data = extract_exif_data_from_bytes(attachment_data)
-                        except Exception as e:
-                            print(f"Warning: Could not extract EXIF data from message attachment: {e}")
-                            exif_data = {}
+                        # # Extract EXIF data including GPS location
+                        # try:
+                        #     exif_data = extract_exif_data_from_bytes(attachment_data)
+                        # except Exception as e:
+                        #     print(f"Warning: Could not extract EXIF data from message attachment: {e}")
+                        #     exif_data = {}
                     
                     # Create MediaBlob
                     media_blob = MediaBlob(
@@ -447,14 +453,14 @@ class IMessageStorage:
                         source=source,
                         source_reference=str(imessage.id),
                         title=exif_data.get('title') or attachment_filename,
-                        description=exif_data.get('description'),
+                        description=exif_data.get('description') if exif_data else None,
                         media_type=attachment_type,
                         year=year,
                         month=month,
-                        latitude=exif_data.get('latitude'),
-                        longitude=exif_data.get('longitude'),
-                        altitude=exif_data.get('altitude'),
-                        has_gps=exif_data.get('has_gps', False)
+                        latitude=exif_data.get('latitude')if exif_data else None,
+                        longitude=exif_data.get('longitude')if exif_data else None,
+                        altitude=exif_data.get('altitude')if exif_data else None,
+                        has_gps=exif_data.get('has_gps', False)if exif_data else None,
                     )
                     session.add(media_item)
                     session.flush()  # Get media_item ID
@@ -636,6 +642,7 @@ class ImageStorage:
         altitude: Optional[float] = None,
         has_gps: bool = False,
         source: str = "Filesystem",
+        processed: bool = False,
         **kwargs
     ) -> Tuple[MediaMetadata, bool]:
         """Save or update image with metadata.
@@ -730,6 +737,7 @@ class ImageStorage:
                     has_gps=has_gps,
                     source=source,
                     source_reference=source_reference,
+                    processed=processed,
                     **kwargs
                 )
                 session.add(media_metadata)
@@ -890,7 +898,7 @@ class ImageStorage:
             # Update thumbnail_data in MediaBlob
             media_blob.thumbnail_data = thumbnail_data
             media_blob.updated_at = utcnow()
-            media_metadata.image_processed = True
+            media_metadata.processed = True
             session.commit()
 
             return True

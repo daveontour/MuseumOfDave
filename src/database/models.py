@@ -131,8 +131,6 @@ class IMessage(Base):
     subject = Column(String(1000), nullable=True)
     text = Column(Text, nullable=True)
     processed = Column(Boolean, default=False, nullable=False)
-    location_processed = Column(Boolean, default=False, nullable=False)
-    image_processed = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -194,8 +192,6 @@ class MediaMetadata(Base):
     available_for_task = Column(Boolean, default=False, nullable=False)
     media_type = Column(String(255), nullable=True)
     processed = Column(Boolean, default=False, nullable=False)
-    location_processed = Column(Boolean, default=False, nullable=False)
-    image_processed = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow) 
     embedding = Column(Text, nullable=True)
@@ -264,6 +260,15 @@ class Contacts(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(500), nullable=False)
+    is_subject = Column(Boolean, default=False, nullable=False)
+    is_contact = Column(Boolean, default=False, nullable=False)
+    is_group = Column(Boolean, default=False, nullable=False)
+    is_organization = Column(Boolean, default=False, nullable=False)
+    is_individual = Column(Boolean, default=False, nullable=False)
+    is_company = Column(Boolean, default=False, nullable=False)
+    is_government = Column(Boolean, default=False, nullable=False)
+    is_non_profit = Column(Boolean, default=False, nullable=False)
+    is_educational = Column(Boolean, default=False, nullable=False)
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
@@ -277,15 +282,40 @@ class Contacts(Base):
     notes = Column(Text, nullable=True)
     facebook = Column(Boolean, default=False, nullable=False)
     instagram = Column(Boolean, default=False, nullable=False)
-    twitter = Column(Boolean, default=False, nullable=False)
     linkedin = Column(Boolean, default=False, nullable=False)
     youtube = Column(Boolean, default=False, nullable=False)
-    tiktok = Column(Boolean, default=False, nullable=False)
-    pinterest = Column(Boolean, default=False, nullable=False)
-    reddit = Column(Boolean, default=False, nullable=False)
-    telegram = Column(Boolean, default=False, nullable=False)
     whatsapp = Column(Boolean, default=False, nullable=False)
     signal = Column(Boolean, default=False, nullable=False)
+
+
+class Relationship(Base):
+    """Relationship model - stores relationships between contacts."""
+
+    __tablename__ = "relationships"
+
+    id = Column(Integer, primary_key=True)
+    source_id = Column(Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False)
+    target_id = Column(Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False)
+    type = Column(Text, nullable=False)  # e.g., "friend", "family", "colleague", "acquaintance"
+    description = Column(Text, nullable=True)  # Manually entered description
+    ai_description = Column(Text, nullable=True)  # AI generated description
+    strength = Column(Integer, nullable=True)  # Relationship strength (e.g., 1-10)
+    is_active = Column(Boolean, default=True, nullable=False)  # Active relationship
+    is_personal = Column(Boolean, default=False, nullable=False)  # Personal relationship
+    is_deleted = Column(Boolean, default=False, nullable=False)  # Deleted relationship
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    # Relationships
+    source = relationship("Contacts", foreign_keys=[source_id], backref="relationships_as_source")
+    target = relationship("Contacts", foreign_keys=[target_id], backref="relationships_as_target")
+
+    # Index for common queries
+    __table_args__ = (
+        Index('idx_relationship_source', 'source_id'),
+        Index('idx_relationship_target', 'target_id'),
+        Index('idx_relationship_type', 'type'),
+    )
 
 
 class GeminiFile(Base):

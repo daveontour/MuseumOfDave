@@ -23,8 +23,6 @@ class ImageSearchFilters:
     rating_max: Optional[int] = None
     available_for_task: Optional[bool] = None
     processed: Optional[bool] = None
-    location_processed: Optional[bool] = None
-    image_processed: Optional[bool] = None
     region: Optional[str] = None
 
 

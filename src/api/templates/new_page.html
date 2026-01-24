@@ -111,7 +111,7 @@
                         <i class="fas fa-edit"></i> Email Editor
                     </button>
                     <button type="button" class="more-options-btn" id="new-image-gallery-sidebar-btn">
-                        <i class="fas fa-images"></i> New Image Gallery
+                        <i class="fas fa-images"></i>Image Gallery
                     </button>
                     <button type="button" class="more-options-btn" id="fb-albums-sidebar-btn">
                         <i class="fas fa-images"></i> Facebook Albums
@@ -537,24 +537,6 @@
                             <div id="empty-tables-status" style="margin-top: 10px; padding: 10px; border-radius: 4px; display: none;"></div>
                         </div>
                     </section>
-                    <section class="config-section">
-                        <h3>Image Processing</h3>
-                        <div class="setting-group">
-                            <p style="margin-bottom: 10px;">
-                                Process image thumbnails: sync existing thumbnails and generate missing ones.
-                            </p>
-                            <button type="button" id="process-thumbnails-btn" class="modal-btn">
-                                Process Thumbnails
-                            </button>
-                            <button type="button" id="cancel-thumbnail-processing-btn" class="modal-btn" style="display: none;">
-                                Cancel Processing
-                            </button>
-                        </div>
-                        <div id="thumbnail-processing-status" style="display: none; margin-top: 10px;">
-                            <div id="thumbnail-processing-status-message"></div>
-                            <div id="thumbnail-processing-status-details"></div>
-                        </div>
-                    </section>
                 </div>
                 <div class="config-tab-content" id="api-docs-tab">
                     <iframe id="api-docs-iframe" src="/docs"></iframe>
@@ -941,6 +923,23 @@
                             <div id="facebook-albums-import-status-details" style="color: #666; font-size: 0.9em; margin-top: 10px;"></div>
                         </div>
                     </section>
+                    <section class="config-section" style="margin-top: 30px;">
+                        <h3>Facebook Places Import</h3>
+                        <div class="setting-group">
+                            <label for="facebook-places-import-file">Facebook Posts JSON File:</label>
+                            <input type="text" id="facebook-places-import-file" placeholder="e.g., G:\My Drive\meta-2026-Jan-11\your_posts__check_ins__photos_and_videos_1.json" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                            <small style="color: #666; display: block; margin-top: 5px;">Path to Facebook posts JSON export file containing place data</small>
+                        </div>
+                        <div class="setting-group" style="margin-top: 20px;">
+                            <button type="button" id="start-facebook-places-import-btn" class="modal-btn modal-btn-primary">
+                                <i class="fas fa-map-marker-alt"></i> Import Facebook Places
+                            </button>
+                        </div>
+                        <div id="facebook-places-import-status" style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6; display: none;">
+                            <div id="facebook-places-import-status-message" style="color: #333; font-weight: bold; margin-bottom: 10px;"></div>
+                            <div id="facebook-places-import-status-details" style="color: #666; font-size: 0.9em; margin-top: 10px;"></div>
+                        </div>
+                    </section>
                 </div>
                 <div class="config-tab-content" id="image-controls-tab">
                     <section class="config-section">
@@ -952,22 +951,15 @@
                         </div>
                         <div class="setting-group" style="margin-top: 10px;">
                             <label for="filesystem-import-max-images">Max Images (Optional):</label>
-                            <input type="number" id="filesystem-import-max-images" placeholder="Leave empty for all images" min="1" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                            <input type="number" id="filesystem-import-max-images" placeholder="Leave empty for all images" min="1" style="width: 100px; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
                             <small style="color: #666; display: block; margin-top: 5px;">Maximum number of images to import (leave empty to import all)</small>
                         </div>
                         <div class="setting-group" style="margin-top: 10px;">
                             <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="checkbox" id="filesystem-import-create-thumbnail" style="cursor: pointer;">
-                                <span>Create Thumbnails</span>
+                                <input type="checkbox" id="filesystem-import-create-thumb-and-exif" checked style="cursor: pointer;">
+                                <span>Create Thumbnails and Process Location Data</span>
                             </label>
-                            <small style="color: #666; display: block; margin-top: 5px;">Generate thumbnails for imported images (may slow down import)</small>
-                        </div>
-                        <div class="setting-group" style="margin-top: 10px;">
-                            <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="checkbox" id="filesystem-import-process-location" checked style="cursor: pointer;">
-                                <span>Process Location Information</span>
-                            </label>
-                            <small style="color: #666; display: block; margin-top: 5px;">Extract GPS coordinates and location data from image EXIF data (may slow down import)</small>
+                            <small style="color: #666; display: block; margin-top: 5px;">Generate thumbnails and extract GPS coordinates/location data from image EXIF data (may slow down import)</small>
                         </div>
                         <div class="setting-group" style="margin-top: 20px;">
                             <button type="button" id="start-filesystem-import-btn" class="modal-btn modal-btn-primary" style="margin-right: 10px;">
@@ -999,6 +991,24 @@
                                 </div>
                             </div>
                             <div id="filesystem-import-status-details" style="color: #666; font-size: 0.9em; margin-top: 10px;"></div>
+                        </div>
+                    </section>
+                    <section class="config-section">
+                        <h3>Image Processing</h3>
+                        <div class="setting-group">
+                            <p style="margin-bottom: 10px;">
+                                Process image thumbnails and location data. Create thumbnails and extract GPS coordinates/location data from image EXIF data.
+                            </p>
+                            <button type="button" id="process-thumbnails-btn" class="modal-btn modal-btn-primary" style="margin-right: 10px;">
+                                <i class="fas fa-play"></i> Process Thumbnails and Location Data
+                            </button>
+                            <button type="button" id="cancel-thumbnail-processing-btn" class="modal-btn modal-btn-secondary" style="display: none;">
+                                <i class="fas fa-stop"></i> Cancel Processing
+                            </button>
+                        </div>
+                        <div id="thumbnail-processing-status" style="display: none; margin-top: 10px;">
+                            <div id="thumbnail-processing-status-message"></div>
+                            <div id="thumbnail-processing-status-details"></div>
                         </div>
                     </section>
                 </div>
@@ -1690,14 +1700,6 @@
                             <div class="new-image-gallery-detail-metadata-row">
                                 <span class="new-image-gallery-detail-metadata-label">Processed:</span>
                                 <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-processed"></span>
-                            </div>
-                            <div class="new-image-gallery-detail-metadata-row">
-                                <span class="new-image-gallery-detail-metadata-label">Location Processed:</span>
-                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-location-processed"></span>
-                            </div>
-                            <div class="new-image-gallery-detail-metadata-row">
-                                <span class="new-image-gallery-detail-metadata-label">Image Processed:</span>
-                                <span class="new-image-gallery-detail-metadata-value" id="new-image-detail-image-processed"></span>
                             </div>
                             <div class="new-image-gallery-detail-metadata-row">
                                 <span class="new-image-gallery-detail-metadata-label">Created At:</span>

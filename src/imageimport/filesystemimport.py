@@ -12,6 +12,7 @@ from PIL import Image, ImageFilter
 from PIL.ExifTags import TAGS, GPSTAGS
 
 from src.services.image_service import ImageService
+from src.services.process_images_service import ProcessImagesService
 
 # Try to register HEIF/HEIC support if pillow-heif is available
 try:
@@ -273,8 +274,7 @@ def _should_exclude_directory(directory_path: Path, exclude_patterns: List[str])
 def import_images_from_filesystem(
     root_directory: str,
     max_images: Optional[int] = None,
-    should_create_thumbnail: bool = False,
-    process_location: bool = True,
+    create_thumb_and_get_exif: bool = True,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     cancelled_check: Optional[Callable[[], bool]] = None,
     exclude_patterns: Optional[List[str]] = None
@@ -284,8 +284,7 @@ def import_images_from_filesystem(
     Args:
         root_directory: Root directory to search for images
         max_images: Maximum number of images to import (None for all)
-        should_create_thumbnail: Whether to generate thumbnails
-        process_location: Whether to extract GPS/location data from EXIF (default True)
+        create_thumb_and_get_exif: Whether to create thumbnails and process location data from EXIF (default True)
         progress_callback: Optional callback function called after each image is processed
         cancelled_check: Optional function to check if import should be cancelled
         exclude_patterns: Optional list of directory patterns to exclude (supports wildcards * and ?)
@@ -356,6 +355,8 @@ def import_images_from_filesystem(
     
     # Second pass: process images
     images_processed = 0
+    process_images_service = ProcessImagesService()
+
     for file_path in root_path.rglob('*'):
         # Check for cancellation
         if cancelled_check and cancelled_check():
@@ -399,27 +400,9 @@ def import_images_from_filesystem(
             
             # Determine MIME type
             mime_type, _ = mimetypes.guess_type(str(file_path))
-            if not mime_type:
-                mime_type = f"image/{file_path.suffix[1:].lower()}"
-            
-            # Extract EXIF data only if process_location is enabled
-            exif_data2 = {}
-            if process_location:
-                exif_data2 = ImageService.extract_exif_data_from_file(str(file_path))
-                # Ensure exif_data2 is not None and has the expected structure
-                if exif_data2 is None:
-                    exif_data2 = {}
-                       
-            # Generate directory tags
+            thumbnail_data, exif_data = process_images_service.create_thumb_and_get_exif(image_data, process_thunbnail=create_thumb_and_get_exif, process_exif=create_thumb_and_get_exif, width=200)
             tags = generate_directory_tags(file_path, root_path)
             
-            thumbnail_data = None         #Use the ImageService to create the thumbnail
-            if should_create_thumbnail:
-                try:
-                    thumbnail_data = ImageService.create_thumbnail_from_bytes(image_data)
-                except Exception as thumb_error:
-                    # If thumbnail creation fails, log but continue without thumbnail
-                    print(f"Warning: Could not create thumbnail for {file_path}: {thumb_error}")
             
             # Save or update image
             metadata, is_update = storage.save_image(
@@ -428,15 +411,15 @@ def import_images_from_filesystem(
                 thumbnail_data=thumbnail_data,
                 media_type=mime_type,
                 title=file_path.stem,
-                description=exif_data2.get('description') if exif_data2 else None,
+                description=exif_data.get('description') if exif_data else None,
                 tags=tags,
-                year=exif_data2.get('year') if exif_data2 else None,
-                month=exif_data2.get('month') if exif_data2 else None,
-                latitude=exif_data2.get('latitude') if exif_data2 else None,
-                longitude=exif_data2.get('longitude') if exif_data2 else None,
-                # altitude=exif_data2.get('altitude') if exif_data2 else None,
-                has_gps=exif_data2.get('has_gps', False) if exif_data2 else False,
-                source="Filesystem"
+                year=exif_data.get('year') if exif_data else None,
+                month=exif_data.get('month') if exif_data else None,
+                latitude=exif_data.get('latitude') if exif_data else None,
+                longitude=exif_data.get('longitude') if exif_data else None,
+                has_gps=exif_data.get('has_gps', False) if exif_data else False,
+                source="Filesystem",
+                processed=create_thumb_and_get_exif
             )
 
             

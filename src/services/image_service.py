@@ -6,6 +6,7 @@ import shutil
 import platform
 from io import BytesIO
 import subprocess
+import tempfile
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from PIL import Image
@@ -111,12 +112,6 @@ class ImageService:
             
             if filters.processed is not None:
                 filter_list.append(MediaMetadata.processed == filters.processed)
-            
-            if filters.location_processed is not None:
-                filter_list.append(MediaMetadata.location_processed == filters.location_processed)
-            
-            if filters.image_processed is not None:
-                filter_list.append(MediaMetadata.image_processed == filters.image_processed)
 
             filter_list.append(MediaMetadata.media_type.like('image/%'))
             
@@ -177,7 +172,7 @@ class ImageService:
                         new_tags = tags.strip()
                     
                     # Update using the storage method
-                    updated = self.storage.update_image_metadata(
+                    updated = self.storage.update_media_metadata(
                         metadata_id=image_id,
                         tags=new_tags
                     )
@@ -250,7 +245,7 @@ class ImageService:
                 raise ValidationError("Rating must be between 1 and 5")
         
         # Update metadata
-        updated_metadata = self.storage.update_image_metadata(
+        updated_metadata = self.storage.update_media_metadata(
             metadata_id=image_id,
             description=updates.description,
             tags=updates.tags,
@@ -365,97 +360,11 @@ class ImageService:
             filename=filename
         )
 
-    @staticmethod
-    def _find_imagemagick_command():
-        """Find ImageMagick executable in system PATH.
-        
-        Returns:
-            Path to ImageMagick executable or None if not found
-        """
-        # Try common ImageMagick command names
-        commands = ["magick", "magick.exe", "convert"]
-        
-        # for cmd in commands:
-        #     path = shutil.which(cmd)
-        #     if path:
-        #         return path
-        
-        # On Windows, also try common installation paths
-       # if platform.system() == "Windows":
-        common_paths = [
-            r"C:\Program Files\ImageMagick-7.1.2-Q16-HDRI\magick.exe",
-            r"C:\Program Files\ImageMagick-7.1.0-Q16-HDRI\magick.exe",
-            r"C:\Program Files\ImageMagick-7.0.11-Q16-HDRI\magick.exe",
-            r"C:\Program Files (x86)\ImageMagick-7.1.1-Q16-HDRI\magick.exe",
-            r"C:\Program Files (x86)\ImageMagick-7.1.0-Q16-HDRI\magick.exe",
-        ]
-        for path in common_paths:
-            if os.path.exists(path):
-                return path
-        
-        return None
-
-    @staticmethod
-    def create_thumbnail_from_bytes(image_data, width=200):
-        """
-        Takes raw image bytes, processes them via ImageMagick (STDIN/STDOUT),
-        and returns the thumbnail bytes.
-        """
-        # Find ImageMagick executable
-        magick_cmd = ImageService._find_imagemagick_command()
-        if not magick_cmd:
-            error_msg = "ImageMagick not found. Please install ImageMagick and ensure it's in your system PATH."
-            print(f"❌ {error_msg}")
-            raise FileNotFoundError(error_msg)
-        
-        cmd = [
-            magick_cmd,
-            "-",               # <--- Crucial: Tells Magick to read from STDIN
-            "-filter", "Lanczos",
-            "-colorspace", "sRGB",
-            "-resize", f"{width}x{width}>",
-            "-unsharp", "0x0.75+0.75+0.008",
-            "-quality", "95",
-            "-strip",
-            "jpg:-"            # <--- Crucial: Force output format (jpg) to STDOUT
-        ]
-
-        try:
-            # We pass the image_data to 'input='
-            # We capture the result in 'stdout'
-            process = subprocess.run(
-                cmd,
-                input=image_data,
-                capture_output=True,
-                check=True
-            )
-            return process.stdout
-        except FileNotFoundError as e:
-            error_msg = f"ImageMagick executable not found: {magick_cmd}. Error: {str(e)}"
-            print(f"❌ {error_msg}")
-            raise FileNotFoundError(error_msg)
-        except subprocess.CalledProcessError as e:
-            stderr_msg = e.stderr.decode() if e.stderr else "Unknown error"
-            error_msg = f"ImageMagick Error: {stderr_msg}"
-            print(f"❌ {error_msg}")
-            return None
-    
-    def batch_process_images_with_magick(self, image_ids: List[int]):
-        """Batch process images with ImageMagick."""
-        images = self.storage.get_images_by_metadata_ids(image_ids)
-        if not images:
-            raise NotFoundError(f"Images with IDs {image_ids} not found")
-        for image in images:
-            thumbnail_data = ImageService.create_thumbnail_from_bytes(image.image_data)
-            image.thumbnail_data = thumbnail_data
-            self.storage.update_image_thumbnail(image_id=image.id, thumbnail_data=thumbnail_data)
-        return images
-
     def find_and_process_images_with_magick(self):
         """Find and process images with ImageMagick."""
-        # Find MediaMetadata where image_processed=False and media_type starts with "image/"
+        # Find MediaMetadata where processed=False and media_type starts with "image/"
         images_metadata = self.db.get_session().query(MediaMetadata).filter(
-            MediaMetadata.image_processed == False,
+            MediaMetadata.processed == False,
             MediaMetadata.media_type.like('image/%')
         ).all()
         print(f"Found {len(images_metadata)} images to process with ImageMagick")
@@ -479,222 +388,6 @@ class ImageService:
             self.storage.update_image_thumbnail(image_id=image.id, thumbnail_data=thumbnail_data)
 
     @staticmethod
-    def _parse_gps_coordinate(gps_string: str) -> float:
-        """
-        Parse GPS coordinate from ImageMagick format (degrees/minutes/seconds as fractions)
-        to decimal degrees.
-        
-        Format: "degrees/numerator,minutes/numerator,seconds/numerator"
-        Example: "25/1,6/1,4036/100" = 25° 6' 40.36"
-        
-        Args:
-            gps_string: GPS coordinate string from ImageMagick
-            
-        Returns:
-            Decimal degrees as float, or None if parsing fails
-        """
-        if not gps_string or gps_string.strip() == '':
-            return None
-        
-        try:
-            # Split by comma to get degrees, minutes, seconds
-            parts = gps_string.split(',')
-            if len(parts) != 3:
-                return None
-            
-            # Parse degrees: "25/1" -> 25.0
-            deg_parts = parts[0].split('/')
-            if len(deg_parts) == 2:
-                degrees = float(deg_parts[0]) / float(deg_parts[1])
-            else:
-                degrees = float(deg_parts[0])
-            
-            # Parse minutes: "6/1" -> 6.0
-            min_parts = parts[1].split('/')
-            if len(min_parts) == 2:
-                minutes = float(min_parts[0]) / float(min_parts[1])
-            else:
-                minutes = float(min_parts[0])
-            
-            # Parse seconds: "4036/100" -> 40.36
-            sec_parts = parts[2].split('/')
-            if len(sec_parts) == 2:
-                seconds = float(sec_parts[0]) / float(sec_parts[1])
-            else:
-                seconds = float(sec_parts[0])
-            
-            # Convert DMS to decimal degrees
-            decimal_degrees = degrees + (minutes / 60.0) + (seconds / 3600.0)
-            return decimal_degrees
-            
-        except (ValueError, IndexError) as e:
-            print(f"Warning: Could not parse GPS coordinate '{gps_string}': {e}")
-            return None
-
-    @staticmethod
-    def extract_exif_data_from_file(file_path: str) -> dict:
-        """
-        Extracts EXIF metadata from an image file using ImageMagick.
-        Returns a dictionary of key/value pairs.
-        
-        Args:
-            file_path: Path to the image file
-            
-        Returns:
-            Dictionary containing EXIF metadata or None on error
-        """
-        # We construct a format string that creates a JSON-like structure.
-        # %w = width, %h = height
-        # %[EXIF:...] accesses specific tags.
-        
-        # Common HEIC/JPG tags:
-        # DateTimeOriginal: When photo was taken
-        # Make/Model: Camera info
-        # GPSLatitude/Longitude: Location (if enabled)
-        
-        format_string = (
-            '{"width": "%w", '
-            '"height": "%h", '
-            '"format": "%m", '
-            '"date_taken": "%[EXIF:DateTimeOriginal]", '
-            '"camera_make": "%[EXIF:Make]", '
-            '"camera_model": "%[EXIF:Model]", '
-            '"orientation": "%[EXIF:Orientation]", '
-            '"latitude": "%[EXIF:GPSLatitude]", '
-            '"longitude": "%[EXIF:GPSLongitude]", '
-            '"latitude_ref": "%[EXIF:GPSLatitudeRef]", '
-            '"longitude_ref": "%[EXIF:GPSLongitudeRef]", '
-            '"altitude": "%[EXIF:GPSAltitude]", '
-            '"title": "%[EXIF:DocumentName]", '
-            '"description": "%[EXIF:ImageDescription]", '
-            '"author": "%[EXIF:Artist]", '
-            '"copyright": "%[EXIF:Copyright]", '
-            '"tags": "%[EXIF:Keywords]"}'
-        )
-
-        # Ensure file_path is a string
-        file_path_str = str(file_path)
-        
-        # Try to find identify command directly first (preferred for ImageMagick 7)
-        identify_cmd = shutil.which("identify") or shutil.which("identify.exe")
-        
-        if identify_cmd:
-            # Use standalone identify command if available
-            cmd = [
-                identify_cmd,
-                "-quiet",
-                "-format", format_string,
-                file_path_str
-            ]
-        else:
-            # Fallback to magick identify
-            magick_cmd = ImageService._find_imagemagick_command()
-            if not magick_cmd:
-                error_msg = "ImageMagick not found. Please install ImageMagick and ensure it's in your system PATH."
-                print(f"❌ {error_msg}")
-                raise FileNotFoundError(error_msg)
-            
-            # Use 'magick identify' command format
-            cmd = [
-                magick_cmd,
-                "identify",
-                "-quiet",
-                "-format", format_string,
-                file_path_str
-            ]
-
-        try:
-            
-            process = subprocess.run(
-                cmd,
-                capture_output=True,
-                check=True,
-                text=True  # Important: Decode output to string automatically
-            )
-            
-            # Parse the JSON string we created
-            if process.stdout.strip():
-                data = json.loads(process.stdout)
-
-                #parse the date_taken string into year, month, day
-                if data.get('date_taken'):
-                    date_taken = datetime.strptime(data['date_taken'], '%Y:%m:%d %H:%M:%S')
-                    data['year'] = date_taken.year
-                    data['month'] = date_taken.month
-                    data['day'] = date_taken.day
-                else:
-                    data['year'] = None
-                    data['month'] = None
-                    data['day'] = None
-                
-                # Convert GPS coordinates from DMS format to decimal degrees
-                if data.get('latitude'):
-                    latitude_decimal = ImageService._parse_gps_coordinate(data['latitude'])
-                    if latitude_decimal is not None:
-                        # Apply direction (N/S) - negative for South
-                        lat_ref = data.get('latitude_ref', '').strip().upper()
-                        if lat_ref == 'S':
-                            latitude_decimal = -latitude_decimal
-                        data['latitude'] = latitude_decimal
-                    else:
-                        data['latitude'] = None
-                else:
-                    data['latitude'] = None
-                
-                if data.get('longitude'):
-                    longitude_decimal = ImageService._parse_gps_coordinate(data['longitude'])
-                    if longitude_decimal is not None:
-                        # Apply direction (E/W) - negative for West
-                        lon_ref = data.get('longitude_ref', '').strip().upper()
-                        if lon_ref == 'W':
-                            longitude_decimal = -longitude_decimal
-                        data['longitude'] = longitude_decimal
-                    else:
-                        data['longitude'] = None
-                else:
-                    data['longitude'] = None
-                
-                # Set has_gps to True only if both latitude and longitude are valid
-                data['has_gps'] = data.get('latitude') is not None and data.get('longitude') is not None
-                
-                # Convert altitude if present (usually in meters as a fraction)
-                if data.get('altitude'):
-                    try:
-                        alt_str = data['altitude']
-                        if '/' in alt_str:
-                            alt_parts = alt_str.split('/')
-                            if len(alt_parts) == 2:
-                                altitude = float(alt_parts[0]) / float(alt_parts[1])
-                            else:
-                                altitude = float(alt_parts[0])
-                        else:
-                            altitude = float(alt_str)
-                        data['altitude'] = altitude
-                    except (ValueError, IndexError):
-                        data['altitude'] = None
-                
-                return data
-            else:
-                print("❌ Warning: ImageMagick returned empty output.")
-                return None
-
-        except json.JSONDecodeError as e:
-            print(f"❌ Error: Could not parse metadata output: {e}")
-            print(f"   Output was: {process.stdout}")
-            return None
-        except subprocess.CalledProcessError as e:
-            error_output = e.stderr.decode() if isinstance(e.stderr, bytes) else e.stderr
-            print(f"❌ ImageMagick Error: {error_output}")
-            print(f"   Command was: {' '.join(cmd)}")
-            return None
-
-    @staticmethod
-    def extract_exif_data_from_filepath(filepath: str) -> bytes:
-        """Extract EXIF data from image data."""
-        
-
-
-    @staticmethod
     def to_response_model(image: MediaMetadata) -> dict:
         """Convert MediaMetadata domain model to response dictionary.
         
@@ -716,8 +409,6 @@ class ImageService:
             "available_for_task": image.available_for_task,
             "media_type": image.media_type,
             "processed": image.processed,
-            "location_processed": image.location_processed,
-            "image_processed": image.image_processed,
             "created_at": image.created_at,
             "updated_at": image.updated_at,
             "year": image.year,

@@ -114,7 +114,7 @@ class Database:
 
                             -- Update the region field
                             UPDATE locations
-                            SET region = region_text, location_processed = TRUE
+                            SET region = region_text
                             WHERE id = loc.id;
                         END LOOP;
                     END;

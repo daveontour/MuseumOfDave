@@ -18,6 +18,8 @@ from sqlalchemy import or_, func, and_, extract, Integer, text
 from sqlalchemy.orm import joinedload
 from PIL import Image
 
+from src.services.process_images_service import ProcessImagesService
+
 # Try to register HEIF/HEIC support if pillow-heif is available
 try:
     from pillow_heif import register_heif_opener
@@ -27,12 +29,13 @@ except ImportError:
     HEIF_SUPPORT = False
 
 from ..database import Database,  Email, IMessage, FacebookAlbum, ReferenceDocument
-from ..database.models import MediaMetadata, MediaBlob, MessageAttachment, Attachment, AlbumMedia, Locations
+from ..database.models import MediaMetadata, MediaBlob, MessageAttachment, Attachment, AlbumMedia, Locations, Relationship, Contacts
 from ..database.storage import EmailStorage, ImageStorage
 from ..services import ImageService, EmailService, ReferenceDocumentService, MessageService, ImportService
 from ..services.gemini_service import ChatService, GeminiService
 from ..services.chat_conversation_service import ChatConversationService
 from ..services.subject_configuration_service import SubjectConfigurationService
+from ..services.relationship_service import RelationshipService
 from ..services.exceptions import ServiceException, ValidationError, NotFoundError, ConflictError
 from ..services.dto import (
     ImageSearchFilters,
@@ -262,6 +265,7 @@ thumbnail_processing_progress: Dict[str, Any] = {
     "phase1_scanned": 0,
     "phase1_updated": 0,
     "phase2_scanned": 0,
+    "phase2_total": 0,
     "phase2_processed": 0,
     "phase2_errors": 0,
     "status": "idle",  # idle, in_progress, completed, cancelled, error
@@ -835,8 +839,7 @@ class ImportFilesystemImagesRequest(BaseModel):
     """Request model for Filesystem Images import."""
     root_directory: str
     max_images: Optional[int] = None
-    create_thumbnail: bool = False
-    process_location: bool = True
+    create_thumb_and_get_exif: bool = True
 
 
 class ImportFilesystemImagesResponse(BaseModel):
@@ -864,8 +867,6 @@ class MediaMetadataResponse(BaseModel):
     available_for_task: bool = False
     media_type: Optional[str] = None
     processed: bool = False
-    location_processed: bool = False
-    image_processed: bool = False
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     year: Optional[int] = None
@@ -1143,6 +1144,12 @@ async def root():
             "POST /facebook/albums/import/cancel": "Cancel Facebook Albums import if in progress",
             "GET /facebook/albums/import/status": "Get current Facebook Albums import status",
             "GET /facebook/albums": "Get list of all Facebook albums",
+            "POST /facebook/import-places": "Import Facebook places from a posts JSON file",
+            "GET /facebook/places": "Retrieve Facebook places imported from Facebook posts JSON",
+            "POST /relationships/create-contacts-from-chat-sessions": "Create contact entries from distinct chat_session values in the messages table",
+            "POST /relationships/create-contacts-from-emails": "Create contact entries from distinct email addresses in the emails table",
+            "GET /relationships": "Retrieve relationships between contacts with contact information (id, name, email)",
+            "GET /contacts": "Retrieve contacts with all fields including id, name, and email",
             "GET /facebook/albums/{album_id}/images": "Get all images for a specific Facebook album",
             "GET /facebook/albums/images/{image_id}": "Get image data for a specific Facebook album image",
             "GET /emails/{email_id}/html": "Get email HTML content by ID",
@@ -3570,8 +3577,7 @@ def import_facebook_albums_background(directory_path: str, result_dict: dict):
 def import_filesystem_images_background(
     directory_paths: List[str],
     max_images: Optional[int],
-    create_thumbnail: bool,
-    process_location: bool,
+    create_thumb_and_get_exif: bool,
     result_dict: dict
 ):
     """Background function to import images from filesystem.
@@ -3579,8 +3585,7 @@ def import_filesystem_images_background(
     Args:
         directory_paths: List of directory paths to import from
         max_images: Maximum total number of images to import across all directories (None for all)
-        create_thumbnail: Whether to create thumbnails
-        process_location: Whether to extract GPS/location data from EXIF
+        create_thumb_and_get_exif: Whether to create thumbnails and process location data from EXIF
         result_dict: Dictionary to store results
     """
     global filesystem_import_in_progress
@@ -3667,8 +3672,7 @@ def import_filesystem_images_background(
             stats = import_images_from_filesystem(
                 root_directory=directory_path,
                 max_images=directory_max_images,
-                should_create_thumbnail=create_thumbnail,
-                process_location=process_location,
+                create_thumb_and_get_exif=create_thumb_and_get_exif,
                 progress_callback=progress_callback,
                 cancelled_check=cancelled_check,
                 exclude_patterns=exclude_patterns
@@ -3921,8 +3925,7 @@ async def import_filesystem_images(
         import_filesystem_images_background,
         validated_paths,
         request.max_images,
-        request.create_thumbnail,
-        request.process_location,
+        request.create_thumb_and_get_exif,
         result_dict
     )
     
@@ -4035,12 +4038,14 @@ def process_thumbnails_background(result_dict: dict):
     """Background function to process image thumbnails.
     
     Phase 1: Scan media_blob table - if thumbnail_data is not null, 
-             set image_processed=true in corresponding media_items table.
-    Phase 2: Scan media_items table - for items with image_processed=false 
+             set processed=true in corresponding media_items table.
+    Phase 2: Scan media_items table - for items with processed=false 
              and media_type starting with "image/", create thumbnails and 
-             set image_processed=true.
+             set processed=true.
     """
     global thumbnail_processing_in_progress
+    db = Database()
+    image_service = ImageService(db)
     
     # Mark processing as started
     with thumbnail_processing_lock:
@@ -4053,6 +4058,7 @@ def process_thumbnails_background(result_dict: dict):
         phase1_scanned=0,
         phase1_updated=0,
         phase2_scanned=0,
+        phase2_total=0,
         phase2_processed=0,
         phase2_errors=0,
         status="in_progress",
@@ -4064,21 +4070,25 @@ def process_thumbnails_background(result_dict: dict):
     
     try:
         session = db.get_session()
-        
+
+        process_images_service = ProcessImagesService()
         try:
-            # Phase 1: Update image_processed for items that already have thumbnails
+            # Phase 1: Update processed for items that already have thumbnails
             update_thumbnail_processing_progress_state(phase="1")
             broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
             
-            # Query MediaBlob where thumbnail_data is not null
-            blobs_with_thumbnails = session.query(MediaBlob).filter(
-                MediaBlob.thumbnail_data.isnot(None)
+            # Query MediaBlob joined with MediaMetadata where thumbnail exists and not processed
+            blobs_with_unprocessed_metadata = session.query(MediaBlob, MediaMetadata).join(
+                MediaMetadata, MediaMetadata.media_blob_id == MediaBlob.id
+            ).filter(
+                MediaBlob.thumbnail_data.isnot(None),
+                MediaMetadata.processed == False
             ).all()
             
             phase1_scanned = 0
             phase1_updated = 0
             
-            for blob in blobs_with_thumbnails:
+            for blob, metadata in blobs_with_unprocessed_metadata:
                 # Check for cancellation
                 if thumbnail_processing_cancelled.is_set():
                     update_thumbnail_processing_progress_state(status="cancelled")
@@ -4087,24 +4097,18 @@ def process_thumbnails_background(result_dict: dict):
                 
                 phase1_scanned += 1
                 
-                # Find corresponding MediaMetadata
-                metadata = session.query(MediaMetadata).filter(
-                    MediaMetadata.media_blob_id == blob.id,
-                    MediaMetadata.image_processed == False
-                ).first()
+                # No separate query needed - metadata is already available
+                metadata.processed = True
+                phase1_updated += 1
                 
-                if metadata:
-                    metadata.image_processed = True
-                    phase1_updated += 1
-                    
-                    # Commit periodically (every 100 items)
-                    if phase1_scanned % 100 == 0:
-                        session.commit()
-                        update_thumbnail_processing_progress_state(
-                            phase1_scanned=phase1_scanned,
-                            phase1_updated=phase1_updated
-                        )
-                        broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
+                # Commit periodically (every 10 items)
+                if phase1_scanned % 10 == 0:
+                    session.commit()
+                    update_thumbnail_processing_progress_state(
+                        phase1_scanned=phase1_scanned,
+                        phase1_updated=phase1_updated
+                    )
+                    broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
             
             # Final commit for phase 1
             session.commit()
@@ -4121,17 +4125,22 @@ def process_thumbnails_background(result_dict: dict):
             # Import create_thumbnail function
             from ..imageimport.filesystemimport import create_thumbnail
             
-            # Query MediaMetadata where image_processed=False and media_type starts with "image/"
-            items_needing_thumbnails = session.query(MediaMetadata).filter(
-                MediaMetadata.image_processed == False,
+            # Query MediaMetadata where processed=False and media_type starts with "image/"
+            items_needing_processing = session.query(MediaMetadata).filter(
+                MediaMetadata.processed == False,
                 MediaMetadata.media_type.like('image/%')
             ).all()
+            
+            # Set total count for phase 2
+            phase2_total = len(items_needing_processing)
+            update_thumbnail_processing_progress_state(phase2_total=phase2_total)
+            broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
             
             phase2_scanned = 0
             phase2_processed = 0
             phase2_errors = 0
             
-            for metadata_item in items_needing_thumbnails:
+            for metadata_item in items_needing_processing:
                 # Check for cancellation
                 if thumbnail_processing_cancelled.is_set():
                     session.commit()
@@ -4146,29 +4155,38 @@ def process_thumbnails_background(result_dict: dict):
                     blob = session.query(MediaBlob).filter(
                         MediaBlob.id == metadata_item.media_blob_id
                     ).first()
-                    
+
                     if blob and blob.image_data:
-                        # Create thumbnail
-                        thumbnail_data = create_thumbnail(blob.image_data)
-                        
+
+                        thumbnail_data, exif_data = process_images_service.create_thumb_and_get_exif(blob.image_data, process_thunbnail=True, process_exif=True, width=200)
+
                         if thumbnail_data:
-                            # Update blob with thumbnail
                             blob.thumbnail_data = thumbnail_data
-                            # Mark as processed
-                            metadata_item.image_processed = True
+                            metadata_item.processed = True
                             phase2_processed += 1
                         else:
-                            # Thumbnail creation failed, but don't count as error
-                            # Just mark as processed to avoid retrying
-                            metadata_item.image_processed = True
+                            metadata_item.processed = False
                             phase2_errors += 1
-                    else:
-                        # No image data, mark as processed to avoid retrying
-                        metadata_item.image_processed = True
-                        phase2_errors += 1
+
+                        if exif_data:
+                            metadata_item.description=exif_data.get('description') if exif_data else None
+                            metadata_item.year=exif_data.get('year') if exif_data else None
+                            metadata_item.month=exif_data.get('month') if exif_data else None
+                            # Ensure latitude/longitude are None (not empty strings) for float columns
+                            lat = exif_data.get('latitude') if exif_data else None
+                            lon = exif_data.get('longitude') if exif_data else None
+                            metadata_item.latitude=lat if lat not in ('', None) else None
+                            metadata_item.longitude=lon if lon not in ('', None) else None
+                            metadata_item.has_gps=exif_data.get('has_gps', False) if exif_data else False
+
+                       
+                    # else:
+                    #     # No image data, mark as processed to avoid retrying
+                    #     metadata_item.processed = True
+                    #     phase2_errors += 1
                     
                     # Commit periodically (every 50 items)
-                    if phase2_scanned % 50 == 0:
+                    if phase2_scanned % 10 == 0:
                         session.commit()
                         update_thumbnail_processing_progress_state(
                             phase2_scanned=phase2_scanned,
@@ -4182,7 +4200,7 @@ def process_thumbnails_background(result_dict: dict):
                     print(f"Error processing thumbnail for media_item {metadata_item.id}: {e}")
                     phase2_errors += 1
                     # Mark as processed to avoid retrying
-                    metadata_item.image_processed = True
+                    metadata_item.processed = True
                     continue
             
             # Final commit for phase 2
@@ -4193,6 +4211,9 @@ def process_thumbnails_background(result_dict: dict):
                 phase2_errors=phase2_errors,
                 status="completed"
             )
+
+            session.execute(text("SELECT  update_location_regions()"))
+
             broadcast_thumbnail_processing_event_sync("completed", get_thumbnail_processing_progress_state())
             
             result_dict.update({
@@ -5786,8 +5807,6 @@ async def search_images(
     rating_max: Optional[int] = Query(None, ge=1, le=5, description="Filter by maximum rating (1-5)"),
     available_for_task: Optional[bool] = Query(None, description="Filter by available_for_task flag"),
     processed: Optional[bool] = Query(None, description="Filter by processed flag"),
-    location_processed: Optional[bool] = Query(None, description="Filter by location_processed flag"),
-    image_processed: Optional[bool] = Query(None, description="Filter by image_processed flag"),
     region: Optional[str] = Query(None, description="Filter by region (partial match, case-insensitive)")
 ):
     """Search images by metadata criteria.
@@ -5812,8 +5831,6 @@ async def search_images(
         rating_max: Maximum rating (1-5)
         available_for_task: Filter by available_for_task flag
         processed: Filter by processed flag
-        location_processed: Filter by location_processed flag
-        image_processed: Filter by image_processed flag
         region: Partial match on region
         
     Returns:
@@ -5839,8 +5856,6 @@ async def search_images(
             rating_max=rating_max,
             available_for_task=available_for_task,
             processed=processed,
-            location_processed=location_processed,
-            image_processed=image_processed,
             region=region
         )
         
@@ -6131,7 +6146,7 @@ def process_images_with_magick_background(result_dict: dict):
         session = db.get_session()
         try:
             images_metadata = session.query(MediaMetadata).filter(
-                MediaMetadata.image_processed == False,
+                MediaMetadata.processed == False,
                 MediaMetadata.media_type.like('image/%')
             ).all()
             unprocessed_count = len(images_metadata)
@@ -6237,7 +6252,7 @@ def process_images_with_magick_background(result_dict: dict):
 async def process_images_with_magick(background_tasks: BackgroundTasks):
     """Process unprocessed images with ImageMagick to create thumbnails (background task).
     
-    Finds all images where image_processed=False and media_type starts with "image/",
+    Finds all images where processed=False and media_type starts with "image/",
     then processes them using ImageMagick to create thumbnails in the background.
     
     Args:
@@ -6263,7 +6278,7 @@ async def process_images_with_magick(background_tasks: BackgroundTasks):
     session = db.get_session()
     try:
         unprocessed_count = session.query(MediaMetadata).filter(
-            MediaMetadata.image_processed == False,
+            MediaMetadata.processed == False,
             MediaMetadata.media_type.like('image/%')
         ).count()
     finally:
@@ -6329,8 +6344,6 @@ async def get_image_metadata(image_id: int):
             available_for_task=media_item.available_for_task,
             media_type=media_item.media_type,
             processed=media_item.processed,
-            location_processed=media_item.location_processed,
-            image_processed=media_item.image_processed,
             created_at=media_item.created_at,
             updated_at=media_item.updated_at,
             year=media_item.year,
@@ -7004,6 +7017,28 @@ class ImportFacebookPlacesResponse(BaseModel):
     errors: List[str]
 
 
+class FacebookPlaceResponse(BaseModel):
+    """Response model for a Facebook place."""
+    id: int
+    name: str
+    description: Optional[str] = None
+    address: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    region: Optional[str] = None
+    altitude: Optional[float] = None
+    source: Optional[str] = None
+    source_reference: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class FacebookPlacesListResponse(BaseModel):
+    """Response model for list of Facebook places."""
+    places: List[FacebookPlaceResponse]
+    total: int
+
+
 def extract_places_from_data(data, places_list):
     """Recursively extract all 'place' elements from nested data structures.
     
@@ -7177,3 +7212,462 @@ async def import_facebook_places(request: ImportFacebookPlacesRequest):
         places_updated=places_updated,
         errors=errors
     )
+
+
+@app.get("/facebook/places", response_model=FacebookPlacesListResponse)
+async def get_facebook_places(
+    name: Optional[str] = Query(None, description="Filter by place name (partial match, case-insensitive)"),
+    region: Optional[str] = Query(None, description="Filter by region (partial match, case-insensitive)"),
+    limit: Optional[int] = Query(100, description="Maximum number of places to return", ge=1, le=1000),
+    offset: Optional[int] = Query(0, description="Number of places to skip", ge=0)
+):
+    """Retrieve Facebook places imported from Facebook posts JSON.
+    
+    Returns all locations where source='facebook', optionally filtered by name or region.
+    
+    Args:
+        name: Optional filter by place name (partial match)
+        region: Optional filter by region (partial match)
+        limit: Maximum number of places to return (default: 100, max: 1000)
+        offset: Number of places to skip for pagination (default: 0)
+        
+    Returns:
+        FacebookPlacesListResponse with list of places and total count
+    """
+    session = db.get_session()
+    try:
+        # Base query: filter by source='facebook'
+        query = session.query(Locations).filter(Locations.source == 'facebook')
+        
+        # Apply filters
+        if name:
+            query = query.filter(Locations.name.ilike(f'%{name}%'))
+        
+        if region:
+            query = query.filter(Locations.region.ilike(f'%{region}%'))
+        
+        # Get total count before pagination
+        total = query.count()
+        
+        # Apply pagination
+        places = query.order_by(Locations.name).offset(offset).limit(limit).all()
+        
+        # Convert to response models
+        places_list = [
+            FacebookPlaceResponse(
+                id=place.id,
+                name=place.name,
+                description=place.description,
+                address=place.address,
+                latitude=place.latitude,
+                longitude=place.longitude,
+                region=place.region,
+                altitude=place.altitude,
+                source=place.source,
+                source_reference=place.source_reference,
+                created_at=place.created_at,
+                updated_at=place.updated_at
+            )
+            for place in places
+        ]
+        
+        return FacebookPlacesListResponse(
+            places=places_list,
+            total=total
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving Facebook places: {str(e)}"
+        )
+    finally:
+        session.close()
+
+
+class CreateContactsFromChatSessionsResponse(BaseModel):
+    """Response model for creating contacts from chat sessions."""
+    message: str
+    total_sessions: int
+    contacts_created: int
+    contacts_existing: int
+    errors: List[str] = []
+
+
+class CreateContactsFromEmailsResponse(BaseModel):
+    """Response model for creating contacts from emails."""
+    message: str
+    total_addresses: int
+    contacts_created: int
+    contacts_existing: int
+    errors: List[str] = []
+
+
+class ContactInfo(BaseModel):
+    """Contact information model."""
+    id: int
+    name: str
+    email: Optional[str] = None
+
+
+class ContactResponse(BaseModel):
+    """Response model for a contact."""
+    id: int
+    name: str
+    email: Optional[str] = None
+    description: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip: Optional[str] = None
+    country: Optional[str] = None
+    notes: Optional[str] = None
+    is_subject: bool = False
+    is_contact: bool = False
+    is_group: bool = False
+    is_organization: bool = False
+    is_individual: bool = False
+    is_company: bool = False
+    is_government: bool = False
+    is_non_profit: bool = False
+    is_educational: bool = False
+    facebook: bool = False
+    instagram: bool = False
+    linkedin: bool = False
+    youtube: bool = False
+    whatsapp: bool = False
+    signal: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+class ContactResponseShort(BaseModel):
+    """Response model for a contact."""
+    id: int
+    name: str
+    email: Optional[str] = None
+
+
+class ContactsListResponse(BaseModel):
+    """Response model for list of contacts."""
+    contacts: List[ContactResponseShort]
+    total: int
+
+
+class RelationshipResponse(BaseModel):
+    """Response model for a relationship."""
+    id: int
+    source: ContactInfo
+    target: ContactInfo
+    type: str
+    description: Optional[str] = None
+    ai_description: Optional[str] = None
+    strength: Optional[int] = None
+    is_active: bool
+    is_personal: bool
+    is_deleted: bool
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class RelationshipsListResponse(BaseModel):
+    """Response model for list of relationships."""
+    relationships: List[RelationshipResponse]
+    total: int
+
+
+@app.post("/relationships/create-contacts-from-chat-sessions", response_model=CreateContactsFromChatSessionsResponse)
+async def create_contacts_from_chat_sessions():
+    """Create contact entries from distinct chat_session values in the messages table.
+    
+    This endpoint:
+    1. Retrieves all distinct chat_session values from the messages table
+    2. Creates a contact entry for each chat_session that doesn't already exist
+    3. Uses the chat_session value as the contact name
+    
+    Returns:
+        CreateContactsFromChatSessionsResponse with statistics:
+        - total_sessions: Total number of distinct chat sessions found
+        - contacts_created: Number of new contacts created
+        - contacts_existing: Number of contacts that already existed
+        - errors: List of error messages if any
+        
+    Raises:
+        HTTPException: 500 on error
+    """
+    relationship_service = RelationshipService(db=db)
+    try:
+        stats = relationship_service.create_contacts_from_chat_sessions()
+        
+        return CreateContactsFromChatSessionsResponse(
+            message=f"Processed {stats['total_sessions']} chat sessions. Created {stats['contacts_created']} new contacts, {stats['contacts_existing']} already existed.",
+            total_sessions=stats['total_sessions'],
+            contacts_created=stats['contacts_created'],
+            contacts_existing=stats['contacts_existing'],
+            errors=stats['errors']
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error creating contacts from chat sessions: {str(e)}"
+        )
+
+
+@app.post("/relationships/create-contacts-from-emails", response_model=CreateContactsFromEmailsResponse)
+async def create_contacts_from_emails():
+    """Create contact entries from distinct email addresses in the emails table.
+    
+    This endpoint:
+    1. Retrieves all distinct from_address values from the emails table
+    2. Retrieves all distinct to_addresses values and splits comma-separated addresses
+    3. Creates a contact entry for each unique email address that doesn't already exist
+    4. Uses the email address as the contact name and email field
+    
+    Returns:
+        CreateContactsFromEmailsResponse with statistics:
+        - total_addresses: Total number of unique email addresses found
+        - contacts_created: Number of new contacts created
+        - contacts_existing: Number of contacts that already existed
+        - errors: List of error messages if any
+        
+    Raises:
+        HTTPException: 500 on error
+    """
+    relationship_service = RelationshipService(db=db)
+    try:
+        stats = relationship_service.create_contacts_from_emails()
+        
+        return CreateContactsFromEmailsResponse(
+            message=f"Processed {stats['total_addresses']} unique email addresses. Created {stats['contacts_created']} new contacts, {stats['contacts_existing']} already existed.",
+            total_addresses=stats['total_addresses'],
+            contacts_created=stats['contacts_created'],
+            contacts_existing=stats['contacts_existing'],
+            errors=stats['errors']
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error creating contacts from emails: {str(e)}"
+        )
+
+
+@app.get("/relationships", response_model=RelationshipsListResponse)
+async def get_relationships(
+    source_id: Optional[int] = Query(None, description="Filter by source contact ID"),
+    target_id: Optional[int] = Query(None, description="Filter by target contact ID"),
+    contact_id: Optional[int] = Query(None, description="Filter by contact ID (as source or target)"),
+    type: Optional[str] = Query(None, description="Filter by relationship type"),
+    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    is_personal: Optional[bool] = Query(None, description="Filter by personal status"),
+    include_deleted: bool = Query(False, description="Include deleted relationships"),
+    limit: Optional[int] = Query(100, description="Maximum number of relationships to return", ge=1, le=1000),
+    offset: Optional[int] = Query(0, description="Number of relationships to skip", ge=0)
+):
+    """Retrieve relationships between contacts.
+    
+    Returns relationships with source and target contact information (id, name, email).
+    
+    Args:
+        source_id: Optional filter by source contact ID
+        target_id: Optional filter by target contact ID
+        contact_id: Optional filter by contact ID (returns relationships where contact is source or target)
+        type: Optional filter by relationship type
+        is_active: Optional filter by active status
+        is_personal: Optional filter by personal status
+        include_deleted: Whether to include deleted relationships (default: False)
+        limit: Maximum number of relationships to return (default: 100, max: 1000)
+        offset: Number of relationships to skip for pagination (default: 0)
+        
+    Returns:
+        RelationshipsListResponse with list of relationships and total count
+    """
+    session = db.get_session()
+    try:
+        # Base query
+        query = session.query(Relationship)
+        
+        # Apply filters
+        if source_id is not None:
+            query = query.filter(Relationship.source_id == source_id)
+        
+        if target_id is not None:
+            query = query.filter(Relationship.target_id == target_id)
+        
+        if contact_id is not None:
+            query = query.filter(
+                (Relationship.source_id == contact_id) | (Relationship.target_id == contact_id)
+            )
+        
+        if type is not None:
+            query = query.filter(Relationship.type.ilike(f'%{type}%'))
+        
+        if is_active is not None:
+            query = query.filter(Relationship.is_active == is_active)
+        
+        if is_personal is not None:
+            query = query.filter(Relationship.is_personal == is_personal)
+        
+        if not include_deleted:
+            query = query.filter(Relationship.is_deleted == False)
+        
+        # Get total count before pagination
+        total = query.count()
+        
+        # Apply pagination and eager load contacts
+        relationships = query.options(
+            joinedload(Relationship.source),
+            joinedload(Relationship.target)
+        ).order_by(Relationship.created_at.desc()).offset(offset).limit(limit).all()
+        
+        # Convert to response models
+        relationships_list = []
+        for rel in relationships:
+            # Access source and target contacts (already loaded via joinedload)
+            source_contact = rel.source
+            target_contact = rel.target
+            
+            if source_contact and target_contact:
+                relationships_list.append(
+                    RelationshipResponse(
+                        id=rel.id,
+                        source=ContactInfo(
+                            id=source_contact.id,
+                            name=source_contact.name,
+                            email=source_contact.email
+                        ),
+                        target=ContactInfo(
+                            id=target_contact.id,
+                            name=target_contact.name,
+                            email=target_contact.email
+                        ),
+                        type=rel.type,
+                        description=rel.description,
+                        ai_description=rel.ai_description,
+                        strength=rel.strength,
+                        is_active=rel.is_active,
+                        is_personal=rel.is_personal,
+                        is_deleted=rel.is_deleted,
+                        created_at=rel.created_at,
+                        updated_at=rel.updated_at
+                    )
+                )
+        
+        return RelationshipsListResponse(
+            relationships=relationships_list,
+            total=total
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving relationships: {str(e)}"
+        )
+    finally:
+        session.close()
+
+
+@app.get("/contacts", response_model=ContactsListResponse)
+async def get_contacts(
+    name: Optional[str] = Query(None, description="Filter by name (partial match, case-insensitive)"),
+    email: Optional[str] = Query(None, description="Filter by email (partial match, case-insensitive)"),
+    is_subject: Optional[bool] = Query(None, description="Filter by is_subject flag"),
+    is_contact: Optional[bool] = Query(None, description="Filter by is_contact flag"),
+    is_group: Optional[bool] = Query(None, description="Filter by is_group flag"),
+    is_organization: Optional[bool] = Query(None, description="Filter by is_organization flag"),
+    is_individual: Optional[bool] = Query(None, description="Filter by is_individual flag"),
+    is_company: Optional[bool] = Query(None, description="Filter by is_company flag"),
+    is_government: Optional[bool] = Query(None, description="Filter by is_government flag"),
+    is_non_profit: Optional[bool] = Query(None, description="Filter by is_non_profit flag"),
+    is_educational: Optional[bool] = Query(None, description="Filter by is_educational flag"),
+    limit: Optional[int] = Query(0, description="Maximum number of contacts to return (0 for all)", ge=0, le=1000),
+    offset: Optional[int] = Query(0, description="Number of contacts to skip", ge=0)
+):
+    """Retrieve contacts from the database.
+    
+    Returns contacts with all their fields including id, name, and email.
+    
+    Args:
+        name: Optional filter by name (partial match, case-insensitive)
+        email: Optional filter by email (partial match, case-insensitive)
+        is_subject: Optional filter by is_subject flag
+        is_contact: Optional filter by is_contact flag
+        is_group: Optional filter by is_group flag
+        is_organization: Optional filter by is_organization flag
+        is_individual: Optional filter by is_individual flag
+        is_company: Optional filter by is_company flag
+        is_government: Optional filter by is_government flag
+        is_non_profit: Optional filter by is_non_profit flag
+        is_educational: Optional filter by is_educational flag
+        limit: Maximum number of contacts to return (default: 100, max: 1000)
+        offset: Number of contacts to skip for pagination (default: 0)
+        
+    Returns:
+        ContactsListResponse with list of contacts and total count
+    """
+    session = db.get_session()
+    try:
+        # Base query
+        query = session.query(Contacts)
+        
+        # Apply filters
+        if name:
+            query = query.filter(Contacts.name.ilike(f'%{name}%'))
+        
+        if email:
+            query = query.filter(Contacts.email.ilike(f'%{email}%'))
+        
+        if is_subject is not None:
+            query = query.filter(Contacts.is_subject == is_subject)
+        
+        if is_contact is not None:
+            query = query.filter(Contacts.is_contact == is_contact)
+        
+        if is_group is not None:
+            query = query.filter(Contacts.is_group == is_group)
+        
+        if is_organization is not None:
+            query = query.filter(Contacts.is_organization == is_organization)
+        
+        if is_individual is not None:
+            query = query.filter(Contacts.is_individual == is_individual)
+        
+        if is_company is not None:
+            query = query.filter(Contacts.is_company == is_company)
+        
+        if is_government is not None:
+            query = query.filter(Contacts.is_government == is_government)
+        
+        if is_non_profit is not None:
+            query = query.filter(Contacts.is_non_profit == is_non_profit)
+        
+        if is_educational is not None:
+            query = query.filter(Contacts.is_educational == is_educational)
+        
+        # Get total count before pagination
+        total = query.count()
+        
+        # Apply pagination
+        if limit > 0:   
+            contacts = query.order_by(Contacts.name).offset(offset).limit(limit).all()
+        else:
+            contacts = query.order_by(Contacts.name).offset(offset).all()
+        
+        # Convert to response models
+        contacts_list = [
+            ContactResponseShort(
+                id=contact.id,
+                name=contact.name,
+                email=contact.email
+            )
+            for contact in contacts
+        ]
+        
+        return ContactsListResponse(
+            contacts=contacts_list,
+            total=total
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving contacts: {str(e)}"
+        )
+    finally:
+        session.close()
