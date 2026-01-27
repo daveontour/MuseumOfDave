@@ -86,18 +86,25 @@ class RelationshipService:
         return (email_string, "")
 
     def create_contacts_from_chat_sessions(self) -> Dict[str, Any]:
-        """Create contact entries from distinct chat_session values in the messages table.
+        """Create contact entries from distinct combinations of chat_session and service values in the messages table.
         
         This method:
-        1. Retrieves all distinct chat_session values from the messages table
-        2. Creates a contact entry for each chat_session that doesn't already exist
+        1. Retrieves all distinct combinations of chat_session and service from the messages table
+        2. Creates a contact entry for each chat_session/service combination
         3. Uses the chat_session value as the contact name
+        4. Sets service-specific fields based on the service type:
+           - iMessage: sets imessageid and numimessages
+           - SMS: sets smsid and numsms
+           - WhatsApp: sets whatsappid and numwhatsapp
+           - Facebook Messenger: sets facebookid and numfacebook
+           - Instagram: sets instagramid and numinstagram
+        5. Skips sessions with less than 2 messages
         
         Returns:
             Dictionary with statistics:
-            - total_sessions: Total number of distinct chat sessions found
+            - total_sessions: Total number of distinct chat_session/service combinations found
             - contacts_created: Number of new contacts created
-            - contacts_existing: Number of contacts that already existed
+            - contacts_existing: Number of contacts that already existed (currently always 0)
             - errors: List of error messages if any
         """
         session = self.db.get_session()
@@ -109,34 +116,77 @@ class RelationshipService:
         }
         
         try:
-            # Get all distinct chat_session values (excluding None and empty strings)
-            distinct_sessions = session.query(distinct(IMessage.chat_session)).filter(
+            # Get all distinct combinations of chat_session and service (excluding None and empty strings)
+            distinct_sessions = session.query(
+                IMessage.chat_session,
+                IMessage.service
+            ).filter(
                 IMessage.chat_session.isnot(None),
                 IMessage.chat_session != ''
+            ).group_by(
+                IMessage.chat_session,
+                IMessage.service
             ).all()
             
-            # Extract session names from tuples
-            session_names = [session_name[0] for session_name in distinct_sessions if session_name[0]]
-            stats["total_sessions"] = len(session_names)
+            # Extract session names and services from tuples
+            session_data = [(row[0], row[1]) for row in distinct_sessions if row[0]]
+            stats["total_sessions"] = len(session_data)
             
-            # Create contacts for each session that doesn't exist
-            for session_name in session_names:
+            # Create contacts for each session/service combination that doesn't exist
+            for session_name, service in session_data:
+
+#remove any emojis like love hearts or other emojis from the session name
+                session_name = re.sub(r'[^\w\s]', '', session_name).strip()
+
+                #strip any leading or trailing spaces from the session name
+                session_name = session_name.strip()
+                #strip any leading or trailing spaces from the session name
+                session_name = session_name.strip()
+                #strip any leading or trailing spaces from the session name
                 try:
                     # Check if contact already exists
                     existing_contact = session.query(Contacts).filter(
                         Contacts.name == session_name
                     ).first()
                     
-                    if existing_contact:
-                        stats["contacts_existing"] += 1
-                    else:
-                        # Create new contact
-                        new_contact = Contacts(
-                            name=session_name,
-                            description=f"Contact created from chat session: {session_name}"
-                        )
-                        session.add(new_contact)
-                        stats["contacts_created"] += 1
+                    # if existing_contact:
+                    #     stats["contacts_existing"] += 1
+                    # else:
+
+                        #count the number of messages where the chat_session and service match
+                    message_count = session.query(IMessage).filter(
+                        IMessage.chat_session == session_name,
+                        IMessage.service == service
+                    ).count()
+
+                    if message_count < 2:
+                        print(f"Skipping contact {session_name} because it has less than 2 messages")
+                        continue
+
+                    new_contact = Contacts(
+                        name=session_name,
+                        description=f"Contact created from chat session: {session_name}"
+                    )
+
+                    if service == "iMessage":
+                        new_contact.imessageid = session_name
+                        new_contact.numimessages = message_count
+                    elif service == "SMS":
+                        new_contact.smsid = session_name
+                        new_contact.numsms = message_count
+                    elif service == "WhatsApp":
+                        new_contact.whatsappid = session_name
+                        new_contact.numwhatsapp = message_count
+                    elif service == "Facebook Messenger":
+                        new_contact.facebookid = session_name
+                        new_contact.numfacebook = message_count
+                    elif service == "Instagram":
+                        new_contact.instagramid = session_name
+                        new_contact.numinstagram = message_count
+                    # Create new contact
+
+                    session.add(new_contact)
+                    stats["contacts_created"] += 1
                         
                 except Exception as e:
                     error_msg = f"Error creating contact for session '{session_name}': {str(e)}"
@@ -257,6 +307,13 @@ class RelationshipService:
                         continue
                     if "/O=" in parsed_email:
                         continue
+                    if "satyam" in parsed_email.lower():
+                        continue
+                    if "thales" in parsed_email.lower():
+                        continue
+                else:
+                    print (f"Name or email address is not valid: {name},  {parsed_email}, {email_address}")
+                    continue
 
 
 
@@ -285,7 +342,8 @@ class RelationshipService:
                             Email.from_address.like(f"%{contact_email}%")
                         )
                     ).count()
-                    if email_count < 5:
+                    if email_count < 2:
+                        print(f"Skipping contact {contact_name} with email {contact_email} because it has less than 2 emails")
                         #continue if the number of emails where the email address is in the to_addresses field of the emails table or the from_address field of the emails table is less than 5
                         continue
 
@@ -297,7 +355,7 @@ class RelationshipService:
                             name=contact_name,
                             email=contact_email if contact_email else None,
                             description=f"Contact created from email address: {email_address}",
-                            is_contact=True
+                            numemails=email_count
                         )
                         session.add(new_contact)
                         stats["contacts_created"] += 1

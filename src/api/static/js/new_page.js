@@ -184,6 +184,12 @@ document.addEventListener('DOMContentLoaded', () => {
         closeSubjectConfigModalBtn: document.getElementById('close-subject-config-modal'),
         subjectNameInput: document.getElementById('subject-name-input'),
         subjectGenderSelect: document.getElementById('subject-gender-select'),
+        familyNameInput: document.getElementById('family-name-input'),
+        otherNamesInput: document.getElementById('other-names-input'),
+        emailAddressesInput: document.getElementById('email-addresses-input'),
+        phoneNumbersInput: document.getElementById('phone-numbers-input'),
+        whatsappHandleInput: document.getElementById('whatsapp-handle-input'),
+        instagramHandleInput: document.getElementById('instagram-handle-input'),
         systemInstructionsTextarea: document.getElementById('system-instructions-textarea'),
         coreSystemInstructionsTextarea: document.getElementById('core-system-instructions-textarea'),
         subjectConfigTabs: document.querySelectorAll('.subject-config-tab'),
@@ -6553,7 +6559,7 @@ ${textContent}
                 }
             }
 
-            function open() {
+            async function open() {
                 const modal = document.getElementById('sms-messages-modal');
                 if (modal) {
                     modal.style.display = 'flex';
@@ -6610,7 +6616,9 @@ ${textContent}
                                 }
                             }
                         }
-                    });      
+                    });
+                    
+                    await loadChatSessions()
                 }
             }
             async function openAndSelectConversation(messageID){
@@ -8187,7 +8195,7 @@ ${textContent}
                 }
             }
 
-            async function saveConfiguration(subjectName, systemInstructions, gender) {
+            async function saveConfiguration(subjectName, systemInstructions, gender, familyName, otherNames, emailAddresses, phoneNumbers, whatsappHandle, instagramHandle) {
                 try {
                     const response = await fetch('/api/subject-configuration', {
                         method: 'POST',
@@ -8197,7 +8205,13 @@ ${textContent}
                         body: JSON.stringify({
                             subject_name: subjectName,
                             system_instructions: systemInstructions,
-                            gender: gender || 'Male'
+                            gender: gender || 'Male',
+                            family_name: familyName || null,
+                            other_names: otherNames || null,
+                            email_addresses: emailAddresses || null,
+                            phone_numbers: phoneNumbers || null,
+                            whatsapp_handle: whatsappHandle || null,
+                            instagram_handle: instagramHandle || null
                         })
                     });
 
@@ -8379,6 +8393,24 @@ ${textContent}
                             if (DOM.subjectGenderSelect) {
                                 DOM.subjectGenderSelect.value = config.gender || 'Male';
                             }
+                            if (DOM.familyNameInput) {
+                                DOM.familyNameInput.value = config.family_name || '';
+                            }
+                            if (DOM.otherNamesInput) {
+                                DOM.otherNamesInput.value = config.other_names || '';
+                            }
+                            if (DOM.emailAddressesInput) {
+                                DOM.emailAddressesInput.value = config.email_addresses || '';
+                            }
+                            if (DOM.phoneNumbersInput) {
+                                DOM.phoneNumbersInput.value = config.phone_numbers || '';
+                            }
+                            if (DOM.whatsappHandleInput) {
+                                DOM.whatsappHandleInput.value = config.whatsapp_handle || '';
+                            }
+                            if (DOM.instagramHandleInput) {
+                                DOM.instagramHandleInput.value = config.instagram_handle || '';
+                            }
                             if (DOM.systemInstructionsTextarea) {
                                 DOM.systemInstructionsTextarea.value = config.system_instructions || '';
                             }
@@ -8460,6 +8492,12 @@ ${textContent}
             async function handleSave() {
                 const subjectName = DOM.subjectNameInput ? DOM.subjectNameInput.value.trim() : '';
                 const gender = DOM.subjectGenderSelect ? DOM.subjectGenderSelect.value : 'Male';
+                const familyName = DOM.familyNameInput ? DOM.familyNameInput.value.trim() : '';
+                const otherNames = DOM.otherNamesInput ? DOM.otherNamesInput.value.trim() : '';
+                const emailAddresses = DOM.emailAddressesInput ? DOM.emailAddressesInput.value.trim() : '';
+                const phoneNumbers = DOM.phoneNumbersInput ? DOM.phoneNumbersInput.value.trim() : '';
+                const whatsappHandle = DOM.whatsappHandleInput ? DOM.whatsappHandleInput.value.trim() : '';
+                const instagramHandle = DOM.instagramHandleInput ? DOM.instagramHandleInput.value.trim() : '';
                 const systemInstructions = DOM.systemInstructionsTextarea ? DOM.systemInstructionsTextarea.value.trim() : '';
 
                 if (!subjectName) {
@@ -8473,7 +8511,7 @@ ${textContent}
                 }
 
                 try {
-                    await saveConfiguration(subjectName, systemInstructions, gender);
+                    await saveConfiguration(subjectName, systemInstructions, gender, familyName, otherNames, emailAddresses, phoneNumbers, whatsappHandle, instagramHandle);
                     updatePageReferences(subjectName, gender);
                     closeModal();
                     

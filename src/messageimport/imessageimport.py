@@ -4,7 +4,10 @@ import csv
 import mimetypes
 from datetime import datetime
 from pathlib import Path
+import re
 from typing import Dict, Any, Optional, Callable
+
+from src.services.subject_configuration_service import SubjectConfigurationService
 
 from ..database.connection import Database
 from ..database.storage import IMessageStorage
@@ -45,6 +48,13 @@ def import_imessages_from_directory(
     directory = Path(directory_path)
     if not directory.exists() or not directory.is_dir():
         raise ValueError(f"Directory does not exist or is not a directory: {directory_path}")
+    
+    config_service = SubjectConfigurationService(db=Database())
+    configuration = config_service.get_configuration()
+
+    subject_name = configuration.subject_name if configuration else None
+    subject_family_name = configuration.family_name if configuration else None
+    subject_full_name = f"{subject_name} {subject_family_name}" if subject_name and subject_family_name else subject_name or subject_family_name or None
     
     storage = IMessageStorage()
     
@@ -196,6 +206,18 @@ def import_imessages_from_directory(
                                 'subject': row.get('Subject', '').strip() or None,
                                 'text': row.get('Text', '').strip() or None,
                             }
+
+                            try:
+                                message_data['chat_session'] = re.sub(r'[^\w\s]', '', message_data['chat_session']).strip()
+                                if message_data['sender_name'] == None and message_data['type'] == 'Outgoing':
+                                    message_data['sender_name'] = subject_full_name
+                                else:
+                                    message_data['sender_name'] = re.sub(r'[^\w\s]', '', message_data['sender_name']).strip()
+                            except Exception as e:
+                                print(f"Skipping message from {message_data['chat_session']}")
+                                continue;
+                                # print(f"Error processing sender name: {e}")
+                                
                             
                             # Save to database
                             _, is_update = storage.save_imessage(

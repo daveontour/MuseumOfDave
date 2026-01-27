@@ -2271,6 +2271,12 @@ class SubjectConfigurationRequest(BaseModel):
     subject_name: str
     system_instructions: str
     gender: Optional[str] = "Male"
+    family_name: Optional[str] = None
+    other_names: Optional[str] = None  # Comma-separated names
+    email_addresses: Optional[str] = None  # Comma-separated email addresses
+    phone_numbers: Optional[str] = None  # Comma-separated phone numbers
+    whatsapp_handle: Optional[str] = None
+    instagram_handle: Optional[str] = None
 
 
 @app.get("/api/subject-configuration")
@@ -2291,6 +2297,12 @@ async def get_subject_configuration():
             "id": configuration.id,
             "subject_name": configuration.subject_name,
             "gender": configuration.gender,
+            "family_name": configuration.family_name,
+            "other_names": configuration.other_names,
+            "email_addresses": configuration.email_addresses,
+            "phone_numbers": configuration.phone_numbers,
+            "whatsapp_handle": configuration.whatsapp_handle,
+            "instagram_handle": configuration.instagram_handle,
             "system_instructions": configuration.system_instructions,
             "core_system_instructions": configuration.core_system_instructions,
             "created_at": configuration.created_at.isoformat() if configuration.created_at else None,
@@ -2320,7 +2332,13 @@ async def create_or_update_subject_configuration(request: SubjectConfigurationRe
         configuration = config_service.create_or_update_configuration(
             subject_name=request.subject_name,
             system_instructions=request.system_instructions,
-            gender=request.gender
+            gender=request.gender,
+            family_name=request.family_name,
+            other_names=request.other_names,
+            email_addresses=request.email_addresses,
+            phone_numbers=request.phone_numbers,
+            whatsapp_handle=request.whatsapp_handle,
+            instagram_handle=request.instagram_handle
         )
         
         # Reload system prompt in chat service to use new configuration
@@ -2330,6 +2348,12 @@ async def create_or_update_subject_configuration(request: SubjectConfigurationRe
             "id": configuration.id,
             "subject_name": configuration.subject_name,
             "gender": configuration.gender,
+            "family_name": configuration.family_name,
+            "other_names": configuration.other_names,
+            "email_addresses": configuration.email_addresses,
+            "phone_numbers": configuration.phone_numbers,
+            "whatsapp_handle": configuration.whatsapp_handle,
+            "instagram_handle": configuration.instagram_handle,
             "system_instructions": configuration.system_instructions,
             "core_system_instructions": configuration.core_system_instructions,
             "created_at": configuration.created_at.isoformat() if configuration.created_at else None,
@@ -7302,6 +7326,22 @@ class CreateContactsFromEmailsResponse(BaseModel):
     errors: List[str] = []
 
 
+class MatchedContactPair(BaseModel):
+    """Model for a pair of matched contacts."""
+    contact_id_1: int
+    name_1: str
+    contact_id_2: int
+    name_2: str
+    match_reason: str
+
+
+class MergeContactsResponse(BaseModel):
+    """Response model for merging contacts."""
+    message: str
+    matched_contacts: List[MatchedContactPair]
+    contacts_merged: int
+
+
 class ContactInfo(BaseModel):
     """Contact information model."""
     id: int
@@ -7345,6 +7385,17 @@ class ContactResponseShort(BaseModel):
     id: int
     name: str
     email: Optional[str] = None
+    numemail: Optional[int] = None
+    facebookid: Optional[str] = None
+    numfacebook: Optional[int] = None
+    whatsappid: Optional[str] = None
+    numwhatsapp: Optional[int] = None
+    imessageid: Optional[str] = None
+    numimessages: Optional[int] = None
+    smsid: Optional[str] = None
+    numsms: Optional[int] = None
+    instagramid: Optional[str] = None
+    numinstagram: Optional[int] = None
 
 
 class ContactsListResponse(BaseModel):
@@ -7377,18 +7428,25 @@ class RelationshipsListResponse(BaseModel):
 
 @app.post("/relationships/create-contacts-from-chat-sessions", response_model=CreateContactsFromChatSessionsResponse)
 async def create_contacts_from_chat_sessions():
-    """Create contact entries from distinct chat_session values in the messages table.
+    """Create contact entries from distinct combinations of chat_session and service values in the messages table.
     
     This endpoint:
-    1. Retrieves all distinct chat_session values from the messages table
-    2. Creates a contact entry for each chat_session that doesn't already exist
+    1. Retrieves all distinct combinations of chat_session and service from the messages table
+    2. Creates a contact entry for each chat_session/service combination
     3. Uses the chat_session value as the contact name
+    4. Sets service-specific fields based on the service type:
+       - iMessage: sets imessageid and numimessages
+       - SMS: sets smsid and numsms
+       - WhatsApp: sets whatsappid and numwhatsapp
+       - Facebook Messenger: sets facebookid and numfacebook
+       - Instagram: sets instagramid and numinstagram
+    5. Skips sessions with less than 2 messages
     
     Returns:
         CreateContactsFromChatSessionsResponse with statistics:
-        - total_sessions: Total number of distinct chat sessions found
+        - total_sessions: Total number of distinct chat_session/service combinations found
         - contacts_created: Number of new contacts created
-        - contacts_existing: Number of contacts that already existed
+        - contacts_existing: Number of contacts that already existed (currently always 0)
         - errors: List of error messages if any
         
     Raises:
@@ -7655,7 +7713,18 @@ async def get_contacts(
             ContactResponseShort(
                 id=contact.id,
                 name=contact.name,
-                email=contact.email
+                email=contact.email,
+                numemail=contact.numemails,
+                facebookid=contact.facebookid,
+                numfacebook=contact.numfacebook,
+                whatsappid=contact.whatsappid,
+                numwhatsapp=contact.numwhatsapp,
+                imessageid=contact.imessageid,
+                numimessages=contact.numimessages,
+                smsid=contact.smsid,
+                numsms=contact.numsms,
+                instagramid=contact.instagramid,
+                numinstagram=contact.numinstagram
             )
             for contact in contacts
         ]
@@ -7668,6 +7737,267 @@ async def get_contacts(
         raise HTTPException(
             status_code=500,
             detail=f"Error retrieving contacts: {str(e)}"
+        )
+    finally:
+        session.close()
+
+def find_likely_matching_contacts():
+    """Find likely matching contacts."""
+
+    sql = """WITH normalized_contacts AS (
+    SELECT 
+        id,
+        name,
+        -- Lowercase email for case-insensitive match
+        LOWER(email) as clean_email,
+        -- Lowercase name for matching
+        LOWER(name) as clean_name,
+        
+        -- IMPROVED CLEANING LOGIC:
+        -- 1. Strip non-digits.
+        -- 2. Check if the result is at least 7 digits long.
+        -- 3. If valid, keep it; otherwise set to NULL.
+        CASE 
+            WHEN LENGTH(REGEXP_REPLACE(whatsappid, '\D', '', 'g')) >= 7 
+            THEN REGEXP_REPLACE(whatsappid, '\D', '', 'g') 
+            ELSE NULL 
+        END as clean_whatsapp,
+        
+        CASE 
+            WHEN LENGTH(REGEXP_REPLACE(smsid, '\D', '', 'g')) >= 7 
+            THEN REGEXP_REPLACE(smsid, '\D', '', 'g') 
+            ELSE NULL 
+        END as clean_sms,
+        
+        CASE 
+            WHEN LENGTH(REGEXP_REPLACE(imessageid, '\D', '', 'g')) >= 7 
+            THEN REGEXP_REPLACE(imessageid, '\D', '', 'g') 
+            ELSE NULL 
+        END as clean_imessage
+
+    FROM contacts
+)
+SELECT 
+    A.id AS contact_id_1, 
+    A.name AS name_1, 
+    B.id AS contact_id_2, 
+    B.name AS name_2,
+    CASE 
+        WHEN A.clean_email = B.clean_email THEN 'Shared Email'
+        WHEN A.clean_name = B.clean_name THEN 'Exact Name Match'
+        -- Check if any phone number in A matches any phone number in B
+        WHEN (A.clean_whatsapp IS NOT NULL AND A.clean_whatsapp IN (B.clean_whatsapp, B.clean_sms, B.clean_imessage)) OR
+             (A.clean_sms IS NOT NULL AND A.clean_sms IN (B.clean_whatsapp, B.clean_sms, B.clean_imessage)) OR
+             (A.clean_imessage IS NOT NULL AND A.clean_imessage IN (B.clean_whatsapp, B.clean_sms, B.clean_imessage)) 
+             THEN 'Shared Phone Number'
+        ELSE 'Unknown'
+    END AS match_reason
+FROM normalized_contacts A
+JOIN normalized_contacts B ON A.id < B.id 
+WHERE 
+    (A.clean_email = B.clean_email AND A.clean_email IS NOT NULL)
+    OR 
+    (A.clean_name = B.clean_name AND A.clean_name IS NOT NULL)
+    OR
+    (   -- Cross-check all phone columns against each other
+        (A.clean_whatsapp IS NOT NULL AND A.clean_whatsapp IN (B.clean_whatsapp, B.clean_sms, B.clean_imessage)) OR
+        (A.clean_sms IS NOT NULL AND A.clean_sms IN (B.clean_whatsapp, B.clean_sms, B.clean_imessage)) OR
+        (A.clean_imessage IS NOT NULL AND A.clean_imessage IN (B.clean_whatsapp, B.clean_sms, B.clean_imessage))
+    )
+ORDER BY A.id;"""
+
+    session = db.get_session()
+    try:
+        contacts = session.execute(text(sql)).fetchall()
+        return contacts
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error finding likely matching contacts: {str(e)}"
+        )
+    finally:
+        session.close()
+
+@app.get("/merge-contacts", response_model=MergeContactsResponse)
+async def merge_contacts():
+    """Merge likely matching contacts.
+    
+    Returns:
+        MergeContactsResponse with:
+        - message: Summary message
+        - matched_contacts: List of matched contact pairs
+        - contacts_merged: Number of contact pairs merged
+    """
+    likely_matching_contacts = find_likely_matching_contacts()
+    matched_contacts_list = []
+    contacts_merged = 0
+    
+    for row in likely_matching_contacts:
+        contact_id_1, name_1, contact_id_2, name_2, match_reason = row
+        
+        # Add to matched contacts list
+        matched_contacts_list.append(MatchedContactPair(
+            contact_id_1=contact_id_1,
+            name_1=name_1,
+            contact_id_2=contact_id_2,
+            name_2=name_2,
+            match_reason=match_reason
+        ))
+        
+        # Merge the contacts
+        if contact_id_1 < contact_id_2:
+            merge_two_contacts(contact_id_1, contact_id_2)
+        else:
+            merge_two_contacts(contact_id_2, contact_id_1)
+        
+        contacts_merged += 1
+    
+    return MergeContactsResponse(
+        message=f"Found {len(matched_contacts_list)} matching contact pairs. Merged {contacts_merged} pairs.",
+        matched_contacts=matched_contacts_list,
+        contacts_merged=contacts_merged
+    )
+
+def merge_two_contacts(contact_id_1: int, contact_id_2: int):
+    """Merge two contacts."""
+
+
+    session = db.get_session()
+    try:
+        contact_1 = session.query(Contacts).filter(Contacts.id == contact_id_1).first()
+        contact_2 = session.query(Contacts).filter(Contacts.id == contact_id_2).first()
+
+        if  contact_1 and  contact_2:
+            # pass
+            # raise HTTPException(
+            #     status_code=404,
+            #     detail=f"Contact with ID {contact_id_1} or {contact_id_2} not found"
+            # )
+
+        #merge the contacts
+           
+            def choose_better_name(name1: str, name2: str) -> str:
+                """Choose the better name and fix capitalization.
+                
+                Prefers names that don't look like email addresses.
+                Applies title case capitalization.
+                """
+                def is_email_like(name: str) -> bool:
+                    """Check if name looks like an email address."""
+                    if not name:
+                        return True
+                    return '@' in name or '.' in name.split()[-1] if name.split() else False
+                
+                def fix_capitalization(name: str) -> str:
+                    """Fix capitalization to title case, handling special cases."""
+                    if not name:
+                        return name
+                    
+                    # Don't modify if it looks like an email
+                    if '@' in name:
+                        return name
+                    
+                    # Split into words and capitalize each
+                    words = name.split()
+                    capitalized_words = []
+                    
+                    for word in words:
+                        # Handle common prefixes (Mc, Mac, O', etc.)
+                        if len(word) > 2 and word[1:2].islower():
+                            # Already has mixed case, preserve it
+                            capitalized_words.append(word)
+                        elif word.lower() in ['van', 'de', 'der', 'von', 'la', 'le', 'du', 'da', 'di', 'del', 'della']:
+                            # Keep lowercase for common prefixes
+                            capitalized_words.append(word.lower())
+                        elif word.startswith("Mc") and len(word) > 2:
+                            # McName -> McName
+                            capitalized_words.append(word[0] + word[1].upper() + word[2:].lower())
+                        elif word.startswith("Mac") and len(word) > 3:
+                            # MacName -> MacName
+                            capitalized_words.append(word[:3] + word[3:].capitalize())
+                        elif word.startswith("O'") and len(word) > 2:
+                            # O'Name -> O'Name
+                            capitalized_words.append(word[:2] + word[2:].capitalize())
+                        else:
+                            # Standard title case
+                            capitalized_words.append(word.capitalize())
+                    
+                    return ' '.join(capitalized_words)
+                
+                # Choose the better name
+                name1_is_email = is_email_like(name1)
+                name2_is_email = is_email_like(name2)
+                
+                if name1_is_email and not name2_is_email:
+                    # name2 is better
+                    return fix_capitalization(name2)
+                elif name2_is_email and not name1_is_email:
+                    # name1 is better
+                    return fix_capitalization(name1)
+                elif not name1_is_email and not name2_is_email:
+                    # Both are valid names, prefer the longer one (more complete)
+                    if len(name1.strip()) >= len(name2.strip()):
+                        return fix_capitalization(name1)
+                    else:
+                        return fix_capitalization(name2)
+                else:
+                    # Both look like emails, use name1 and fix capitalization
+                    return fix_capitalization(name1)
+            
+            # Choose the better name
+            name1 = contact_1.name or ""
+            name2 = contact_2.name or ""
+            chosen_name = choose_better_name(name1, name2)
+            
+            # Determine which name was chosen and add the other to alternative_names
+            # Compare normalized versions to see which one was selected
+            name1_normalized = name1.strip().lower()
+            name2_normalized = name2.strip().lower()
+            chosen_normalized = chosen_name.strip().lower()
+            
+            # Add the name that wasn't chosen to alternative_names
+            if chosen_normalized == name1_normalized and name2:
+                # name1 was chosen, add name2 to alternatives
+                other_name = name2
+            elif chosen_normalized == name2_normalized and name1:
+                # name2 was chosen, add name1 to alternatives
+                other_name = name1
+            else:
+                # If names are the same or one is empty, just use the chosen name
+                other_name = None
+            
+            contact_1.name = chosen_name
+            if other_name and other_name.strip():
+                # Don't add if the alternative name is the same as the chosen name
+                if other_name.strip().lower() != chosen_name.strip().lower():
+                    if contact_1.alternative_names:
+                        # Check if other_name is already in alternative_names
+                        alt_names_list = [n.strip() for n in contact_1.alternative_names.split(',')]
+                        if other_name.strip() not in alt_names_list:
+                            contact_1.alternative_names = f"{contact_1.alternative_names}, {other_name}"
+                    else:
+                        contact_1.alternative_names = other_name
+            contact_1.email = f"{contact_1.email}, {contact_2.email}"
+            contact_1.numemails = contact_1.numemails + contact_2.numemails
+            contact_1.facebookid = f"{contact_1.facebookid}, {contact_2.facebookid}"
+            contact_1.numfacebook = contact_1.numfacebook + contact_2.numfacebook
+            contact_1.whatsappid = f"{contact_1.whatsappid}, {contact_2.whatsappid}"
+            contact_1.numwhatsapp = contact_1.numwhatsapp + contact_2.numwhatsapp
+            contact_1.imessageid = f"{contact_1.imessageid}, {contact_2.imessageid}"
+            contact_1.numimessages = contact_1.numimessages + contact_2.numimessages
+            contact_1.smsid = f"{contact_1.smsid}, {contact_2.smsid}"
+            contact_1.numsms = contact_1.numsms + contact_2.numsms
+            contact_1.instagramid = f"{contact_1.instagramid}, {contact_2.instagramid}"
+            contact_1.numinstagram = contact_1.numinstagram + contact_2.numinstagram
+            session.commit()
+
+            #delete the second contact
+            session.delete(contact_2)
+            session.commit()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error merging contacts: {str(e)}"
         )
     finally:
         session.close()

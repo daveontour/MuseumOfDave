@@ -3,9 +3,10 @@
 from typing import Optional
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 
 from ..database import Database
-from ..database.models import SubjectConfiguration
+from ..database.models import SubjectConfiguration, Contacts
 from .exceptions import NotFoundError, ValidationError
 
 
@@ -19,6 +20,37 @@ class SubjectConfigurationService:
             db: Database instance
         """
         self.db = db
+    
+    def _normalize_phone_numbers(self, phone_numbers: Optional[str]) -> Optional[str]:
+        """Normalize phone numbers by removing spaces, leading zeros, and '+' signs.
+        
+        Args:
+            phone_numbers: Comma-separated phone numbers string
+            
+        Returns:
+            Normalized comma-separated phone numbers string, or None if input is empty
+        """
+        if not phone_numbers or not phone_numbers.strip():
+            return None
+        
+        # Split by comma and normalize each number
+        numbers = [num.strip() for num in phone_numbers.split(',')]
+        normalized_numbers = []
+        
+        for number in numbers:
+            if not number:
+                continue
+            
+            # Remove spaces, '+', and leading zeros
+            normalized = re.sub(r'[\s+]', '', number)  # Remove spaces and +
+            normalized = normalized.lstrip('0')  # Remove leading zeros
+            
+            if normalized:  # Only add if there's something left
+                normalized_numbers.append(normalized)
+        
+        if normalized_numbers:
+            return ', '.join(normalized_numbers)  # Join with comma-space for readability
+        return None
 
     def get_configuration(self) -> Optional[SubjectConfiguration]:
         """Get the current subject configuration.
@@ -34,7 +66,7 @@ class SubjectConfigurationService:
         finally:
             session.close()
 
-    def create_or_update_configuration(self, subject_name: str, system_instructions: str, core_system_instructions: Optional[str] = None, gender: Optional[str] = None) -> SubjectConfiguration:
+    def create_or_update_configuration(self, subject_name: str, system_instructions: str, core_system_instructions: Optional[str] = None, gender: Optional[str] = None, family_name: Optional[str] = None, other_names: Optional[str] = None, email_addresses: Optional[str] = None, phone_numbers: Optional[str] = None, whatsapp_handle: Optional[str] = None, instagram_handle: Optional[str] = None) -> SubjectConfiguration:
         """Create or update the subject configuration (singleton pattern).
         
         Args:
@@ -42,6 +74,12 @@ class SubjectConfigurationService:
             system_instructions: System instructions/prompt text
             core_system_instructions: Core system instructions (optional, only updated if provided)
             gender: Gender of the subject (optional, defaults to "Male" if not provided)
+            family_name: Family name of the subject (optional)
+            other_names: Other names, comma-separated (optional)
+            email_addresses: Email addresses, comma-separated (optional)
+            phone_numbers: Phone numbers, comma-separated (optional, will be normalized)
+            whatsapp_handle: WhatsApp handle (optional)
+            instagram_handle: Instagram handle (optional)
             
         Returns:
             Created or updated SubjectConfiguration instance
@@ -70,6 +108,18 @@ class SubjectConfigurationService:
                 configuration.gender = gender.strip()
                 if core_system_instructions is not None:
                     configuration.core_system_instructions = core_system_instructions.strip()
+                if family_name is not None:
+                    configuration.family_name = family_name.strip() if family_name.strip() else None
+                if other_names is not None:
+                    configuration.other_names = other_names.strip() if other_names.strip() else None
+                if email_addresses is not None:
+                    configuration.email_addresses = email_addresses.strip() if email_addresses.strip() else None
+                if phone_numbers is not None:
+                    configuration.phone_numbers = self._normalize_phone_numbers(phone_numbers)
+                if whatsapp_handle is not None:
+                    configuration.whatsapp_handle = whatsapp_handle.strip() if whatsapp_handle.strip() else None
+                if instagram_handle is not None:
+                    configuration.instagram_handle = instagram_handle.strip() if instagram_handle.strip() else None
                 configuration.updated_at = datetime.now(timezone.utc)
             else:
                 # Create new configuration
@@ -80,16 +130,93 @@ class SubjectConfigurationService:
                 configuration = SubjectConfiguration(
                     subject_name=subject_name.strip(),
                     gender=gender.strip(),
+                    family_name=family_name.strip() if family_name and family_name.strip() else None,
+                    other_names=other_names.strip() if other_names and other_names.strip() else None,
+                    email_addresses=email_addresses.strip() if email_addresses and email_addresses.strip() else None,
+                    phone_numbers=self._normalize_phone_numbers(phone_numbers),
+                    whatsapp_handle=whatsapp_handle.strip() if whatsapp_handle and whatsapp_handle.strip() else None,
+                    instagram_handle=instagram_handle.strip() if instagram_handle and instagram_handle.strip() else None,
                     system_instructions=system_instructions.strip(),
                     core_system_instructions=core_system_instructions.strip() if core_system_instructions else ''
                 )
                 session.add(configuration)
             
+            # Create or update the corresponding Contacts entry with is_subject=True
+            # Do this before commit so we can do a single commit for both operations
+            # Prepare contact values from parameters (will be same as what's stored)
+            contact_subject_name = subject_name.strip()
+            contact_family_name = family_name.strip() if family_name and family_name.strip() else None
+            contact_email_addresses = email_addresses.strip() if email_addresses and email_addresses.strip() else None
+            contact_phone_numbers = self._normalize_phone_numbers(phone_numbers)
+            contact_whatsapp_handle = whatsapp_handle.strip() if whatsapp_handle and whatsapp_handle.strip() else None
+            contact_instagram_handle = instagram_handle.strip() if instagram_handle and instagram_handle.strip() else None
+            
+            self._sync_contacts_entry(
+                session=session,
+                subject_name=contact_subject_name,
+                family_name=contact_family_name,
+                email_addresses=contact_email_addresses,
+                phone_numbers=contact_phone_numbers,
+                whatsapp_handle=contact_whatsapp_handle,
+                instagram_handle=contact_instagram_handle
+            )
+            
+            # Single commit for both SubjectConfiguration and Contacts changes
             session.commit()
             session.refresh(configuration)
+            # Expunge the object from the session so it can be used after session closes
+            # This prevents DetachedInstanceError when accessing attributes after return
+            session.expunge(configuration)
             return configuration
         finally:
             session.close()
+    
+    def _sync_contacts_entry(self, session, subject_name: str, family_name: Optional[str] = None, email_addresses: Optional[str] = None, phone_numbers: Optional[str] = None, whatsapp_handle: Optional[str] = None, instagram_handle: Optional[str] = None):
+        """Create or update the Contacts entry for the subject.
+        
+        Args:
+            session: Database session
+            subject_name: Subject's name
+            family_name: Family name (optional)
+            email_addresses: Comma-separated email addresses (optional)
+            phone_numbers: Comma-separated phone numbers (optional, already normalized)
+            whatsapp_handle: WhatsApp handle (optional)
+            instagram_handle: Instagram handle (optional)
+        """
+        # Build the contact name - use subject_name, optionally with family_name
+        contact_name = subject_name
+        if family_name:
+            contact_name = f"{subject_name} {family_name}".strip()
+        
+        # Find existing contact with is_subject=True
+        subject_contact = session.query(Contacts).filter(Contacts.is_subject == True).first()
+        
+        if subject_contact:
+            # Update existing contact
+            subject_contact.name = contact_name
+            if email_addresses is not None:
+                subject_contact.email = email_addresses
+            if phone_numbers is not None:
+                # Store phone numbers in smsid field (or combine with existing)
+                # Note: Contacts model doesn't have a dedicated phone_numbers field,
+                # so we'll use smsid as a general phone number field
+                subject_contact.smsid = phone_numbers
+            if whatsapp_handle is not None:
+                subject_contact.whatsappid = whatsapp_handle
+            if instagram_handle is not None:
+                subject_contact.instagramid = instagram_handle
+            subject_contact.updated_at = datetime.now(timezone.utc)
+        else:
+            # Create new contact
+            subject_contact = Contacts(
+                name=contact_name,
+                is_subject=True,
+                email=email_addresses,
+                smsid=phone_numbers,  # Using smsid field for phone numbers
+                whatsappid=whatsapp_handle,
+                instagramid=instagram_handle
+            )
+            session.add(subject_contact)
 
     def get_subject_name(self) -> Optional[str]:
         """Get the current subject name.
