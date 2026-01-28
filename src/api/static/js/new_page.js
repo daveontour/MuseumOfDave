@@ -5619,6 +5619,9 @@ ${textContent}
 
         SMSMessages: (() => {
             let chatSessions = [];
+            let contactsSessions = [];
+            let groupsSessions = [];
+            let otherSessions = [];
             let filteredSessions = [];
             let originalChatData = null;
             let currentSession = null;
@@ -5657,10 +5660,15 @@ ${textContent}
                     const data = await response.json();
                     // Store original data structure
                     originalChatData = data;
-                    // Combine both categories for filtering
+                    // Keep categories separate
+                    contactsSessions = data.contacts || [];
+                    groupsSessions = data.groups || [];
+                    otherSessions = data.other || [];
+                    // Combine for backward compatibility with search
                     chatSessions = [
-                        ...(data.contacts_and_groups || []),
-                        ...(data.other || [])
+                        ...contactsSessions,
+                        ...groupsSessions,
+                        ...otherSessions
                     ];
                     filteredSessions = [...chatSessions];
                     renderChatSessions();
@@ -5678,81 +5686,100 @@ ${textContent}
                 const listContainer = document.getElementById('sms-chat-sessions-list');
                 if (!listContainer) return;
 
-                // First filter by message type
-                const typeFilteredSessions = filteredSessions.filter(session => {
-                    const messageType = session.message_type;
-                    
-                    // If message type is not defined, don't show it
-                    if (!messageType) {
-                        return false;
-                    }
-                    
-                    // If it's a mixed conversation, show it if ANY individual type is selected OR if mixed is selected
-                    if (messageType === 'mixed') {
-                        return messageTypeFilters.mixed === true || 
-                               messageTypeFilters.imessage === true || 
-                               messageTypeFilters.sms === true || 
-                               messageTypeFilters.whatsapp === true || 
-                               messageTypeFilters.facebook === true ||
-                               messageTypeFilters.instagram === true;
-                    }
-                    
-                    // For other types, check if the filter is enabled
-                    // Strict boolean check since we're setting boolean values
-                    return messageTypeFilters[messageType] === true;
-                });
+                // Helper function to filter sessions by message type
+                function filterByMessageType(sessions) {
+                    return sessions.filter(session => {
+                        const messageType = session.message_type;
+                        
+                        // If message type is not defined, don't show it
+                        if (!messageType) {
+                            return false;
+                        }
+                        
+                        // If it's a mixed conversation, show it if ANY individual type is selected OR if mixed is selected
+                        if (messageType === 'mixed') {
+                            return messageTypeFilters.mixed === true || 
+                                   messageTypeFilters.imessage === true || 
+                                   messageTypeFilters.sms === true || 
+                                   messageTypeFilters.whatsapp === true || 
+                                   messageTypeFilters.facebook === true ||
+                                   messageTypeFilters.instagram === true;
+                        }
+                        
+                        // For other types, check if the filter is enabled
+                        // Strict boolean check since we're setting boolean values
+                        return messageTypeFilters[messageType] === true;
+                    });
+                }
 
-                // Get data from API response structure
-                const contactsAndGroups = typeFilteredSessions.filter(session => {
-                    // Check if it's a phone number (same logic as backend)
-                    const chatSession = session.chat_session || '';
-                    const cleaned = chatSession.replace(/[\s\-\(\)]/g, '');
-                    if (cleaned.startsWith('+')) {
-                        return !cleaned.substring(1).match(/^\d{7,}$/);
-                    }
-                    const digitCount = (chatSession.match(/\d/g) || []).length;
-                    return !(digitCount >= 7 && cleaned.length <= 20);
-                });
+                // Filter each category separately by message type
+                // Also filter by search if filteredSessions is different from chatSessions
+                // Create a Set of chat_session values from filteredSessions for efficient lookup
+                const filteredSet = new Set(filteredSessions.map(s => s.chat_session));
+                const isSearchActive = filteredSessions.length !== chatSessions.length;
                 
-                const otherSessions = typeFilteredSessions.filter(session => {
-                    const chatSession = session.chat_session || '';
-                    const cleaned = chatSession.replace(/[\s\-\(\)]/g, '');
-                    if (cleaned.startsWith('+')) {
-                        return cleaned.substring(1).match(/^\d{7,}$/);
-                    }
-                    const digitCount = (chatSession.match(/\d/g) || []).length;
-                    return digitCount >= 7 && cleaned.length <= 20;
-                });
+                let filteredContacts = contactsSessions;
+                let filteredGroups = groupsSessions;
+                let filteredOther = otherSessions;
+                
+                if (isSearchActive) {
+                    // If search is active, filter each category by what's in filteredSessions
+                    filteredContacts = contactsSessions.filter(s => filteredSet.has(s.chat_session));
+                    filteredGroups = groupsSessions.filter(s => filteredSet.has(s.chat_session));
+                    filteredOther = otherSessions.filter(s => filteredSet.has(s.chat_session));
+                }
+                
+                // Apply message type filter to each category
+                const typeFilteredContacts = filterByMessageType(filteredContacts);
+                const typeFilteredGroups = filterByMessageType(filteredGroups);
+                const typeFilteredOther = filterByMessageType(filteredOther);
 
-                if (typeFilteredSessions.length === 0) {
+                const totalFiltered = typeFilteredContacts.length + typeFilteredGroups.length + typeFilteredOther.length;
+                
+                if (totalFiltered === 0) {
                     listContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;">No conversations found</div>';
                     return;
                 }
 
                 listContainer.innerHTML = '';
                 
-                // Render Contacts and Groups section
-                if (contactsAndGroups.length > 0) {
+                // Render Contacts section
+                if (typeFilteredContacts.length > 0) {
                     const categoryHeader = document.createElement('div');
                     categoryHeader.className = 'sms-chat-category-header';
-                    categoryHeader.textContent = 'Contacts and Groups';
+                    categoryHeader.textContent = 'Contacts';
                     categoryHeader.style.cssText = 'padding: 12px 16px; font-weight: 600; font-size: 13px; color: #233366; background-color: #e9ecef; border-bottom: 1px solid #dee2e6; text-transform: uppercase; letter-spacing: 0.5px;';
                     listContainer.appendChild(categoryHeader);
                     
-                    contactsAndGroups.forEach(session => {
+                    typeFilteredContacts.forEach(session => {
+                        renderChatSessionItem(session, listContainer);
+                    });
+                }
+                
+                // Render Group Chats section
+                if (typeFilteredGroups.length > 0) {
+                    const categoryHeader = document.createElement('div');
+                    categoryHeader.className = 'sms-chat-category-header';
+                    categoryHeader.textContent = 'Group Chats';
+                    const hasPreviousSection = typeFilteredContacts.length > 0;
+                    categoryHeader.style.cssText = 'padding: 12px 16px; font-weight: 600; font-size: 13px; color: #233366; background-color: #e9ecef; border-bottom: 1px solid #dee2e6; border-top: 1px solid #dee2e6; margin-top: ' + (hasPreviousSection ? '8px' : '0') + '; text-transform: uppercase; letter-spacing: 0.5px;';
+                    listContainer.appendChild(categoryHeader);
+                    
+                    typeFilteredGroups.forEach(session => {
                         renderChatSessionItem(session, listContainer);
                     });
                 }
                 
                 // Render Other section
-                if (otherSessions.length > 0) {
+                if (typeFilteredOther.length > 0) {
                     const categoryHeader = document.createElement('div');
                     categoryHeader.className = 'sms-chat-category-header';
                     categoryHeader.textContent = 'Other';
-                    categoryHeader.style.cssText = 'padding: 12px 16px; font-weight: 600; font-size: 13px; color: #233366; background-color: #e9ecef; border-bottom: 1px solid #dee2e6; border-top: 1px solid #dee2e6; margin-top: ' + (contactsAndGroups.length > 0 ? '8px' : '0') + '; text-transform: uppercase; letter-spacing: 0.5px;';
+                    const hasPreviousSection = typeFilteredContacts.length > 0 || typeFilteredGroups.length > 0;
+                    categoryHeader.style.cssText = 'padding: 12px 16px; font-weight: 600; font-size: 13px; color: #233366; background-color: #e9ecef; border-bottom: 1px solid #dee2e6; border-top: 1px solid #dee2e6; margin-top: ' + (hasPreviousSection ? '8px' : '0') + '; text-transform: uppercase; letter-spacing: 0.5px;';
                     listContainer.appendChild(categoryHeader);
                     
-                    otherSessions.forEach(session => {
+                    typeFilteredOther.forEach(session => {
                         renderChatSessionItem(session, listContainer);
                     });
                 }

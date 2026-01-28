@@ -4,7 +4,11 @@ import csv
 import mimetypes
 from datetime import datetime
 from pathlib import Path
+import re
 from typing import Dict, Any, Optional, Callable
+
+from src.database import IMessage
+from src.services.subject_configuration_service import SubjectConfigurationService
 
 from ..database.connection import Database
 from ..database.storage import IMessageStorage
@@ -19,6 +23,31 @@ def parse_date(date_str: Optional[str]) -> Optional[datetime]:
     except ValueError as e:
         print(f"Warning: Could not parse date '{date_str}': {e}")
         return None
+
+
+# Exclusion patterns for non-group-chat notifications
+NON_GROUP_CHAT_NOTIFICATION_PATTERNS = (
+    "Messages to this chat and calls are now secured with end-to-end encryption",
+    "You started a call",
+    "You ended a call",
+    "You joined a call",
+    "You left a call",
+    "You missed a call",
+    "You rejected a call",
+    "You accepted a call",
+    "You declined a call",
+    "You blocked a call",
+    "changed their phone number to a new number",
+    "is a contact",
+    "This chat is now end-to-end encrypted",
+    "Voice call -",
+    "Video call -",
+    "Missed video",
+    "Missed voice",
+    "This chat is with a business account",
+    "turned on disappearing messages",
+    "This business account has now registered as a standard account"
+)
 
 
 def find_attachment_file(base_dir: Path, filename: str) -> Optional[Path]:
@@ -93,6 +122,13 @@ def import_whatsapp_from_directory(
         
         # Find CSV files in the subdirectory
         csv_files = list(subdir.glob("*.csv"))
+
+        config_service = SubjectConfigurationService(db=Database())
+        configuration = config_service.get_configuration()
+
+        subject_name = configuration.subject_name if configuration else None
+        subject_family_name = configuration.family_name if configuration else None
+        subject_full_name = f"{subject_name} {subject_family_name}" if subject_name and subject_family_name else subject_name or subject_family_name or None
         
         if not csv_files:
             print(f"No CSV file found in subdirectory: {conversation_name}")
@@ -191,6 +227,21 @@ def import_whatsapp_from_directory(
                                 "subject": None,  # WhatsApp CSV doesn't have subject
                                 "text": row.get('Text', '').strip() or None,
                             }
+
+                            # Check if notification indicates a group chat
+                            # Group chat notifications exclude encryption messages, call events, and contact changes
+                            if message_data['type'] == "Notification":
+                                message_text = message_data.get('text') or ''
+                                if not any(pattern in message_text for pattern in NON_GROUP_CHAT_NOTIFICATION_PATTERNS):
+                                    message_data['is_group_chat'] = True
+
+                            try:
+                                message_data['chat_session'] = re.sub(r'[^\w\s]', '', message_data['chat_session']).strip()
+                                if message_data['sender_name'] != None: 
+                                    message_data['sender_name'] = re.sub(r'[^\w\s]', '', message_data['sender_name']).strip()
+                            except Exception as e:
+                                print(f"Skipping message from {message_data['chat_session']}")
+                                continue;
                             
                             # Save message to database
                             imessage, is_update = storage.save_imessage(
@@ -207,6 +258,8 @@ def import_whatsapp_from_directory(
                                 stats["messages_created"] += 1
                             
                             stats["messages_imported"] += 1
+
+                            
                             
                         except Exception as e:
                             print(f"Error processing message row: {e}")
@@ -222,7 +275,32 @@ def import_whatsapp_from_directory(
         if progress_callback:
             progress_callback(stats.copy())
     
+    print("Setting is_group_chat flag")
+    set_is_group_chat()
+    
     return stats
+
+def set_is_group_chat() -> Dict[str, Any]:
+        """Set the is_notification flag for the message data."""
+        #for each distinct chat_session, checi his any message is a notification and if so, set the is_notification flag to True for all messages in that chat_session
+        try:
+            db = Database()
+            session = db.get_session()
+            distinct_chat_sessions = session.query(IMessage.chat_session).distinct().all()
+            for chat_session_tuple in distinct_chat_sessions:
+                chat_session = chat_session_tuple[0]  # Extract the actual value from the tuple
+                messages = session.query(IMessage).filter(IMessage.chat_session == chat_session).all()
+                # Check if any message in this chat_session has is_notification set
+                has_group_chat = any(message.is_group_chat for message in messages)
+                # If any message has is_notification set, set all messages to is_notification = True
+                if has_group_chat:
+                    for message in messages:
+                        message.is_group_chat = True
+            session.commit()
+            session.close()
+        except Exception as e:
+            print(f"Error setting is_notification flag: {e}")
+            return False
 
 
 def main():

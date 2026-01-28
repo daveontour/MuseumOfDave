@@ -1682,7 +1682,8 @@ async def get_chat_sessions():
             }
         
         return {
-            "contacts_and_groups": [session_to_dict(s) for s in result.contacts_and_groups],
+            "contacts": [session_to_dict(s) for s in result.contacts],
+            "groups": [session_to_dict(s) for s in result.groups],
             "other": [session_to_dict(s) for s in result.other]
         }
     except ServiceException as e:

@@ -353,6 +353,12 @@ class IMessageStorage:
             tuple: (IMessage instance, is_update: bool) where is_update is True if message was updated, False if created
         """
         session = self.db.get_session()
+
+        if not message_data.get("is_group_chat"):
+            message_data["is_group_chat"] = False
+        else:
+            message_data["is_group_chat"] = True
+            
         try:
             # Check if message already exists
             existing = session.query(IMessage).filter(
@@ -373,6 +379,7 @@ class IMessageStorage:
                 existing.replying_to = message_data.get("replying_to")
                 existing.subject = message_data.get("subject")
                 existing.text = message_data.get("text")
+                existing.is_group_chat = message_data.get("is_group_chat")
                 
                 # Delete existing message attachments if updating
                 session.query(MessageAttachment).filter(MessageAttachment.message_id == existing.id).delete()
@@ -395,6 +402,7 @@ class IMessageStorage:
                     replying_to=message_data.get("replying_to"),
                     subject=message_data.get("subject"),
                     text=message_data.get("text"),
+                    is_group_chat=message_data.get("is_group_chat"),
                 )
                 session.add(imessage)
                 session.flush()  # Get message ID

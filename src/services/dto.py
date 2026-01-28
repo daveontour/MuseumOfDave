@@ -116,5 +116,6 @@ class ChatSessionInfo:
 @dataclass
 class ChatSessionsResult:
     """Result of chat session query."""
-    contacts_and_groups: List[ChatSessionInfo]
+    contacts: List[ChatSessionInfo]
+    groups: List[ChatSessionInfo]
     other: List[ChatSessionInfo]

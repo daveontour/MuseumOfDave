@@ -4,6 +4,7 @@ import json
 import mimetypes
 from datetime import datetime
 from pathlib import Path
+import re
 from typing import Dict, Any, Optional, Callable
 
 from ..database.connection import Database
@@ -179,6 +180,14 @@ def import_instagram_from_directory(
                                 "subject": None,  # Instagram doesn't have subject field
                                 "text": text_content,
                             }
+
+                            try:
+                                message_data['chat_session'] = re.sub(r'[^\w\s]', '', message_data['chat_session']).strip()
+                                if message_data['sender_name'] != None: 
+                                    message_data['sender_name'] = re.sub(r'[^\w\s]', '', message_data['sender_name']).strip()
+                            except Exception as e:
+                                print(f"Skipping message from {message_data['chat_session']}")
+                                continue;
                             
                             # Handle photos if present
                             if photos:

@@ -37,7 +37,8 @@ class MessageService:
                     func.count(func.distinct(case((IMessage.service.ilike('%SMS%'), IMessage.id), else_=None))).label('sms_count'),
                     func.count(func.distinct(case((IMessage.service == 'WhatsApp', IMessage.id), else_=None))).label('whatsapp_count'),
                     func.count(func.distinct(case((IMessage.service == 'Facebook Messenger', IMessage.id), else_=None))).label('facebook_count'),
-                    func.count(func.distinct(case((IMessage.service == 'Instagram', IMessage.id), else_=None))).label('instagram_count')
+                    func.count(func.distinct(case((IMessage.service == 'Instagram', IMessage.id), else_=None))).label('instagram_count'),
+                    func.count(case((IMessage.is_group_chat == True, 1), else_=None)).label('group_chat_count')
                 ).outerjoin(
                     MessageAttachment, MessageAttachment.message_id == IMessage.id
                 ).filter(
@@ -64,7 +65,8 @@ class MessageService:
                                 COUNT(CASE WHEN m.service ILIKE '%SMS%' THEN 1 END) as sms_count,
                                 COUNT(CASE WHEN m.service = 'WhatsApp' THEN 1 END) as whatsapp_count,
                                 COUNT(CASE WHEN m.service = 'Facebook Messenger' THEN 1 END) as facebook_count,
-                                COUNT(CASE WHEN m.service = 'Instagram' THEN 1 END) as instagram_count
+                                COUNT(CASE WHEN m.service = 'Instagram' THEN 1 END) as instagram_count,
+                                COUNT(CASE WHEN m.is_group_chat = TRUE THEN 1 END) as group_chat_count
                             FROM messages m
                             LEFT JOIN message_attachments ma ON ma.message_id = m.id
                             WHERE m.chat_session IS NOT NULL
@@ -93,6 +95,7 @@ class MessageService:
             
             contacts_and_groups = []
             other_sessions = []
+            group_chats = []
             
             for result in results:
                 imessage_count = result[5] or 0
@@ -102,7 +105,7 @@ class MessageService:
                 instagram_count = result[9] if len(result) > 9 else 0
                 total_count = result[1] or 0
                 last_message_date = result[4]
-                
+                group_chat_count = result[10] if len(result) > 10 else 0
                 # Determine message type: 'imessage', 'sms', 'whatsapp', 'facebook', 'instagram', or 'mixed'
                 non_zero_counts = sum([
                     1 if imessage_count > 0 else 0,
@@ -146,11 +149,14 @@ class MessageService:
                 # Categorize: phone numbers go to "other", names go to "contacts_and_groups"
                 if is_phone_number(result[0]):
                     other_sessions.append(session_info)
+                elif group_chat_count > 0:
+                    group_chats.append(session_info)
                 else:
                     contacts_and_groups.append(session_info)
             
             return ChatSessionsResult(
-                contacts_and_groups=contacts_and_groups,
+                contacts=contacts_and_groups,
+                groups=group_chats,
                 other=other_sessions
             )
         finally:
