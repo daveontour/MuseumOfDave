@@ -4,7 +4,12 @@ import json
 import mimetypes
 from datetime import datetime, timedelta
 from pathlib import Path
+from sqlalchemy import text
 from typing import Dict, Any, Optional, Callable
+
+from sqlalchemy import func
+
+from src.database import IMessage
 
 from ..database.connection import Database
 from ..database.storage import IMessageStorage
@@ -576,9 +581,54 @@ def import_facebook_from_directory(
         # Call progress callback after each conversation is processed
         if progress_callback:
             progress_callback(stats.copy())
+
+    detect_group_chat()
     
     return stats
 
+def detect_group_chat():
+    """Detect if a chat is a group chat based on the participants."""
+    try:
+        db = Database()
+        session = db.get_session()
+
+        try:
+            distinct_senders = session.query( IMessage.chat_session, func.count(func.distinct(IMessage.sender_id)).label('sender_count')).filter(IMessage.service == 'Facebook Messenger').group_by(IMessage.chat_session).all()
+            for sender in distinct_senders:
+                if sender.sender_count < 3:
+                    continue;
+                messages = session.query(IMessage).filter(IMessage.chat_session == sender.chat_session).filter(IMessage.service == 'Facebook Messenger').all()
+                for message in messages:
+                    message.is_group_chat = True
+                session.commit()
+        except Exception as e:
+            print(f"Error detecting group chat: {e}")
+            return False
+        finally:
+            session.close()
+
+        session = db.get_session()
+        try:
+            #delete all the messages with is_group_chat = True, service = 'Facebook Messenger' and the number of messages is less than 3
+            sql = """DELETE from messages where service = 'Facebook Messenger' AND chat_session IN (
+                        SELECT chat_session
+                        FROM messages
+                        GROUP BY chat_session
+                        HAVING COUNT(*) < 2 
+                        )
+        """
+            session.execute(text(sql))
+            session.commit()
+        except Exception as e:
+            print(f"Error deleting group chat messages: {e}")
+            return False
+        finally:
+            session.close()
+        
+
+    except Exception as e:
+            print(f"Error detecting group chat: {e}")
+            return False
 
 def main():
     """Main function for testing the import."""

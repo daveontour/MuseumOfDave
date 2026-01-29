@@ -277,6 +277,7 @@ class Contacts(Base):
     instagramid = Column(Text, nullable=True)
     numinstagram = Column(Integer, nullable=False, default=0)
     description = Column(Text, nullable=True)
+    total = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 

@@ -286,7 +286,7 @@ def set_is_group_chat() -> Dict[str, Any]:
         try:
             db = Database()
             session = db.get_session()
-            distinct_chat_sessions = session.query(IMessage.chat_session).distinct().all()
+            distinct_chat_sessions = session.query(IMessage.chat_session).distinct().filter(IMessage.service == 'WhatsApp').all()
             for chat_session_tuple in distinct_chat_sessions:
                 chat_session = chat_session_tuple[0]  # Extract the actual value from the tuple
                 messages = session.query(IMessage).filter(IMessage.chat_session == chat_session).all()

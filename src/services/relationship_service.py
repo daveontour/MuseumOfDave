@@ -3,7 +3,7 @@
 from operator import or_
 import re
 from typing import List, Optional, Dict, Any, Tuple
-from sqlalchemy import distinct
+from sqlalchemy import distinct, text
 
 from ..database import Database
 from ..database.models import Relationship, Contacts, IMessage, Email
@@ -116,85 +116,52 @@ class RelationshipService:
         }
         
         try:
-            # Get all distinct combinations of chat_session and service (excluding None and empty strings)
-            distinct_sessions = session.query(
-                IMessage.chat_session,
-                IMessage.service
-            ).filter(
-                IMessage.chat_session.isnot(None),
-                IMessage.chat_session != ''
-            ).group_by(
-                IMessage.chat_session,
-                IMessage.service
-            ).all()
-            
-            # Extract session names and services from tuples
-            session_data = [(row[0], row[1]) for row in distinct_sessions if row[0]]
-            stats["total_sessions"] = len(session_data)
-            
-            # Create contacts for each session/service combination that doesn't exist
-            for session_name, service in session_data:
 
-#remove any emojis like love hearts or other emojis from the session name
-                session_name = re.sub(r'[^\w\s]', '', session_name).strip()
+            sql = """SELECT 
+                    chat_session as name,
+                    is_group_chat as is_group,
+                    COUNT(CASE WHEN service = 'WhatsApp' THEN 1 END) AS numwhatsapp,
+                    COUNT(CASE WHEN service = 'iMessage' THEN 1 END) AS numimessages,
+                    COUNT(CASE WHEN service = 'Facebook Messenger' THEN 1 END) AS numfacebook,
+                    COUNT(CASE WHEN service = 'SMS' THEN 1 END) AS numsms,
+                    COUNT(CASE WHEN service = 'Instagram' THEN 1 END) AS numinstagram,
+                    COUNT(CASE WHEN service ilike  '%' THEN 1 END) AS total
+                FROM 
+                    messages
+                GROUP BY 
+                    is_group,name
+                ORDER BY 
+                    is_group, name, total DESC;
+                            """
+            results = session.execute(text(sql)).fetchall()
 
-                #strip any leading or trailing spaces from the session name
-                session_name = session_name.strip()
-                #strip any leading or trailing spaces from the session name
-                session_name = session_name.strip()
-                #strip any leading or trailing spaces from the session name
+            #create a contact entry for each result
+            for result in results:
                 try:
-                    # Check if contact already exists
-                    existing_contact = session.query(Contacts).filter(
-                        Contacts.name == session_name
-                    ).first()
-                    
-                    # if existing_contact:
-                    #     stats["contacts_existing"] += 1
-                    # else:
-
-                        #count the number of messages where the chat_session and service match
-                    message_count = session.query(IMessage).filter(
-                        IMessage.chat_session == session_name,
-                        IMessage.service == service
-                    ).count()
-
-                    if message_count < 2:
-                        print(f"Skipping contact {session_name} because it has less than 2 messages")
-                        continue
-
-                    new_contact = Contacts(
-                        name=session_name,
-                        description=f"Contact created from chat session: {session_name}"
+                    contact = Contacts(
+                        name=result[0],
+                        is_group=result[1],
+                        numwhatsapp=result[2],
+                        numimessages=result[3],
+                        numfacebook=result[4],
+                        numsms=result[5],
+                        numinstagram=result[6],
+                        total=result[7]
                     )
-
-                    if service == "iMessage":
-                        new_contact.imessageid = session_name
-                        new_contact.numimessages = message_count
-                    elif service == "SMS":
-                        new_contact.smsid = session_name
-                        new_contact.numsms = message_count
-                    elif service == "WhatsApp":
-                        new_contact.whatsappid = session_name
-                        new_contact.numwhatsapp = message_count
-                    elif service == "Facebook Messenger":
-                        new_contact.facebookid = session_name
-                        new_contact.numfacebook = message_count
-                    elif service == "Instagram":
-                        new_contact.instagramid = session_name
-                        new_contact.numinstagram = message_count
-                    # Create new contact
-
-                    session.add(new_contact)
+                    session.add(contact)
+                    session.commit()
                     stats["contacts_created"] += 1
-                        
                 except Exception as e:
-                    error_msg = f"Error creating contact for session '{session_name}': {str(e)}"
+                    error_msg = f"Error creating contact for {result[0]}: {str(e)}"
                     stats["errors"].append(error_msg)
                     continue
+
+                
+
+            return stats
+
             
-            # Commit all changes
-            session.commit()
+
             
         except Exception as e:
             session.rollback()
