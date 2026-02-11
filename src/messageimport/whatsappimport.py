@@ -7,6 +7,8 @@ from pathlib import Path
 import re
 from typing import Dict, Any, Optional, Callable
 
+from sqlalchemy import text
+
 from src.database import IMessage
 from src.services.subject_configuration_service import SubjectConfigurationService
 
@@ -153,6 +155,8 @@ def import_whatsapp_from_directory(
                             attachment_filename = row.get('Attachment', '').strip() or None
                             attachment_type = row.get('Attachment type', '').strip() or None
                             attachment_data = None
+
+                        
                             
                             # Handle attachments
                             if attachment_filename:
@@ -283,24 +287,55 @@ def import_whatsapp_from_directory(
 def set_is_group_chat() -> Dict[str, Any]:
         """Set the is_notification flag for the message data."""
         #for each distinct chat_session, checi his any message is a notification and if so, set the is_notification flag to True for all messages in that chat_session
-        try:
+        try:   
+            sql = """WITH GroupSessions AS (
+                        SELECT 
+                            chat_session,
+                            service
+                        FROM 
+                            messages
+                        WHERE 
+                            service IN ('WhatsApp', 'Facebook Messenger')
+                        GROUP BY 
+                            chat_session, service
+                        HAVING 
+                            COUNT(DISTINCT sender_id) > 2
+                    )
+                    UPDATE messages m
+                    SET is_group_chat = TRUE
+                    FROM GroupSessions gs
+                    WHERE m.chat_session = gs.chat_session 
+                    AND m.service = gs.service;
+            """
             db = Database()
             session = db.get_session()
-            distinct_chat_sessions = session.query(IMessage.chat_session).distinct().filter(IMessage.service == 'WhatsApp').all()
-            for chat_session_tuple in distinct_chat_sessions:
-                chat_session = chat_session_tuple[0]  # Extract the actual value from the tuple
-                messages = session.query(IMessage).filter(IMessage.chat_session == chat_session).all()
-                # Check if any message in this chat_session has is_notification set
-                has_group_chat = any(message.is_group_chat for message in messages)
-                # If any message has is_notification set, set all messages to is_notification = True
-                if has_group_chat:
-                    for message in messages:
-                        message.is_group_chat = True
+            session.execute(text(sql))
             session.commit()
             session.close()
         except Exception as e:
-            print(f"Error setting is_notification flag: {e}")
+            print(f"Error setting is_group_chat flag: {e}")
             return False
+        finally:
+            session.close()
+            
+        # try:
+        #     db = Database()
+        #     session = db.get_session()
+        #     distinct_chat_sessions = session.query(IMessage.chat_session).distinct().filter(IMessage.service == 'WhatsApp').all()
+        #     for chat_session_tuple in distinct_chat_sessions:
+        #         chat_session = chat_session_tuple[0]  # Extract the actual value from the tuple
+        #         messages = session.query(IMessage).filter(IMessage.chat_session == chat_session).all()
+        #         # Check if any message in this chat_session has is_notification set
+        #         has_group_chat = any(message.is_group_chat for message in messages)
+        #         # If any message has is_notification set, set all messages to is_notification = True
+        #         if has_group_chat:
+        #             for message in messages:
+        #                 message.is_group_chat = True
+        #     session.commit()
+        #     session.close()
+        # except Exception as e:
+        #     print(f"Error setting is_notification flag: {e}")
+        #     return False
 
 
 def main():

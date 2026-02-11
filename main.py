@@ -13,6 +13,8 @@ from src.api import app
 import shutil
 import subprocess
 
+from src.services.relationship_service import RelationshipService
+
 
 def main():
     """Main function - initialize database and start API server."""
@@ -35,6 +37,19 @@ def main():
     print("API documentation available at http://localhost:8000/docs")
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
+def testContactExtract():
+    """Test the contact extraction service."""
+    config = get_config()
+    db = Database(config)
+    relationship_service = RelationshipService(db=db)
+    relationship_service.merge_duplicate_email_contacts()
+   # from_addresses = relationship_service.get_all_email_contacts()
+    # #to_addresses = relationship_service.get_to_addresses()
+    # for address in from_addresses:
+    #     print(address)
+    # #print(f"To addresses: {to_addresses}")
+
 if __name__ == "__main__":
     #test_imagemagick()
     main()
+    # testContactExtract()
