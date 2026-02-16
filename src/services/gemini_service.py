@@ -175,6 +175,115 @@ Summary:"""
                     raise Exception(error_msg)
                 else:
                     raise Exception(f"Error calling Gemini API: {error_msg}")
+
+    def summarize_writing_style(self, messages_data: Dict[str, Any]) -> str:
+        """Summarize a user's writing style using Gemini LLM.
+        
+        Args:
+            messages_data: Dictionary containing conversation data with structure:
+                {
+                    "chat_session": str,
+                    "message_count": int,
+                    "messages": [
+                        {
+                            "message_date": str,
+                            "sender_name": str,
+                            "type": str,
+                            "text": str,
+                            "has_attachment": bool
+                        }
+                    ]
+                }
+        
+        Returns:
+            Summary text string
+        
+        Raises:
+            ValueError: If API key is missing or messages_data is invalid
+            Exception: If API call fails
+        """
+        print("[GeminiService.summarize_writing_style] Starting writing style summarization...")
+        
+        if not messages_data or "messages" not in messages_data:
+            print("[GeminiService.summarize_writing_style] ERROR: Invalid messages_data - missing 'messages' key")
+            raise ValueError("Invalid messages_data: missing 'messages' key")
+        
+        messages = messages_data.get("messages", [])
+        message_count = messages_data.get("message_count", len(messages))
+        chat_session = messages_data.get("chat_session", "Unknown")
+        input_prompt = messages_data.get("input_prompt", "Please provide a detailed analysis of the writing writing style of the following text. The purpose of the analysis is to provide it to an LLM to produce text in the same style")
+        
+        print(f"[GeminiService.summarize_writing_style] Chat session: {chat_session}")
+        print(f"[GeminiService.summarize_writing_style] Message count: {message_count}")
+        
+        if not messages:
+            print("[GeminiService.summarize_writing_style] WARNING: No messages found in conversation")
+            return "No messages found in this conversation."
+        
+        # Format conversation for prompt
+        print("[GeminiService.summarize_writing_style] Formatting conversation for prompt...")
+        conversation_text = self._format_conversation_for_prompt(messages_data)
+        print(f"[GeminiService.summarize_writing_style] Formatted conversation length: {len(conversation_text)} characters")
+        
+        # Create prompt
+        prompt = f"""{input_prompt}
+
+Conversation:
+{conversation_text}
+
+Summary:"""
+        
+        print(f"[GeminiService.summarize_writing_style] Prompt length: {len(prompt)} characters")
+        print("[GeminiService.summarize_writing_style] Calling Gemini API...")
+        
+        try:
+            # Call Gemini API
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
+            print("[GeminiService.summarize_writing_style] Received response from Gemini API")
+            
+            if response and response.text:
+                summary = response.text.strip()
+                print(f"[GeminiService.summarize_writing_style] Summary length: {len(summary)} characters")
+                print(f"[GeminiService.summarize_writing_style] Summary preview: {summary[:100]}...")
+                return summary
+            else:
+                print("[GeminiService.summarize_writing_style] ERROR: Empty response from Gemini API")
+                raise Exception("Empty response from Gemini API")
+        
+        except ValueError as e:
+            # Re-raise ValueError (e.g., missing API key) as-is
+            print(f"[GeminiService.summarize_writing_style] ValueError raised: {str(e)}")
+            raise
+        except Exception as e:
+            error_msg = str(e)
+            print(f"[GeminiService.summarize_writing_style] Exception caught: {error_msg}")
+            
+            # Provide more user-friendly error messages
+            if "API key" in error_msg.lower() or "authentication" in error_msg.lower():
+                print("[GeminiService.summarize_writing_style] Error type: Authentication/API key issue")
+                raise ValueError("Invalid or missing Gemini API key. Please check your GEMINI_API_KEY environment variable.")
+            elif "404" in error_msg.lower() or "not found" in error_msg.lower() or "not supported" in error_msg.lower():
+                model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
+                print(f"[GeminiService.summarize_writing_style] Error type: Model not found - {model_name}")
+                raise ValueError(f"Model '{model_name}' is not available. Please check your GEMINI_MODEL_NAME environment variable. Common models: gemini-1.5-flash, gemini-1.5-pro, gemini-pro")
+            elif "quota" in error_msg.lower() or "rate limit" in error_msg.lower():
+                print("[GeminiService.summarize_writing_style] Error type: Quota/Rate limit exceeded")
+                raise Exception("API quota exceeded. Please try again later.")
+            elif "timeout" in error_msg.lower():
+                print("[GeminiService.summarize_writing_style] Error type: Timeout")
+                raise Exception("Request timed out. Please try again.")
+            else:
+                print(f"[GeminiService.summarize_writing_style] Error type: Unknown - {error_msg}")
+                # Make error message more user-friendly
+                if "Error calling Gemini API:" in error_msg:
+                    # Already formatted, use as-is
+                    raise Exception(error_msg)
+                else:
+                    raise Exception(f"Error calling Gemini API: {error_msg}")
+
     
     def _format_conversation_for_prompt(self, messages_data: Dict[str, Any]) -> str:
         """Format conversation data into a readable text format for the prompt.
@@ -825,6 +934,37 @@ class ChatService:
         finally:
             session.close()
 
+    def _get_subject_writing_examples(self) -> Dict[str, Any]:
+        """Get the subject writing examples.
+        
+        Returns:
+            Dictionary with subject writing examples
+        """
+
+        #select 2000 random messages from the database where the sender_id is the subject and the type is "text"
+        messages = self.db.get_session().query(IMessage).filter(
+            IMessage.sender_id == self.subject_name,
+            IMessage.type == "text"
+        ).order_by(func.random()).limit(2000).all()
+
+        #format the messages into a list of dictionaries
+        messages_list = []
+        for message in messages:
+            messages_list.append({
+                "id": message.id,
+                "message_date": message.message_date.isoformat() if message.message_date else None,
+                "sender_name": message.sender_name or "Unknown",
+                "sender_id": message.sender_id or "",
+                "type": message.type or "",
+                "text": message.text or "",
+                "service": message.service or "",
+                "subject": message.subject or None
+            })
+
+        return {
+            "subject_writing_examples": messages_list
+
+        }
     def _get_tools_config(self) -> List[Any]:
         """Get the tools configuration for Gemini function calling.
         
@@ -870,8 +1010,18 @@ class ChatService:
                 "required": ["name"]
             }
         )
+
+        get_subject_writing_examples_declaration = types.FunctionDeclaration(
+            name="get_subject_writing_examples",
+            description="Get the subject writing examples. Use this when the user asks about subject writing examples.",
+            parameters={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        )
         
-        return [types.Tool(function_declarations=[get_current_time_declaration, get_imessages_declaration, get_emails_declaration])]
+        return [types.Tool(function_declarations=[get_current_time_declaration, get_imessages_declaration, get_emails_declaration, get_subject_writing_examples_declaration])]
 
     def _execute_function_call(self, function_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a function call by routing to the appropriate handler method.

@@ -391,10 +391,32 @@ class SubjectConfiguration(Base):
     phone_numbers = Column(Text, nullable=True)  # Comma-separated phone numbers (normalized)
     whatsapp_handle = Column(String(255), nullable=True)
     instagram_handle = Column(String(255), nullable=True)
+    writing_style_ai = Column(Text, nullable=True)
+    psychological_profile_ai = Column(Text, nullable=True)
+    personality_profile_ai = Column(Text, nullable=True)
+    interests_ai = Column(Text, nullable=True)
     system_instructions = Column(Text, nullable=False)
     core_system_instructions = Column(Text, nullable=False)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+class ImportControlLastRun(Base):
+    """Tracks the last run time and result of each import control."""
+
+    __tablename__ = "import_control_last_run"
+
+    id = Column(Integer, primary_key=True)
+    import_type = Column(String(100), nullable=False, unique=True)  # whatsapp, facebook, instagram, imessage, facebook_albums, facebook_places, filesystem, thumbnails
+    last_run_at = Column(DateTime, nullable=False)
+    result = Column(String(50), nullable=False)  # success, error, cancelled
+    result_message = Column(Text, nullable=True)  # Optional summary or error message
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        Index('idx_import_control_last_run_type', 'import_type'),
+    )
+
 
 class Locations(Base):
     """Locations model."""

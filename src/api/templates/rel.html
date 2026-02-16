@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Bio-Graph: Pro Research System</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; background: #f4f7f9; color: #333; }
+        .dashboard { 
+            background: white; padding: 20px; border-radius: 12px; margin-bottom: 15px; 
+            display: flex; flex-wrap: wrap; gap: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); align-items: flex-end;
+        }
+        .control-group { display: flex; flex-direction: column; gap: 8px; }
+        label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #666; }
+        #main-layout { display: flex; gap: 20px; }
+        #cy-container { position: relative; flex-grow: 1; height: 75vh; border-radius: 12px; border: 1px solid #ddd; overflow: hidden; background: white; }
+        #cy { width: 100%; height: 100%; }
+        #legend { width: 220px; background: white; padding: 20px; border-radius: 12px; border: 1px solid #ddd; font-size: 13px; }
+        .legend-item { display: flex; align-items: center; margin-bottom: 12px; gap: 10px; }
+        .circle { border-radius: 50%; background: #4285f4; }
+        .line { height: 4px; background: #4285f4; border-radius: 2px; }
+        .balloon {
+            position: absolute; display: none; background: rgba(33, 37, 41, 0.95); color: white;
+            padding: 8px 12px; border-radius: 6px; pointer-events: none; z-index: 1000; font-size: 13px;
+        }
+        .btn { border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+        .btn-primary { background: #1a73e8; color: white; }
+        .btn-secondary { background: #e8eaed; color: #3c4043; }
+        input[type="text"] { padding: 8px; border: 1px solid #ddd; border-radius: 6px; width: 180px; }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <div class="control-group">
+            <label>Search Person</label>
+            <input type="text" id="search-input" placeholder="Type a name...">
+        </div>
+        <div class="control-group">
+            <label>Min Strength: <span id="str-val">1</span></label>
+            <input type="range" id="filter-slider" min="1" max="10" value="1">
+        </div>
+        <div class="control-group">
+            <label style="color: #1a73e8; font-weight: bold;">
+                <input type="checkbox" id="subject-only-check"> Hub Focus Only
+            </label>
+        </div>
+        <div class="control-group">
+            <label>Base Size: <span id="size-val">20</span>px</label>
+            <input type="range" id="size-slider" min="10" max="40" value="20">
+        </div>
+        <div style="display:flex; gap: 10px;">
+            <button class="btn btn-primary" onclick="reLayout()">Pin & Center Hub</button>
+            <button class="btn btn-secondary" onclick="resetView()">Fit All</button>
+        </div>
+    </div>
+
+    <div id="main-layout">
+        <div id="cy-container"><div id="cy"></div></div>
+        <div id="legend">
+            <h4 style="margin-top:0">Map Legend</h4>
+            <div class="legend-item"><div class="circle" style="width:24px; height:24px; background:#1a73e8; border: 2px solid #000"></div> <strong>Subject</strong></div>
+            <div class="legend-item"><div class="circle" style="width:18px; height:18px"></div> Influential</div>
+            <div class="legend-item"><div class="circle" style="width:10px; height:10px"></div> Standard</div>
+            <hr>
+            <div class="legend-item"><div class="line" style="width:30px; height:6px"></div> Strong (8-10)</div>
+            <div class="legend-item"><div class="line" style="width:30px; height:2px; background:#e0e0e0"></div> Weak (1-3)</div>
+            <p style="font-size: 11px; color: #777; margin-top: 15px;"><em>Tip: Hover over a person to Focus on their network.</em></p>
+        </div>
+    </div>
+    
+    <div id="balloon" class="balloon"></div>
+
+    <script>
+        let cy;
+        const balloon = document.getElementById('balloon');
+        let hideTimeout;
+
+        async function fetchData() {
+            return new Promise(r => {
+                setTimeout(() => {
+                    const nodes = [{id: 'p0', name: 'CORE SUBJECT'}];
+                    const links = [];
+                    for (let i = 1; i < 100; i++) nodes.push({id: 'p'+i, name: 'Person '+(i+1)});
+                    for (let i = 1; i <= 50; i++) links.push({source:'p0', target:'p'+i, strength: Math.floor(Math.random()*10)+1});
+                    for (let i = 0; i < 150; i++) {
+                        const s = 'p'+Math.floor(Math.random()*100), t = 'p'+Math.floor(Math.random()*100);
+                        if(s !== t) links.push({source:s, target:t, strength: Math.floor(Math.random()*10)+1});
+                    }
+                    r({nodes, links});
+                }, 400);
+            });
+        }
+
+        async function init() {
+            const data = await fetchData();
+            const elements = [...data.nodes.map(n => ({data: n})), ...data.links.map(l => ({data: l}))];
+
+            cy = cytoscape({
+                container: document.getElementById('cy'),
+                elements: elements,
+                style: [
+                    { selector: 'node', style: { 'background-color': '#4285f4', 'label': 'data(name)', 'font-size': '10px', 'text-valign': 'bottom', 'text-margin-y': 4 } },
+                    { selector: 'node[id="p0"]', style: { 'background-color': '#1a73e8', 'border-width': 3, 'border-color': '#000', 'z-index': 1000 } },
+                    { selector: 'edge', style: { 'width': 'data(strength)', 'line-color': '#e0e0e0', 'curve-style': 'bezier', 'opacity': 0.6 } },
+                    { selector: 'edge[source="p0"], edge[target="p0"]', style: { 'line-color': '#bbdefb' } },
+                    { selector: '.hidden', style: { 'display': 'none' } },
+                    { selector: 'edge:selected', style: { 'line-color': '#ff5722', 'opacity': 1, 'z-index': 999 } },
+                    
+                    // --- Focus Mode Cytoscape Styles ---
+                    { selector: '.faded', style: { 'opacity': 0.08, 'text-opacity': 0 } },
+                    { selector: '.highlight', style: { 'opacity': 1, 'text-opacity': 1, 'z-index': 9999 } }
+                ]
+            });
+
+            setupEvents();
+            reLayout();
+        }
+
+        function updateGraph() {
+            const threshold = parseInt(document.getElementById('filter-slider').value);
+            const baseSize = parseFloat(document.getElementById('size-slider').value);
+            const hubOnly = document.getElementById('subject-only-check').checked;
+            const hub = cy.getElementById('p0');
+
+            cy.elements().removeClass('hidden');
+            cy.edges().forEach(e => { if (e.data('strength') < threshold) e.addClass('hidden'); });
+
+            if (hubOnly) {
+                const neighbors = hub.neighborhood();
+                cy.elements().not(neighbors).not(hub).addClass('hidden');
+                cy.edges(':visible').forEach(e => {
+                    if (e.source().id() !== 'p0' && e.target().id() !== 'p0') e.addClass('hidden');
+                });
+            } else {
+                cy.nodes().forEach(n => { if (n.connectedEdges(':visible').length === 0) n.addClass('hidden'); });
+            }
+
+            const visible = cy.nodes(':visible');
+            if (visible.length > 0) {
+                const degrees = visible.map(n => n.connectedEdges(':visible').length);
+                const min = Math.min(...degrees), max = Math.max(...degrees);
+                const maxSize = baseSize * 4;
+                visible.forEach(n => {
+                    const deg = n.connectedEdges(':visible').length;
+                    let s = baseSize;
+                    if(max !== min) s = baseSize + (deg - min) * (maxSize - baseSize) / (max - min);
+                    n.style({'width': s, 'height': s});
+                });
+            }
+        }
+
+        function reLayout() {
+            updateGraph();
+            const hub = cy.getElementById('p0');
+            hub.unlock();
+            hub.position({ x: cy.width() / 2, y: cy.height() / 2 });
+            hub.lock();
+            const layout = cy.layout({ name: 'cose', animate: true, fit: false, nodeRepulsion: () => 800000, gravity: 2, eles: cy.elements(':visible') });
+            layout.one('layoutstop', () => { cy.animate({ center: { eles: hub }, zoom: 0.7, duration: 800 }); });
+            layout.run();
+        }
+
+        function resetView() { cy.animate({ fit: { eles: cy.elements(':visible'), padding: 50 }, duration: 500 }); }
+
+        function setupEvents() {
+            // Search
+            document.getElementById('search-input').addEventListener('input', (e) => {
+                const text = e.target.value.toLowerCase();
+                if (!text) return;
+                const found = cy.nodes().filter(n => n.data('name').toLowerCase().includes(text));
+                if (found.length > 0) { cy.animate({ center: { eles: found[0] }, zoom: 1.2, duration: 400 }); found[0].select(); }
+            });
+
+            // FIXED Focus Mode
+            cy.on('mouseover', 'node', function(e) {
+                const node = e.target;
+                const neighborhood = node.closedNeighborhood();
+                cy.elements().addClass('faded');
+                neighborhood.removeClass('faded').addClass('highlight');
+            });
+
+            cy.on('mouseout', 'node', function() {
+                cy.elements().removeClass('faded highlight');
+            });
+
+            // Clicks
+            cy.on('tap', 'edge', function(e) {
+                const edge = e.target;
+                clearTimeout(hideTimeout);
+                cy.edges().unselect();
+                edge.select();
+                balloon.innerHTML = `<strong>Strength: ${edge.data('strength')}/10</strong>`;
+                balloon.style.display = 'block';
+                balloon.style.top = (e.renderedPosition.y - 40) + 'px';
+                balloon.style.left = (e.renderedPosition.x + 10) + 'px';
+                hideTimeout = setTimeout(() => { balloon.style.display = 'none'; edge.unselect(); }, 3000);
+            });
+
+            cy.on('tap', 'node', function(e) {
+                const node = e.target;
+                balloon.innerHTML = `<strong>${node.data('name')}</strong><br>Connections: ${node.connectedEdges(':visible').length}`;
+                balloon.style.display = 'block';
+                balloon.style.top = (e.renderedPosition.y - 40) + 'px';
+                balloon.style.left = (e.renderedPosition.x + 10) + 'px';
+            });
+
+            cy.on('tap', function(e) { if(e.target === cy) { balloon.style.display = 'none'; cy.edges().unselect(); } });
+
+            document.getElementById('filter-slider').oninput = function() { document.getElementById('str-val').innerText = this.value; updateGraph(); };
+            document.getElementById('size-slider').oninput = function() { document.getElementById('size-val').innerText = this.value; updateGraph(); };
+            document.getElementById('subject-only-check').onchange = () => reLayout();
+        }
+
+        init();
+    </script>
+</body>
+</html>

@@ -1,9 +1,10 @@
 """FastAPI HTTP Server."""
 
 import os
+import re
+import subprocess
 import threading
 import json
-import re
 import asyncio
 from pathlib import Path
 from io import BytesIO
@@ -13,12 +14,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import or_, func, and_, extract, Integer, text
 from sqlalchemy.orm import joinedload
-from PIL import Image
+# from PIL import Image
 
-from src.services.process_images_service import ProcessImagesService
 
 # Try to register HEIF/HEIC support if pillow-heif is available
 try:
@@ -29,9 +29,9 @@ except ImportError:
     HEIF_SUPPORT = False
 
 from ..database import Database,  Email, IMessage, FacebookAlbum, ReferenceDocument
-from ..database.models import MediaMetadata, MediaBlob, MessageAttachment, Attachment, AlbumMedia, Locations, Relationship, Contacts
+from ..database.models import MediaMetadata, MediaBlob, MessageAttachment, Attachment, AlbumMedia, Locations, Relationship, Contacts, ImportControlLastRun
 from ..database.storage import EmailStorage, ImageStorage
-from ..services import ImageService, EmailService, ReferenceDocumentService, MessageService, ImportService
+from ..services import ImageService, EmailService, ReferenceDocumentService, MessageService
 from ..services.gemini_service import ChatService, GeminiService
 from ..services.chat_conversation_service import ChatConversationService
 from ..services.subject_configuration_service import SubjectConfigurationService
@@ -47,12 +47,6 @@ from ..services.dto import (
 )
 from ..loader import EmailDatabaseLoader
 from ..config import get_config
-from ..messageimport.imessageimport import import_imessages_from_directory
-from ..messageimport.whatsappimport import import_whatsapp_from_directory
-from ..messageimport.facebookimport import import_facebook_from_directory
-from ..messageimport.facebookalbumsimport import import_facebook_albums_from_directory
-from ..messageimport.instagramimport import import_instagram_from_directory
-from ..imageimport.filesystemimport import import_images_from_filesystem
 
 # Create FastAPI app instance
 app = FastAPI(
@@ -70,6 +64,34 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 # Initialize database connection
 db = Database(get_config())
+
+
+def _record_import_control_last_run(import_type: str, result: str, result_message: Optional[str] = None):
+    """Record the last run time and result of an import control. Result: success, error, cancelled."""
+    try:
+        session = db.get_session()
+        try:
+            now = datetime.now(timezone.utc)
+            existing = session.query(ImportControlLastRun).filter(
+                ImportControlLastRun.import_type == import_type
+            ).first()
+            if existing:
+                existing.last_run_at = now
+                existing.result = result
+                existing.result_message = result_message[:500] if result_message else None
+            else:
+                session.add(ImportControlLastRun(
+                    import_type=import_type,
+                    last_run_at=now,
+                    result=result,
+                    result_message=result_message[:500] if result_message else None
+                ))
+            session.commit()
+        finally:
+            session.close()
+    except Exception as e:
+        print(f"[ImportControlLastRun] Failed to record: {e}")
+
 
 # The Gemini Chat Service (global instance for maintaining conversation history)
 chat_service = ChatService()
@@ -116,7 +138,8 @@ imessage_import_progress: Dict[str, Any] = {
     "missing_attachment_filenames": [],
     "errors": 0,
     "status": "idle",  # idle, in_progress, completed, cancelled, error
-    "error_message": None
+    "error_message": None,
+    "status_line": None,  # current stderr line for display
 }
 
 # SSE event queue for iMessage import progress updates
@@ -156,7 +179,8 @@ whatsapp_import_progress: Dict[str, Any] = {
     "missing_attachment_filenames": [],
     "errors": 0,
     "status": "idle",  # idle, in_progress, completed, cancelled, error
-    "error_message": None
+    "error_message": None,
+    "status_line": None,  # current stderr line for display
 }
 
 # SSE event queue for WhatsApp import progress updates
@@ -181,7 +205,8 @@ facebook_import_progress: Dict[str, Any] = {
     "missing_attachment_filenames": [],
     "errors": 0,
     "status": "idle",  # idle, in_progress, completed, cancelled, error
-    "error_message": None
+    "error_message": None,
+    "status_line": None,  # current stderr line for display
 }
 
 # SSE event queue for Facebook Messenger import progress updates
@@ -201,9 +226,13 @@ instagram_import_progress: Dict[str, Any] = {
     "messages_imported": 0,
     "messages_created": 0,
     "messages_updated": 0,
+    "attachments_found": 0,
+    "attachments_missing": 0,
+    "missing_attachment_filenames": [],
     "errors": 0,
     "status": "idle",  # idle, in_progress, completed, cancelled, error
-    "error_message": None
+    "error_message": None,
+    "status_line": None,  # current stderr line for display
 }
 
 # SSE event queue for Instagram import progress updates
@@ -227,12 +256,29 @@ facebook_albums_import_progress: Dict[str, Any] = {
     "missing_image_filenames": [],
     "errors": 0,
     "status": "idle",  # idle, in_progress, completed, cancelled, error
-    "error_message": None
+    "error_message": None,
+    "status_line": None,  # current stderr line for display
 }
 
 # SSE event queue for Facebook Albums import progress updates
 facebook_albums_sse_clients: List[asyncio.Queue] = []
 facebook_albums_sse_clients_lock = threading.Lock()
+
+# Facebook Places import state management
+facebook_places_import_lock = threading.Lock()
+facebook_places_import_cancelled = threading.Event()
+facebook_places_import_in_progress = False
+facebook_places_import_progress: Dict[str, Any] = {
+    "status": "idle",
+    "status_line": None,
+    "places_imported": 0,
+    "places_created": 0,
+    "places_updated": 0,
+    "errors": [],
+    "error_message": None,
+}
+facebook_places_sse_clients: List[asyncio.Queue] = []
+facebook_places_sse_clients_lock = threading.Lock()
 
 # Filesystem import state management
 filesystem_import_lock = threading.Lock()
@@ -242,6 +288,7 @@ filesystem_import_in_progress = False
 # Progress state for Filesystem import SSE streaming
 filesystem_import_progress: Dict[str, Any] = {
     "status": "idle",
+    "status_line": None,
     "current_file": None,
     "files_processed": 0,
     "total_files": 0,
@@ -269,30 +316,12 @@ thumbnail_processing_progress: Dict[str, Any] = {
     "phase2_processed": 0,
     "phase2_errors": 0,
     "status": "idle",  # idle, in_progress, completed, cancelled, error
-    "error_message": None
+    "error_message": None,
+    "status_line": None,
 }
 
 thumbnail_processing_sse_clients: List[asyncio.Queue] = []
 thumbnail_processing_sse_clients_lock = threading.Lock()
-
-# ImageMagick processing state management
-magick_processing_lock = threading.Lock()
-magick_processing_cancelled = threading.Event()
-magick_processing_in_progress = False
-
-# Progress state for ImageMagick processing
-magick_processing_progress: Dict[str, Any] = {
-    "images_found": 0,
-    "images_processed": 0,
-    "images_created": 0,
-    "images_updated": 0,
-    "errors": 0,
-    "error_messages": [],
-    "current_image": None,
-    "status": "idle",  # idle, in_progress, completed, cancelled, error
-    "error_message": None
-}
-
 
 def update_imessage_progress_state(**kwargs):
     """Thread-safe function to update iMessage import progress state."""
@@ -529,6 +558,44 @@ def broadcast_facebook_albums_progress_event_sync(event_type: str, data: Dict[st
                 facebook_albums_sse_clients.remove(client)
 
 
+def update_facebook_places_progress_state(**kwargs):
+    """Thread-safe function to update Facebook Places import progress state."""
+    global facebook_places_import_progress
+    with facebook_places_import_lock:
+        for key, value in kwargs.items():
+            if key in facebook_places_import_progress:
+                if key == "errors" and isinstance(value, list):
+                    facebook_places_import_progress[key] = value.copy()
+                else:
+                    facebook_places_import_progress[key] = value
+
+
+def get_facebook_places_progress_state() -> Dict[str, Any]:
+    """Thread-safe function to get current Facebook Places import progress state."""
+    global facebook_places_import_progress
+    with facebook_places_import_lock:
+        return facebook_places_import_progress.copy()
+
+
+def broadcast_facebook_places_progress_event_sync(event_type: str, data: Dict[str, Any]):
+    """Thread-safe function to queue Facebook Places import progress event for SSE clients."""
+    global facebook_places_sse_clients
+    event_data = {"type": event_type, "data": data}
+    message = f"data: {json.dumps(event_data)}\n\n"
+    with facebook_places_sse_clients_lock:
+        disconnected_clients = []
+        for client_queue in facebook_places_sse_clients:
+            try:
+                client_queue.put_nowait(message)
+            except asyncio.QueueFull:
+                pass
+            except Exception:
+                disconnected_clients.append(client_queue)
+        for client in disconnected_clients:
+            if client in facebook_places_sse_clients:
+                facebook_places_sse_clients.remove(client)
+
+
 def update_filesystem_import_progress_state(**kwargs):
     """Thread-safe function to update Filesystem import progress state."""
     global filesystem_import_progress
@@ -640,15 +707,16 @@ def get_instagram_progress_state() -> Dict[str, Any]:
         return instagram_import_progress.copy()
 
 
-def broadcast_instagram_progress_event_sync():
+def broadcast_instagram_progress_event_sync(event_type: str = "progress", data: Optional[Dict[str, Any]] = None):
     """Thread-safe function to queue Instagram import progress event for SSE clients."""
     global instagram_sse_clients
-    progress_state = get_instagram_progress_state()
+    if data is None:
+        data = get_instagram_progress_state()
     
     # Create SSE event data
     event_data = {
-        "type": "progress",
-        "data": progress_state
+        "type": event_type,
+        "data": data
     }
     
     message = f"data: {json.dumps(event_data)}\n\n"
@@ -781,6 +849,7 @@ class ImportFacebookRequest(BaseModel):
     """Request model for Facebook Messenger import."""
     directory_path: str
     user_name: Optional[str] = None
+    export_root: Optional[str] = None
 
 
 class ImportFacebookResponse(BaseModel):
@@ -802,6 +871,7 @@ class ImportInstagramRequest(BaseModel):
     """Request model for Instagram import."""
     directory_path: str
     user_name: Optional[str] = None
+    export_root: Optional[str] = None
 
 
 class ImportInstagramResponse(BaseModel):
@@ -833,13 +903,14 @@ class ImportFacebookAlbumsResponse(BaseModel):
     missing_image_filenames: List[str] = []
     errors: int
     timestamp: datetime
+    status_message: Optional[str] = None
 
 
 class ImportFilesystemImagesRequest(BaseModel):
     """Request model for Filesystem Images import."""
     root_directory: str
     max_images: Optional[int] = None
-    create_thumb_and_get_exif: bool = True
+    create_thumb_and_get_exif: bool = False
 
 
 class ImportFilesystemImagesResponse(BaseModel):
@@ -1102,7 +1173,10 @@ def process_emails_background(labels: List[str], new_only: bool, result_dict: di
             broadcast_progress_event_sync("completed", get_progress_state())
             
     finally:
-        # Mark processing as completed
+        state = get_progress_state()
+        result = "cancelled" if processing_cancelled.is_set() else (state.get("status") or "error")
+        msg = state.get("error_message") if result == "error" else None
+        _record_import_control_last_run("email_processing", result, msg)
         with processing_lock:
             processing_in_progress = False
 
@@ -1127,6 +1201,7 @@ async def root():
             "DELETE /imessages/conversation/{chat_session}": "Delete a conversation",
             "GET /imessages/{message_id}/attachment": "Get attachment content for a message",
             "POST /chat/generate": "Generate a chat response using ChatService with Gemini LLM",
+            "POST /writing-style/summarize": "Summarize Dave Burton's writing style from a random sample of 5000 messages",
             "POST /whatsapp/import": "Import WhatsApp messages from a directory structure",
             "GET /whatsapp/import/stream": "Stream WhatsApp import progress via SSE",
             "POST /whatsapp/import/cancel": "Cancel WhatsApp import if in progress",
@@ -1145,6 +1220,9 @@ async def root():
             "GET /facebook/albums/import/status": "Get current Facebook Albums import status",
             "GET /facebook/albums": "Get list of all Facebook albums",
             "POST /facebook/import-places": "Import Facebook places from a posts JSON file",
+            "GET /facebook/import-places/stream": "Stream Facebook Places import progress via SSE",
+            "POST /facebook/import-places/cancel": "Cancel Facebook Places import if in progress",
+            "GET /facebook/import-places/status": "Get current Facebook Places import status",
             "GET /facebook/places": "Retrieve Facebook places imported from Facebook posts JSON",
             "POST /relationships/create-contacts-from-chat-sessions": "Create contact entries from distinct chat_session values in the messages table",
             "POST /relationships/create-contacts-from-emails": "Create contact entries from distinct email addresses in the emails table",
@@ -1180,6 +1258,14 @@ async def new_page(request: Request):
         {"request": request}
     )
 
+@app.get("/rel", response_class=HTMLResponse)
+async def new_page(request: Request):
+    """Serve the new page."""
+    return templates.TemplateResponse(
+        "rel.html",
+        {"request": request}
+    )
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint - returns server status."""
@@ -1187,6 +1273,29 @@ async def health_check():
         message="Server is running",
         timestamp=datetime.now()
     )
+
+
+@app.get("/api/import-control-last-run")
+async def get_import_control_last_run():
+    """Get last run time and result for each import control.
+    
+    Returns a dict keyed by import_type (whatsapp, facebook, instagram, imessage,
+    facebook_albums, facebook_places, filesystem, thumbnails) with last_run_at (ISO),
+    result (success/error/cancelled), and result_message.
+    """
+    session = db.get_session()
+    try:
+        rows = session.query(ImportControlLastRun).all()
+        return {
+            r.import_type: {
+                "last_run_at": r.last_run_at.isoformat(),
+                "result": r.result,
+                "result_message": r.result_message,
+            }
+            for r in rows
+        }
+    finally:
+        session.close()
 
 
 @app.get("/api/control-defaults")
@@ -1337,17 +1446,64 @@ async def get_processing_status():
         }
 
 
-def import_imessages_background(directory_path: str, result_dict: dict):
-    """Background function to import iMessages from directory."""
+def _parse_imessage_stdout(stdout: str) -> tuple[int, int, int, int, int, int, int, list[str], str]:
+    """Parse import-processor imessage stdout. Returns (conversations_processed, messages_imported, messages_created, messages_updated, attachments_found, attachments_missing, errors, missing_filenames, status_message)."""
+    conversations_processed = 0
+    messages_imported = 0
+    messages_created = 0
+    messages_updated = 0
+    attachments_found = 0
+    attachments_missing = 0
+    errors = 0
+    missing_filenames: list[str] = []
+    status_parts: list[str] = []
+    m1 = re.search(r"Processed (\d+) conversation\(s\)", stdout)
+    if m1:
+        conversations_processed = int(m1.group(1))
+    m2 = re.search(r"Imported (\d+) message\(s\) \((\d+) created, (\d+) updated\)", stdout)
+    if m2:
+        messages_imported = int(m2.group(1))
+        messages_created = int(m2.group(2))
+        messages_updated = int(m2.group(3))
+    m3 = re.search(r"Found (\d+) attachment\(s\), (\d+) missing", stdout)
+    if m3:
+        attachments_found = int(m3.group(1))
+        attachments_missing = int(m3.group(2))
+    m4 = re.search(r"Skipped invalid messages.*: (\d+)", stdout)
+    if m4:
+        errors = int(m4.group(1))
+    in_missing = False
+    for line in stdout.splitlines():
+        line = line.rstrip()
+        if line == "Missing attachment files:":
+            in_missing = True
+            continue
+        if in_missing and line.startswith("  - "):
+            missing_filenames.append(line[4:].strip())
+    if conversations_processed > 0:
+        status_parts.append(f"Processed {conversations_processed} conversation(s)")
+    if messages_imported > 0:
+        status_parts.append(f"Imported {messages_imported} message(s) ({messages_created} created, {messages_updated} updated)")
+    if attachments_found > 0 or attachments_missing > 0:
+        status_parts.append(f"Found {attachments_found}, {attachments_missing} missing")
+    if errors > 0:
+        status_parts.append(f"{errors} error(s)")
+    status_message = "Import completed successfully. " + "; ".join(status_parts) if status_parts else "Import completed."
+    return (conversations_processed, messages_imported, messages_created, messages_updated,
+            attachments_found, attachments_missing, errors, missing_filenames, status_message)
+
+
+def import_imessage_background_subprocess(directory_path: str):
+    """Background task: run import-processor imessage, stream stderr lines via SSE, broadcast completion."""
     global imessage_import_in_progress
-    
-    # Mark processing as started
+
     with imessage_import_lock:
         imessage_import_in_progress = True
         imessage_import_cancelled.clear()
-    
-    # Initialize progress state
+
     update_imessage_progress_state(
+        status="in_progress",
+        status_line="Starting import-processor...",
         current_conversation=None,
         conversations_processed=0,
         total_conversations=0,
@@ -1358,73 +1514,89 @@ def import_imessages_background(directory_path: str, result_dict: dict):
         attachments_missing=0,
         missing_attachment_filenames=[],
         errors=0,
-        status="in_progress",
-        error_message=None
     )
-    
-    # Broadcast initial progress event
-    broadcast_imessage_progress_event_sync("progress", get_imessage_progress_state())
-    
+    broadcast_imessage_progress_event_sync("status", {"status_line": "Starting import-processor..."})
+
     try:
-        def progress_callback(stats: Dict[str, Any]):
-            """Callback function to update progress state."""
-            # Check for cancellation
-            if imessage_import_cancelled.is_set():
-                return
-            
-            # Update progress state with current stats
-            update_imessage_progress_state(
-                current_conversation=stats.get("current_conversation"),
-                conversations_processed=stats.get("conversations_processed", 0),
-                total_conversations=stats.get("total_conversations", 0),
-                messages_imported=stats.get("messages_imported", 0),
-                messages_created=stats.get("messages_created", 0),
-                messages_updated=stats.get("messages_updated", 0),
-                attachments_found=stats.get("attachments_found", 0),
-                attachments_missing=stats.get("attachments_missing", 0),
-                missing_attachment_filenames=stats.get("missing_attachment_filenames", []),
-                errors=stats.get("errors", 0),
-                status="in_progress"
-            )
-            
-            # Broadcast progress event
-            broadcast_imessage_progress_event_sync("progress", get_imessage_progress_state())
-        
-        def cancelled_check() -> bool:
-            """Check if import should be cancelled."""
-            return imessage_import_cancelled.is_set()
-        
-        # Run import with progress callback
-        stats = import_imessages_from_directory(
-            directory_path,
-            progress_callback=progress_callback,
-            cancelled_check=cancelled_check
+        binary = _get_import_processor_path()
+        cwd = binary.parent
+        path_str = str(Path(directory_path).resolve())
+        proc = subprocess.Popen(
+            [str(binary), "imessage", "--path", path_str],
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
         )
-        
-        result_dict.update(stats)
-        result_dict["success"] = True
-        
-        # Update final progress state
-        update_imessage_progress_state(
-            status="completed",
-            **{k: v for k, v in stats.items() if k in imessage_import_progress}
-        )
-        broadcast_imessage_progress_event_sync("completed", get_imessage_progress_state())
-        
-    except Exception as e:
-        error_msg = str(e)
-        result_dict["success"] = False
-        result_dict["error"] = error_msg
-        
-        update_imessage_progress_state(
-            status="error",
-            error_message=error_msg
-        )
+        stdout_parts: list[str] = []
+
+        def read_stderr():
+            try:
+                for line in iter(proc.stderr.readline, ""):
+                    if imessage_import_cancelled.is_set():
+                        proc.terminate()
+                        return
+                    line = line.rstrip()
+                    if line:
+                        update_imessage_progress_state(status_line=line)
+                        broadcast_imessage_progress_event_sync("status", {"status_line": line})
+            except Exception:
+                pass
+
+        def read_stdout():
+            try:
+                while True:
+                    chunk = proc.stdout.read(8192)
+                    if not chunk:
+                        break
+                    stdout_parts.append(chunk)
+            except Exception:
+                pass
+
+        stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+        stdout_thread = threading.Thread(target=read_stdout, daemon=True)
+        stderr_thread.start()
+        stdout_thread.start()
+        stderr_thread.join()
+        stdout_thread.join()
+        stdout = "".join(stdout_parts)
+        if imessage_import_cancelled.is_set():
+            proc.terminate()
+            proc.wait(timeout=10)
+            update_imessage_progress_state(status="cancelled", status_line="Import cancelled.")
+            broadcast_imessage_progress_event_sync("cancelled", get_imessage_progress_state())
+        else:
+            proc.wait(timeout=60)
+            if proc.returncode != 0:
+                err_msg = (stdout or "").strip() or f"Process exited with code {proc.returncode}"
+                update_imessage_progress_state(status="error", error_message=err_msg, status_line=err_msg)
+                broadcast_imessage_progress_event_sync("error", get_imessage_progress_state())
+            else:
+                conv, msg_imp, msg_cre, msg_upd, att_found, att_miss, errs, missing_filenames, status_message = _parse_imessage_stdout(stdout or "")
+                update_imessage_progress_state(
+                    status="completed",
+                    status_line=status_message,
+                    conversations_processed=conv,
+                    total_conversations=conv,
+                    messages_imported=msg_imp,
+                    messages_created=msg_cre,
+                    messages_updated=msg_upd,
+                    attachments_found=att_found,
+                    attachments_missing=att_miss,
+                    missing_attachment_filenames=missing_filenames,
+                    errors=errs,
+                )
+                broadcast_imessage_progress_event_sync("completed", get_imessage_progress_state())
+    except FileNotFoundError as e:
+        update_imessage_progress_state(status="error", error_message=str(e), status_line=str(e))
         broadcast_imessage_progress_event_sync("error", get_imessage_progress_state())
-        
-        print(f"[Background Task] Error importing iMessages: {error_msg}")
+    except Exception as e:
+        err_msg = str(e)
+        update_imessage_progress_state(status="error", error_message=err_msg, status_line=err_msg)
+        broadcast_imessage_progress_event_sync("error", get_imessage_progress_state())
     finally:
-        # Mark processing as completed
+        state = get_imessage_progress_state()
+        _record_import_control_last_run("imessage", state.get("status", "error"), state.get("error_message") or state.get("status_line"))
         with imessage_import_lock:
             imessage_import_in_progress = False
 
@@ -1450,65 +1622,24 @@ async def import_imessages(
         HTTPException: If directory doesn't exist or import already in progress
     """
     global imessage_import_in_progress
-    
-    # Create import service with state accessors
-    def get_import_state(import_type: str) -> bool:
-        if import_type == "imessage":
-            return imessage_import_in_progress
-        return False
-    
-    def set_import_state(import_type: str, value: bool):
-        global imessage_import_in_progress
-        if import_type == "imessage":
-            imessage_import_in_progress = value
-    
-    def get_cancellation_event(import_type: str):
-        if import_type == "imessage":
-            return imessage_import_cancelled
-        return None
-    
-    def get_import_lock(import_type: str):
-        if import_type == "imessage":
-            return imessage_import_lock
-        return None
-    
-    import_service = ImportService(
-        get_import_state=get_import_state,
-        set_import_state=set_import_state,
-        get_cancellation_event=get_cancellation_event,
-        get_import_lock=get_import_lock
-    )
-    
-    try:
-        # Check if import can start
-        import_service.can_start_import("imessage")
-        
-        # Validate directory
-        import_service.validate_import_directory(request.directory_path)
-    except ConflictError as e:
-        raise HTTPException(status_code=409, detail=str(e))
-    except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ServiceException as e:
-        raise HTTPException(status_code=e.status_code, detail=str(e))
-    
-    result_dict = {
-        "conversations_processed": 0,
-        "messages_imported": 0,
-        "messages_created": 0,
-        "messages_updated": 0,
-        "attachments_found": 0,
-        "attachments_missing": 0,
-        "missing_attachment_filenames": [],
-        "errors": 0,
-        "success": False
-    }
-    
-    # Start background processing
+
+    with imessage_import_lock:
+        if imessage_import_in_progress:
+            raise HTTPException(
+                status_code=409,
+                detail="iMessage import is already in progress. Please cancel it first or wait for it to complete."
+            )
+
+    directory = Path(request.directory_path)
+    if not directory.exists() or not directory.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Directory does not exist or is not a directory: {request.directory_path}"
+        )
+
     background_tasks.add_task(
-        import_imessages_background,
+        import_imessage_background_subprocess,
         request.directory_path,
-        result_dict
     )
     
     return ImportIMessagesResponse(
@@ -1534,21 +1665,21 @@ async def stream_imessage_import_progress():
         StreamingResponse with text/event-stream content type
     """
     async def event_generator():
-        # Create a queue for this client
-        client_queue = asyncio.Queue(maxsize=100)
-        
-        # Add client to the list
+        client_queue = asyncio.Queue()
+
         with imessage_sse_clients_lock:
             imessage_sse_clients.append(client_queue)
-        
+
         try:
-            # Send initial progress state
             initial_state = get_imessage_progress_state()
-            event_data = {
-                "type": "progress",
-                "data": initial_state
-            }
+            status = initial_state.get("status", "idle")
+            if status in ("completed", "cancelled", "error"):
+                event_data = {"type": status, "data": initial_state}
+            else:
+                event_data = {"type": "progress", "data": initial_state}
             yield f"data: {json.dumps(event_data)}\n\n"
+            if status in ("completed", "cancelled", "error"):
+                return
             
             # Send heartbeat every 30 seconds to keep connection alive
             heartbeat_interval = 30
@@ -1870,6 +2001,93 @@ async def summarize_conversation(chat_session: str):
         "summary": summary,
         "chat_session": decoded_session
     }
+
+
+@app.post("/writing-style/summarize")
+async def summarize_writing_style_endpoint():
+    """Summarize Dave Burton's writing style using a random sample of 5000 messages.
+    
+    Retrieves messages where sender_name is 'Dave Burton', randomly selects up to 5000,
+    and sends them to the Gemini service for writing style analysis.
+    
+    Returns:
+        Dictionary with status, summary, message_count, and total_available
+    """
+    session = db.get_session()
+    try:
+        # Count total messages for Dave Burton
+        total_available = session.query(IMessage).filter(
+            IMessage.sender_name == "Dave Burton"
+        ).count()
+        
+        if total_available == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="No messages found for sender 'Dave Burton'"
+            )
+        
+        # Randomly select up to 5000 using database-level ORDER BY random()
+        selected_messages = session.query(IMessage).filter(
+            IMessage.sender_name == "Dave Burton"
+        ).order_by(func.random()).limit(5000).all()
+        
+        sample_size = len(selected_messages)
+        
+        # Format messages for summarize_writing_style
+        messages_data_list = []
+        for msg in selected_messages:
+            message_attachment = session.query(MessageAttachment).filter(
+                MessageAttachment.message_id == msg.id
+            ).first()
+            has_attachment = message_attachment is not None
+            
+            messages_data_list.append({
+                "message_date": msg.message_date.isoformat() if msg.message_date else None,
+                "sender_name": msg.sender_name or "Unknown",
+                "type": msg.type or "",
+                "text": msg.text or "",
+                "has_attachment": has_attachment
+            })
+        
+        messages_data = {
+            "chat_session": "Dave Burton (writing style sample)",
+            "message_count": len(messages_data_list),
+            "messages": messages_data_list
+        }
+    finally:
+        session.close()
+    
+    try:
+        gemini_service = GeminiService()
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    try:
+        summary = gemini_service.summarize_writing_style(messages_data)
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating writing style summary: {str(e)}"
+        )
+    
+    # Save to subject_configuration.writing_style_ai
+    config_service = SubjectConfigurationService(db=db)
+    config = config_service.update_writing_style_ai(summary)
+    if not config:
+        # No subject config exists yet - summary is still returned, just not persisted
+        pass
+    
+    return {
+        "status": "completed",
+        "summary": summary,
+        "message_count": sample_size,
+        "total_available": total_available
+    }
+
 
 @app.post("/emails/thread/{participant}/summarize")
 async def summarize_conversation(participant: str):
@@ -2304,6 +2522,7 @@ async def get_subject_configuration():
             "phone_numbers": configuration.phone_numbers,
             "whatsapp_handle": configuration.whatsapp_handle,
             "instagram_handle": configuration.instagram_handle,
+            "writing_style_ai": configuration.writing_style_ai,
             "system_instructions": configuration.system_instructions,
             "core_system_instructions": configuration.core_system_instructions,
             "created_at": configuration.created_at.isoformat() if configuration.created_at else None,
@@ -2638,17 +2857,64 @@ async def delete_conversation(chat_session: str):
         session.close()
 
 
-def import_whatsapp_background(directory_path: str, result_dict: dict):
-    """Background function to import WhatsApp messages from directory."""
+def _parse_whatsapp_stdout(stdout: str) -> tuple[int, int, int, int, int, int, int, list[str], str]:
+    """Parse import-processor whatsapp stdout. Returns (conversations_processed, messages_imported, messages_created, messages_updated, attachments_found, attachments_missing, errors, missing_filenames, status_message)."""
+    conversations_processed = 0
+    messages_imported = 0
+    messages_created = 0
+    messages_updated = 0
+    attachments_found = 0
+    attachments_missing = 0
+    errors = 0
+    missing_filenames: list[str] = []
+    status_parts: list[str] = []
+    m1 = re.search(r"Processed (\d+) conversation\(s\)", stdout)
+    if m1:
+        conversations_processed = int(m1.group(1))
+    m2 = re.search(r"Imported (\d+) message\(s\) \((\d+) created, (\d+) updated\)", stdout)
+    if m2:
+        messages_imported = int(m2.group(1))
+        messages_created = int(m2.group(2))
+        messages_updated = int(m2.group(3))
+    m3 = re.search(r"Found (\d+) attachment\(s\), (\d+) missing", stdout)
+    if m3:
+        attachments_found = int(m3.group(1))
+        attachments_missing = int(m3.group(2))
+    m4 = re.search(r"Skipped invalid messages.*: (\d+)", stdout)
+    if m4:
+        errors = int(m4.group(1))
+    in_missing = False
+    for line in stdout.splitlines():
+        line = line.rstrip()
+        if line == "Missing attachment files:":
+            in_missing = True
+            continue
+        if in_missing and line.startswith("  - "):
+            missing_filenames.append(line[4:].strip())
+    if conversations_processed > 0:
+        status_parts.append(f"Processed {conversations_processed} conversation(s)")
+    if messages_imported > 0:
+        status_parts.append(f"Imported {messages_imported} message(s) ({messages_created} created, {messages_updated} updated)")
+    if attachments_found > 0 or attachments_missing > 0:
+        status_parts.append(f"Found {attachments_found}, {attachments_missing} missing")
+    if errors > 0:
+        status_parts.append(f"{errors} error(s)")
+    status_message = "Import completed successfully. " + "; ".join(status_parts) if status_parts else "Import completed."
+    return (conversations_processed, messages_imported, messages_created, messages_updated,
+            attachments_found, attachments_missing, errors, missing_filenames, status_message)
+
+
+def import_whatsapp_background_subprocess(directory_path: str):
+    """Background task: run import-processor whatsapp, stream stderr lines via SSE, broadcast completion."""
     global whatsapp_import_in_progress
-    
-    # Mark processing as started
+
     with whatsapp_import_lock:
         whatsapp_import_in_progress = True
         whatsapp_import_cancelled.clear()
-    
-    # Initialize progress state
+
     update_whatsapp_progress_state(
+        status="in_progress",
+        status_line="Starting import-processor...",
         current_conversation=None,
         conversations_processed=0,
         total_conversations=0,
@@ -2659,73 +2925,89 @@ def import_whatsapp_background(directory_path: str, result_dict: dict):
         attachments_missing=0,
         missing_attachment_filenames=[],
         errors=0,
-        status="in_progress",
-        error_message=None
     )
-    
-    # Broadcast initial progress event
-    broadcast_whatsapp_progress_event_sync("progress", get_whatsapp_progress_state())
-    
+    broadcast_whatsapp_progress_event_sync("status", {"status_line": "Starting import-processor..."})
+
     try:
-        def progress_callback(stats: Dict[str, Any]):
-            """Callback function to update progress state."""
-            # Check for cancellation
-            if whatsapp_import_cancelled.is_set():
-                return
-            
-            # Update progress state with current stats
-            update_whatsapp_progress_state(
-                current_conversation=stats.get("current_conversation"),
-                conversations_processed=stats.get("conversations_processed", 0),
-                total_conversations=stats.get("total_conversations", 0),
-                messages_imported=stats.get("messages_imported", 0),
-                messages_created=stats.get("messages_created", 0),
-                messages_updated=stats.get("messages_updated", 0),
-                attachments_found=stats.get("attachments_found", 0),
-                attachments_missing=stats.get("attachments_missing", 0),
-                missing_attachment_filenames=stats.get("missing_attachment_filenames", []),
-                errors=stats.get("errors", 0),
-                status="in_progress"
-            )
-            
-            # Broadcast progress event
-            broadcast_whatsapp_progress_event_sync("progress", get_whatsapp_progress_state())
-        
-        def cancelled_check() -> bool:
-            """Check if import should be cancelled."""
-            return whatsapp_import_cancelled.is_set()
-        
-        # Run import with progress callback
-        stats = import_whatsapp_from_directory(
-            directory_path,
-            progress_callback=progress_callback,
-            cancelled_check=cancelled_check
+        binary = _get_import_processor_path()
+        cwd = binary.parent
+        path_str = str(Path(directory_path).resolve())
+        proc = subprocess.Popen(
+            [str(binary), "whatsapp", "--path", path_str],
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
         )
-        
-        result_dict.update(stats)
-        result_dict["success"] = True
-        
-        # Update final progress state
-        update_whatsapp_progress_state(
-            status="completed",
-            **{k: v for k, v in stats.items() if k in whatsapp_import_progress}
-        )
-        broadcast_whatsapp_progress_event_sync("completed", get_whatsapp_progress_state())
-        
-    except Exception as e:
-        error_msg = str(e)
-        result_dict["success"] = False
-        result_dict["error"] = error_msg
-        
-        update_whatsapp_progress_state(
-            status="error",
-            error_message=error_msg
-        )
+        stdout_parts: list[str] = []
+
+        def read_stderr():
+            try:
+                for line in iter(proc.stderr.readline, ""):
+                    if whatsapp_import_cancelled.is_set():
+                        proc.terminate()
+                        return
+                    line = line.rstrip()
+                    if line:
+                        update_whatsapp_progress_state(status_line=line)
+                        broadcast_whatsapp_progress_event_sync("status", {"status_line": line})
+            except Exception:
+                pass
+
+        def read_stdout():
+            try:
+                while True:
+                    chunk = proc.stdout.read(8192)
+                    if not chunk:
+                        break
+                    stdout_parts.append(chunk)
+            except Exception:
+                pass
+
+        stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+        stdout_thread = threading.Thread(target=read_stdout, daemon=True)
+        stderr_thread.start()
+        stdout_thread.start()
+        stderr_thread.join()
+        stdout_thread.join()
+        stdout = "".join(stdout_parts)
+        if whatsapp_import_cancelled.is_set():
+            proc.terminate()
+            proc.wait(timeout=10)
+            update_whatsapp_progress_state(status="cancelled", status_line="Import cancelled.")
+            broadcast_whatsapp_progress_event_sync("cancelled", get_whatsapp_progress_state())
+        else:
+            proc.wait(timeout=60)
+            if proc.returncode != 0:
+                err_msg = (stdout or "").strip() or f"Process exited with code {proc.returncode}"
+                update_whatsapp_progress_state(status="error", error_message=err_msg, status_line=err_msg)
+                broadcast_whatsapp_progress_event_sync("error", get_whatsapp_progress_state())
+            else:
+                conv, msg_imp, msg_cre, msg_upd, att_found, att_miss, errs, missing_filenames, status_message = _parse_whatsapp_stdout(stdout or "")
+                update_whatsapp_progress_state(
+                    status="completed",
+                    status_line=status_message,
+                    conversations_processed=conv,
+                    total_conversations=conv,
+                    messages_imported=msg_imp,
+                    messages_created=msg_cre,
+                    messages_updated=msg_upd,
+                    attachments_found=att_found,
+                    attachments_missing=att_miss,
+                    missing_attachment_filenames=missing_filenames,
+                    errors=errs,
+                )
+                broadcast_whatsapp_progress_event_sync("completed", get_whatsapp_progress_state())
+    except FileNotFoundError as e:
+        update_whatsapp_progress_state(status="error", error_message=str(e), status_line=str(e))
         broadcast_whatsapp_progress_event_sync("error", get_whatsapp_progress_state())
-        
-        print(f"[Background Task] Error importing WhatsApp messages: {error_msg}")
+    except Exception as e:
+        err_msg = str(e)
+        update_whatsapp_progress_state(status="error", error_message=err_msg, status_line=err_msg)
+        broadcast_whatsapp_progress_event_sync("error", get_whatsapp_progress_state())
     finally:
-        # Mark processing as completed
+        state = get_whatsapp_progress_state()
+        _record_import_control_last_run("whatsapp", state.get("status", "error"), state.get("error_message") or state.get("status_line"))
         with whatsapp_import_lock:
             whatsapp_import_in_progress = False
 
@@ -2736,6 +3018,9 @@ async def import_whatsapp(
     background_tasks: BackgroundTasks
 ):
     """Import WhatsApp messages from a directory structure asynchronously.
+    
+    Runs the import-processor whatsapp command in a subprocess. Connect to
+    GET /whatsapp/import/stream for real-time stderr status updates.
     
     The directory should contain subdirectories, each representing a conversation.
     Each subdirectory should contain a CSV file with the messages.
@@ -2768,23 +3053,10 @@ async def import_whatsapp(
             detail=f"Directory does not exist or is not a directory: {request.directory_path}"
         )
     
-    result_dict = {
-        "conversations_processed": 0,
-        "messages_imported": 0,
-        "messages_created": 0,
-        "messages_updated": 0,
-        "attachments_found": 0,
-        "attachments_missing": 0,
-        "missing_attachment_filenames": [],
-        "errors": 0,
-        "success": False
-    }
-    
-    # Start background processing
+    # Start background processing (import-processor subprocess, stderr streamed via SSE)
     background_tasks.add_task(
-        import_whatsapp_background,
+        import_whatsapp_background_subprocess,
         request.directory_path,
-        result_dict
     )
     
     return ImportWhatsAppResponse(
@@ -2810,21 +3082,24 @@ async def stream_whatsapp_import_progress():
         StreamingResponse with text/event-stream content type
     """
     async def event_generator():
-        # Create a queue for this client
-        client_queue = asyncio.Queue(maxsize=100)
+        # Create a queue for this client (unbounded to avoid dropping completed event)
+        client_queue = asyncio.Queue()
         
         # Add client to the list
         with whatsapp_sse_clients_lock:
             whatsapp_sse_clients.append(client_queue)
         
         try:
-            # Send initial progress state
+            # Send initial progress state; if already completed/cancelled/error, send as terminal event
             initial_state = get_whatsapp_progress_state()
-            event_data = {
-                "type": "progress",
-                "data": initial_state
-            }
+            status = initial_state.get("status", "idle")
+            if status in ("completed", "cancelled", "error"):
+                event_data = {"type": status, "data": initial_state}
+            else:
+                event_data = {"type": "progress", "data": initial_state}
             yield f"data: {json.dumps(event_data)}\n\n"
+            if status in ("completed", "cancelled", "error"):
+                return
             
             # Send heartbeat every 30 seconds to keep connection alive
             heartbeat_interval = 30
@@ -2928,17 +3203,64 @@ async def get_whatsapp_import_status():
         }
 
 
-def import_facebook_background(directory_path: str, user_name: Optional[str], result_dict: dict):
-    """Background function to import Facebook Messenger messages from directory."""
+def _parse_facebook_stdout(stdout: str) -> tuple[int, int, int, int, int, int, int, list[str], str]:
+    """Parse import-processor facebook stdout. Returns (conversations_processed, messages_imported, messages_created, messages_updated, attachments_found, attachments_missing, errors, missing_filenames, status_message)."""
+    conversations_processed = 0
+    messages_imported = 0
+    messages_created = 0
+    messages_updated = 0
+    attachments_found = 0
+    attachments_missing = 0
+    errors = 0
+    missing_filenames: list[str] = []
+    status_parts: list[str] = []
+    m1 = re.search(r"Processed (\d+) conversation\(s\)", stdout)
+    if m1:
+        conversations_processed = int(m1.group(1))
+    m2 = re.search(r"Imported (\d+) message\(s\) \((\d+) created, (\d+) updated\)", stdout)
+    if m2:
+        messages_imported = int(m2.group(1))
+        messages_created = int(m2.group(2))
+        messages_updated = int(m2.group(3))
+    m3 = re.search(r"Found (\d+) attachment\(s\), (\d+) missing", stdout)
+    if m3:
+        attachments_found = int(m3.group(1))
+        attachments_missing = int(m3.group(2))
+    m4 = re.search(r"Skipped invalid messages: (\d+)", stdout)
+    if m4:
+        errors = int(m4.group(1))
+    in_missing = False
+    for line in stdout.splitlines():
+        line = line.rstrip()
+        if line == "Missing attachment files:":
+            in_missing = True
+            continue
+        if in_missing and line.startswith("  - "):
+            missing_filenames.append(line[4:].strip())
+    if conversations_processed > 0:
+        status_parts.append(f"Processed {conversations_processed} conversation(s)")
+    if messages_imported > 0:
+        status_parts.append(f"Imported {messages_imported} message(s) ({messages_created} created, {messages_updated} updated)")
+    if attachments_found > 0 or attachments_missing > 0:
+        status_parts.append(f"Found {attachments_found}, {attachments_missing} missing")
+    if errors > 0:
+        status_parts.append(f"{errors} error(s)")
+    status_message = "Import completed successfully. " + "; ".join(status_parts) if status_parts else "Import completed."
+    return (conversations_processed, messages_imported, messages_created, messages_updated,
+            attachments_found, attachments_missing, errors, missing_filenames, status_message)
+
+
+def import_facebook_background_subprocess(directory_path: str, user_name: Optional[str], export_root: Optional[str]):
+    """Background task: run import-processor facebook, stream stderr lines via SSE, broadcast completion."""
     global facebook_import_in_progress
-    
-    # Mark processing as started
+
     with facebook_import_lock:
         facebook_import_in_progress = True
         facebook_import_cancelled.clear()
-    
-    # Initialize progress state
+
     update_facebook_progress_state(
+        status="in_progress",
+        status_line="Starting import-processor...",
         current_conversation=None,
         conversations_processed=0,
         total_conversations=0,
@@ -2949,74 +3271,96 @@ def import_facebook_background(directory_path: str, user_name: Optional[str], re
         attachments_missing=0,
         missing_attachment_filenames=[],
         errors=0,
-        status="in_progress",
-        error_message=None
     )
-    
-    # Broadcast initial progress event
-    broadcast_facebook_progress_event_sync("progress", get_facebook_progress_state())
-    
+    broadcast_facebook_progress_event_sync("status", {"status_line": "Starting import-processor..."})
+
     try:
-        def progress_callback(stats: Dict[str, Any]):
-            """Callback function to update progress state."""
-            # Check for cancellation
-            if facebook_import_cancelled.is_set():
-                return
-            
-            # Update progress state with current stats
-            update_facebook_progress_state(
-                current_conversation=stats.get("current_conversation"),
-                conversations_processed=stats.get("conversations_processed", 0),
-                total_conversations=stats.get("total_conversations", 0),
-                messages_imported=stats.get("messages_imported", 0),
-                messages_created=stats.get("messages_created", 0),
-                messages_updated=stats.get("messages_updated", 0),
-                attachments_found=stats.get("attachments_found", 0),
-                attachments_missing=stats.get("attachments_missing", 0),
-                missing_attachment_filenames=stats.get("missing_attachment_filenames", []),
-                errors=stats.get("errors", 0),
-                status="in_progress"
-            )
-            
-            # Broadcast progress event
-            broadcast_facebook_progress_event_sync("progress", get_facebook_progress_state())
-        
-        def cancelled_check() -> bool:
-            """Check if import should be cancelled."""
-            return facebook_import_cancelled.is_set()
-        
-        # Run import with progress callback
-        stats = import_facebook_from_directory(
-            directory_path,
-            progress_callback=progress_callback,
-            cancelled_check=cancelled_check,
-            user_name=user_name
+        binary = _get_import_processor_path()
+        cwd = binary.parent
+        path_str = str(Path(directory_path).resolve())
+        args = [str(binary), "facebook", "--path", path_str]
+        if export_root:
+            args.extend(["--export-root", str(Path(export_root).resolve())])
+        # if user_name:
+        #     args.extend(["--user-name", user_name])
+        proc = subprocess.Popen(
+            args,
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
         )
-        
-        result_dict.update(stats)
-        result_dict["success"] = True
-        
-        # Update final progress state
-        update_facebook_progress_state(
-            status="completed",
-            **{k: v for k, v in stats.items() if k in facebook_import_progress}
-        )
-        broadcast_facebook_progress_event_sync("completed", get_facebook_progress_state())
-        
-    except Exception as e:
-        error_msg = str(e)
-        result_dict["success"] = False
-        result_dict["error"] = error_msg
-        
-        update_facebook_progress_state(
-            status="error",
-            error_message=error_msg
-        )
+        stdout_parts: list[str] = []
+
+        def read_stderr():
+            try:
+                for line in iter(proc.stderr.readline, ""):
+                    if facebook_import_cancelled.is_set():
+                        proc.terminate()
+                        return
+                    line = line.rstrip()
+                    if line:
+                        update_facebook_progress_state(status_line=line)
+                        broadcast_facebook_progress_event_sync("status", {"status_line": line})
+            except Exception:
+                pass
+
+        def read_stdout():
+            try:
+                while True:
+                    chunk = proc.stdout.read(8192)
+                    if not chunk:
+                        break
+                    stdout_parts.append(chunk)
+            except Exception:
+                pass
+
+        stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+        stdout_thread = threading.Thread(target=read_stdout, daemon=True)
+        stderr_thread.start()
+        stdout_thread.start()
+        stderr_thread.join()
+        stdout_thread.join()
+        stdout = "".join(stdout_parts)
+        if facebook_import_cancelled.is_set():
+            proc.terminate()
+            proc.wait(timeout=10)
+            update_facebook_progress_state(status="cancelled", status_line="Import cancelled.")
+            broadcast_facebook_progress_event_sync("cancelled", get_facebook_progress_state())
+        else:
+            proc.wait(timeout=60)
+            if proc.returncode != 0:
+                err_msg = (stdout or "").strip() or f"Process exited with code {proc.returncode}"
+                update_facebook_progress_state(status="error", error_message=err_msg, status_line=err_msg)
+                broadcast_facebook_progress_event_sync("error", get_facebook_progress_state())
+            else:
+                conv, msg_imp, msg_cre, msg_upd, att_found, att_miss, errs, missing_filenames, status_message = _parse_facebook_stdout(stdout or "")
+                update_facebook_progress_state(
+                    status="completed",
+                    status_line=status_message,
+                    conversations_processed=conv,
+                    total_conversations=conv,
+                    messages_imported=msg_imp,
+                    messages_created=msg_cre,
+                    messages_updated=msg_upd,
+                    attachments_found=att_found,
+                    attachments_missing=att_miss,
+                    missing_attachment_filenames=missing_filenames,
+                    errors=errs,
+                )
+                broadcast_facebook_progress_event_sync("completed", get_facebook_progress_state())
+    except FileNotFoundError as e:
+        update_facebook_progress_state(status="error", error_message=str(e), status_line=str(e))
         broadcast_facebook_progress_event_sync("error", get_facebook_progress_state())
-        
-        print(f"[Background Task] Error importing Facebook Messenger messages: {error_msg}")
+    except Exception as e:
+        err_msg = str(e)
+        update_facebook_progress_state(status="error", error_message=err_msg, status_line=err_msg)
+        broadcast_facebook_progress_event_sync("error", get_facebook_progress_state())
     finally:
-        # Mark processing as completed
+        state = get_facebook_progress_state()
+        result = state.get("status", "error")
+        msg = state.get("error_message") or state.get("status_line")
+        _record_import_control_last_run("facebook", result, msg)
         with facebook_import_lock:
             facebook_import_in_progress = False
 
@@ -3062,24 +3406,12 @@ async def import_facebook(
             detail=f"Directory does not exist or is not a directory: {request.directory_path}"
         )
     
-    result_dict = {
-        "conversations_processed": 0,
-        "messages_imported": 0,
-        "messages_created": 0,
-        "messages_updated": 0,
-        "attachments_found": 0,
-        "attachments_missing": 0,
-        "missing_attachment_filenames": [],
-        "errors": 0,
-        "success": False
-    }
-    
     # Start background processing
     background_tasks.add_task(
-        import_facebook_background,
+        import_facebook_background_subprocess,
         request.directory_path,
         request.user_name,
-        result_dict
+        request.export_root
     )
     
     return ImportFacebookResponse(
@@ -3105,8 +3437,8 @@ async def stream_facebook_import_progress():
         StreamingResponse with text/event-stream content type
     """
     async def event_generator():
-        # Create a queue for this client
-        client_queue = asyncio.Queue(maxsize=100)
+        # Create unbounded queue for this client
+        client_queue = asyncio.Queue()
         
         # Add client to the list
         with facebook_sse_clients_lock:
@@ -3120,6 +3452,15 @@ async def stream_facebook_import_progress():
                 "data": initial_state
             }
             yield f"data: {json.dumps(event_data)}\n\n"
+            
+            # If already completed/cancelled/error, send final state and return
+            if initial_state.get("status") in ("completed", "cancelled", "error"):
+                final_event = {
+                    "type": initial_state["status"],
+                    "data": initial_state
+                }
+                yield f"data: {json.dumps(final_event)}\n\n"
+                return
             
             # Send heartbeat every 30 seconds to keep connection alive
             heartbeat_interval = 30
@@ -3223,93 +3564,164 @@ async def get_facebook_import_status():
         }
 
 
-def import_instagram_background(
-    directory_path: str,
-    user_name: Optional[str],
-    result_dict: Dict[str, Any]
-):
-    """Background function to import Instagram messages from directory."""
+def _parse_instagram_stdout(stdout: str) -> tuple[int, int, int, int, int, int, int, list[str], str]:
+    """Parse import-processor instagram stdout. Returns (conversations_processed, messages_imported, messages_created, messages_updated, attachments_found, attachments_missing, errors, missing_filenames, status_message)."""
+    conversations_processed = 0
+    messages_imported = 0
+    messages_created = 0
+    messages_updated = 0
+    attachments_found = 0
+    attachments_missing = 0
+    errors = 0
+    missing_filenames: list[str] = []
+    status_parts: list[str] = []
+    m1 = re.search(r"Processed (\d+) conversation\(s\)", stdout)
+    if m1:
+        conversations_processed = int(m1.group(1))
+    m2 = re.search(r"Imported (\d+) message\(s\) \((\d+) created, (\d+) updated\)", stdout)
+    if m2:
+        messages_imported = int(m2.group(1))
+        messages_created = int(m2.group(2))
+        messages_updated = int(m2.group(3))
+    m3 = re.search(r"Found (\d+) attachment\(s\), (\d+) missing", stdout)
+    if m3:
+        attachments_found = int(m3.group(1))
+        attachments_missing = int(m3.group(2))
+    m4 = re.search(r"Skipped invalid messages: (\d+)", stdout)
+    if m4:
+        errors = int(m4.group(1))
+    in_missing = False
+    for line in stdout.splitlines():
+        line = line.rstrip()
+        if line == "Missing attachment files:":
+            in_missing = True
+            continue
+        if in_missing and line.startswith("  - "):
+            missing_filenames.append(line[4:].strip())
+    if conversations_processed > 0:
+        status_parts.append(f"Processed {conversations_processed} conversation(s)")
+    if messages_imported > 0:
+        status_parts.append(f"Imported {messages_imported} message(s) ({messages_created} created, {messages_updated} updated)")
+    if attachments_found > 0 or attachments_missing > 0:
+        status_parts.append(f"Found {attachments_found}, {attachments_missing} missing")
+    if errors > 0:
+        status_parts.append(f"{errors} error(s)")
+    status_message = "Import completed successfully. " + "; ".join(status_parts) if status_parts else "Import completed."
+    return (conversations_processed, messages_imported, messages_created, messages_updated,
+            attachments_found, attachments_missing, errors, missing_filenames, status_message)
+
+
+def import_instagram_background_subprocess(directory_path: str, user_name: Optional[str], export_root: Optional[str]):
+    """Background task: run import-processor instagram, stream stderr lines via SSE, broadcast completion."""
     global instagram_import_in_progress
-    
-    # Mark import as in progress
+
     with instagram_import_lock:
         instagram_import_in_progress = True
         instagram_import_cancelled.clear()
-    
-    # Initialize progress state
+
     update_instagram_progress_state(
+        status="in_progress",
+        status_line="Starting import-processor...",
         current_conversation=None,
         conversations_processed=0,
         total_conversations=0,
         messages_imported=0,
         messages_created=0,
         messages_updated=0,
+        attachments_found=0,
+        attachments_missing=0,
+        missing_attachment_filenames=[],
         errors=0,
-        status="in_progress",
-        error_message=None
     )
-    
-    # Broadcast initial progress event
-    broadcast_instagram_progress_event_sync()
-    
+    broadcast_instagram_progress_event_sync("status", {"status_line": "Starting import-processor..."})
+
     try:
-        def progress_callback(stats: Dict[str, Any]):
-            """Callback function to update progress state."""
-            # Check for cancellation
-            if instagram_import_cancelled.is_set():
-                return
-            
-            # Update progress state with current stats
-            update_instagram_progress_state(
-                current_conversation=stats.get("current_conversation"),
-                conversations_processed=stats.get("conversations_processed", 0),
-                total_conversations=stats.get("total_conversations", 0),
-                messages_imported=stats.get("messages_imported", 0),
-                messages_created=stats.get("messages_created", 0),
-                messages_updated=stats.get("messages_updated", 0),
-                errors=stats.get("errors", 0),
-                status="in_progress"
-            )
-            
-            # Broadcast progress event
-            broadcast_instagram_progress_event_sync()
-        
-        def cancelled_check() -> bool:
-            """Check if import should be cancelled."""
-            return instagram_import_cancelled.is_set()
-        
-        # Run import with progress callback
-        stats = import_instagram_from_directory(
-            directory_path,
-            progress_callback=progress_callback,
-            cancelled_check=cancelled_check,
-            user_name=user_name
+        binary = _get_import_processor_path()
+        cwd = binary.parent
+        path_str = str(Path(directory_path).resolve())
+        args = [str(binary), "instagram", "--path", path_str]
+        if export_root:
+            args.extend(["--export-root", str(Path(export_root).resolve())])
+        # if user_name:
+        #     args.extend(["--user-name", user_name])
+        proc = subprocess.Popen(
+            args,
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
         )
-        
-        result_dict.update(stats)
-        result_dict["success"] = True
-        
-        # Update final progress state
-        update_instagram_progress_state(
-            status="completed",
-            **{k: v for k, v in stats.items() if k in instagram_import_progress}
-        )
-        broadcast_instagram_progress_event_sync()
-        
+        stdout_parts: list[str] = []
+
+        def read_stderr():
+            try:
+                for line in iter(proc.stderr.readline, ""):
+                    if instagram_import_cancelled.is_set():
+                        proc.terminate()
+                        return
+                    line = line.rstrip()
+                    if line:
+                        update_instagram_progress_state(status_line=line)
+                        broadcast_instagram_progress_event_sync("status", {"status_line": line})
+            except Exception:
+                pass
+
+        def read_stdout():
+            try:
+                while True:
+                    chunk = proc.stdout.read(8192)
+                    if not chunk:
+                        break
+                    stdout_parts.append(chunk)
+            except Exception:
+                pass
+
+        stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+        stdout_thread = threading.Thread(target=read_stdout, daemon=True)
+        stderr_thread.start()
+        stdout_thread.start()
+        stderr_thread.join()
+        stdout_thread.join()
+        stdout = "".join(stdout_parts)
+        if instagram_import_cancelled.is_set():
+            proc.terminate()
+            proc.wait(timeout=10)
+            update_instagram_progress_state(status="cancelled", status_line="Import cancelled.")
+            broadcast_instagram_progress_event_sync("cancelled", get_instagram_progress_state())
+        else:
+            proc.wait(timeout=60)
+            if proc.returncode != 0:
+                err_msg = (stdout or "").strip() or f"Process exited with code {proc.returncode}"
+                update_instagram_progress_state(status="error", error_message=err_msg, status_line=err_msg)
+                broadcast_instagram_progress_event_sync("error", get_instagram_progress_state())
+            else:
+                conv, msg_imp, msg_cre, msg_upd, att_found, att_miss, errs, missing_filenames, status_message = _parse_instagram_stdout(stdout or "")
+                update_instagram_progress_state(
+                    status="completed",
+                    status_line=status_message,
+                    conversations_processed=conv,
+                    total_conversations=conv,
+                    messages_imported=msg_imp,
+                    messages_created=msg_cre,
+                    messages_updated=msg_upd,
+                    attachments_found=att_found,
+                    attachments_missing=att_miss,
+                    missing_attachment_filenames=missing_filenames,
+                    errors=errs,
+                )
+                broadcast_instagram_progress_event_sync("completed", get_instagram_progress_state())
+    except FileNotFoundError as e:
+        update_instagram_progress_state(status="error", error_message=str(e), status_line=str(e))
+        broadcast_instagram_progress_event_sync("error", get_instagram_progress_state())
     except Exception as e:
-        error_msg = str(e)
-        result_dict["success"] = False
-        result_dict["error"] = error_msg
-        
-        update_instagram_progress_state(
-            status="error",
-            error_message=error_msg
-        )
-        broadcast_instagram_progress_event_sync()
-        
-        print(f"[Background Task] Error importing Instagram messages: {error_msg}")
+        err_msg = str(e)
+        update_instagram_progress_state(status="error", error_message=err_msg, status_line=err_msg)
+        broadcast_instagram_progress_event_sync("error", get_instagram_progress_state())
     finally:
-        # Mark processing as completed
+        state = get_instagram_progress_state()
+        result = state.get("status", "error")
+        msg = state.get("error_message") or state.get("status_line")
+        _record_import_control_last_run("instagram", result, msg)
         with instagram_import_lock:
             instagram_import_in_progress = False
 
@@ -3355,21 +3767,12 @@ async def import_instagram(
             detail=f"Directory does not exist or is not a directory: {request.directory_path}"
         )
     
-    result_dict = {
-        "conversations_processed": 0,
-        "messages_imported": 0,
-        "messages_created": 0,
-        "messages_updated": 0,
-        "errors": 0,
-        "success": False
-    }
-    
     # Start background processing
     background_tasks.add_task(
-        import_instagram_background,
+        import_instagram_background_subprocess,
         request.directory_path,
         request.user_name,
-        result_dict
+        request.export_root
     )
     
     return ImportInstagramResponse(
@@ -3392,8 +3795,8 @@ async def stream_instagram_import_progress():
         StreamingResponse with text/event-stream content type
     """
     async def event_generator():
-        # Create a queue for this client
-        client_queue = asyncio.Queue(maxsize=100)
+        # Create unbounded queue for this client
+        client_queue = asyncio.Queue()
         
         # Add client to the list
         with instagram_sse_clients_lock:
@@ -3407,6 +3810,15 @@ async def stream_instagram_import_progress():
                 "data": initial_state
             }
             yield f"data: {json.dumps(event_data)}\n\n"
+            
+            # If already completed/cancelled/error, send final state and return
+            if initial_state.get("status") in ("completed", "cancelled", "error"):
+                final_event = {
+                    "type": initial_state["status"],
+                    "data": initial_state
+                }
+                yield f"data: {json.dumps(final_event)}\n\n"
+                return
             
             # Send heartbeat every 30 seconds to keep connection alive
             heartbeat_interval = 30
@@ -3509,237 +3921,160 @@ async def get_instagram_import_status():
         }
 
 
-def import_facebook_albums_background(directory_path: str, result_dict: dict):
-    """Background function to import Facebook Albums from directory."""
-    global facebook_albums_import_in_progress
-    
-    # Mark processing as started
-    with facebook_albums_import_lock:
-        facebook_albums_import_in_progress = True
-        facebook_albums_import_cancelled.clear()
-    
-    # Initialize progress state
-    update_facebook_albums_progress_state(
-        current_album=None,
-        albums_processed=0,
-        total_albums=0,
-        albums_imported=0,
-        images_imported=0,
-        images_found=0,
-        images_missing=0,
-        missing_image_filenames=[],
-        errors=0,
-        status="in_progress",
-        error_message=None
-    )
-    
-    # Broadcast initial progress event
-    broadcast_facebook_albums_progress_event_sync("progress", get_facebook_albums_progress_state())
-    
-    try:
-        def progress_callback(stats: Dict[str, Any]):
-            """Callback function to update progress state."""
-            # Check for cancellation
-            if facebook_albums_import_cancelled.is_set():
-                return
-            
-            # Update progress state with current stats
-            update_facebook_albums_progress_state(
-                current_album=stats.get("current_album"),
-                albums_processed=stats.get("albums_processed", 0),
-                total_albums=stats.get("total_albums", 0),
-                albums_imported=stats.get("albums_imported", 0),
-                images_imported=stats.get("images_imported", 0),
-                images_found=stats.get("images_found", 0),
-                images_missing=stats.get("images_missing", 0),
-                missing_image_filenames=stats.get("missing_image_filenames", []),
-                errors=stats.get("errors", 0),
-                status="in_progress"
-            )
-            
-            # Broadcast progress event
-            broadcast_facebook_albums_progress_event_sync("progress", get_facebook_albums_progress_state())
-        
-        def cancelled_check() -> bool:
-            """Check if import should be cancelled."""
-            return facebook_albums_import_cancelled.is_set()
-        
-        # Run import with progress callback
-        stats = import_facebook_albums_from_directory(
-            directory_path,
-            progress_callback=progress_callback,
-            cancelled_check=cancelled_check
-        )
-        
-        result_dict.update(stats)
-        result_dict["success"] = True
-        
-        # Update final progress state
-        update_facebook_albums_progress_state(
-            status="completed",
-            **{k: v for k, v in stats.items() if k in facebook_albums_import_progress}
-        )
-        broadcast_facebook_albums_progress_event_sync("completed", get_facebook_albums_progress_state())
-        
-    except Exception as e:
-        error_msg = str(e)
-        result_dict["success"] = False
-        result_dict["error"] = error_msg
-        
-        update_facebook_albums_progress_state(
-            status="error",
-            error_message=error_msg
-        )
-        broadcast_facebook_albums_progress_event_sync("error", get_facebook_albums_progress_state())
-        
-        print(f"[Background Task] Error importing Facebook Albums: {error_msg}")
-    finally:
-        # Mark processing as completed
-        with facebook_albums_import_lock:
-            facebook_albums_import_in_progress = False
+def _parse_filesystem_stdout(stdout: str) -> tuple[int, int, int, int, int, list[str], str]:
+    """Parse import-processor filesystem stdout. Returns (total_files, files_processed, images_imported, images_updated, errors, error_messages, status_message)."""
+    total_files = 0
+    files_processed = 0
+    images_imported = 0
+    images_updated = 0
+    errors = 0
+    error_messages: list[str] = []
+    m1 = re.search(r"Total files: (\d+)", stdout)
+    if m1:
+        total_files = int(m1.group(1))
+    m2 = re.search(r"Files processed: (\d+)", stdout)
+    if m2:
+        files_processed = int(m2.group(1))
+    m3 = re.search(r"Images imported: (\d+)", stdout)
+    if m3:
+        images_imported = int(m3.group(1))
+    m4 = re.search(r"Images updated: (\d+)", stdout)
+    if m4:
+        images_updated = int(m4.group(1))
+    m5 = re.search(r"Errors: (\d+)", stdout)
+    if m5:
+        errors = int(m5.group(1))
+    in_errors = False
+    for line in stdout.splitlines():
+        line = line.rstrip()
+        if line == "Error messages:":
+            in_errors = True
+            continue
+        if in_errors and line.startswith("  - "):
+            error_messages.append(line[4:].strip())
+    status_parts: list[str] = []
+    if total_files > 0:
+        status_parts.append(f"Total files: {total_files}")
+    if files_processed > 0:
+        status_parts.append(f"Processed: {files_processed}")
+    if images_imported > 0 or images_updated > 0:
+        status_parts.append(f"Imported: {images_imported}, Updated: {images_updated}")
+    if errors > 0:
+        status_parts.append(f"Errors: {errors}")
+    status_message = "Import completed. " + "; ".join(status_parts) if status_parts else "Import completed."
+    return (total_files, files_processed, images_imported, images_updated, errors, error_messages, status_message)
 
 
-def import_filesystem_images_background(
+def import_filesystem_background_subprocess(
     directory_paths: List[str],
     max_images: Optional[int],
-    create_thumb_and_get_exif: bool,
-    result_dict: dict
+    exclude_patterns: List[str],
 ):
-    """Background function to import images from filesystem.
-    
-    Args:
-        directory_paths: List of directory paths to import from
-        max_images: Maximum total number of images to import across all directories (None for all)
-        create_thumb_and_get_exif: Whether to create thumbnails and process location data from EXIF
-        result_dict: Dictionary to store results
-    """
+    """Background task: run import-processor filesystem, stream stderr via SSE, broadcast completion."""
     global filesystem_import_in_progress
-    
-    # Mark processing as started
+
     with filesystem_import_lock:
         filesystem_import_in_progress = True
         filesystem_import_cancelled.clear()
-    
-    # Initialize progress state
+
     update_filesystem_import_progress_state(
         status="in_progress",
+        status_line="Starting import-processor...",
         current_file=None,
         files_processed=0,
         total_files=0,
         images_imported=0,
         images_updated=0,
         errors=0,
-        error_messages=[]
+        error_messages=[],
     )
-    
-    # Broadcast initial progress event
-    broadcast_filesystem_import_progress_event_sync("progress", get_filesystem_import_progress_state())
-    
-    # Accumulated stats across all directories
-    accumulated_stats = {
-        'total_files': 0,
-        'files_processed': 0,
-        'images_imported': 0,
-        'images_updated': 0,
-        'errors': 0,
-        'error_messages': [],
-        'current_file': None
-    }
-    
+    broadcast_filesystem_import_progress_event_sync("status", {"status_line": "Starting import-processor..."})
+
     try:
-        def progress_callback(stats: Dict[str, Any]):
-            """Callback function to update progress state."""
-            # Check for cancellation
-            if filesystem_import_cancelled.is_set():
-                return
-            
-            # Calculate totals: accumulated stats from previous directories + current directory progress
-            # Note: stats from import_images_from_filesystem are cumulative for the current directory
-            # So we add accumulated stats (from previous directories) to current directory stats
-            update_filesystem_import_progress_state(
-                current_file=stats.get("current_file"),
-                files_processed=accumulated_stats['files_processed'] + stats.get("files_processed", 0),
-                total_files=accumulated_stats['total_files'] + stats.get("total_files", 0),
-                images_imported=accumulated_stats['images_imported'] + stats.get("images_imported", 0),
-                images_updated=accumulated_stats['images_updated'] + stats.get("images_updated", 0),
-                errors=accumulated_stats['errors'] + stats.get("errors", 0),
-                error_messages=accumulated_stats['error_messages'] + stats.get("error_messages", []),
-                status="in_progress"
-            )
-            
-            # Broadcast progress event
-            broadcast_filesystem_import_progress_event_sync("progress", get_filesystem_import_progress_state())
-        
-        def cancelled_check() -> bool:
-            """Check if import should be cancelled."""
-            return filesystem_import_cancelled.is_set()
-        
-        # Get exclude patterns from config
-        config = get_config()
-        exclude_patterns = config.get_filesystem_exclude_patterns()
-        
-        # Process each directory sequentially
-        remaining_images = max_images  # Track remaining images if max_images is set
-        for idx, directory_path in enumerate(directory_paths):
-            # Check for cancellation before processing each directory
-            if filesystem_import_cancelled.is_set():
-                break
-            
-            # Calculate max_images for this directory
-            directory_max_images = None
-            if remaining_images is not None:
-                # If we've already imported enough, skip remaining directories
-                if remaining_images <= 0:
-                    break
-                directory_max_images = remaining_images
-            
-            # Run import with progress callback for this directory
-            stats = import_images_from_filesystem(
-                root_directory=directory_path,
-                max_images=directory_max_images,
-                create_thumb_and_get_exif=create_thumb_and_get_exif,
-                progress_callback=progress_callback,
-                cancelled_check=cancelled_check,
-                exclude_patterns=exclude_patterns
-            )
-            
-            # Accumulate stats (stats from import_images_from_filesystem are totals for that directory)
-            accumulated_stats['total_files'] += stats.get('total_files', 0)
-            accumulated_stats['files_processed'] += stats.get('files_processed', 0)
-            accumulated_stats['images_imported'] += stats.get('images_imported', 0)
-            accumulated_stats['images_updated'] += stats.get('images_updated', 0)
-            accumulated_stats['errors'] += stats.get('errors', 0)
-            accumulated_stats['error_messages'].extend(stats.get('error_messages', []))
-            
-            # Update remaining images count
-            if remaining_images is not None:
-                images_added = stats.get('images_imported', 0) + stats.get('images_updated', 0)
-                remaining_images -= images_added
-        
-        result_dict.update(accumulated_stats)
-        result_dict["success"] = True
-        
-        # Update final progress state
-        update_filesystem_import_progress_state(
-            status="completed",
-            **{k: v for k, v in accumulated_stats.items() if k in filesystem_import_progress and k != "status"}
+        binary = _get_import_processor_path()
+        cwd = binary.parent
+        args = [str(binary), "filesystem"]
+        for p in directory_paths:
+            args.extend(["--path", str(Path(p).resolve())])
+        for pat in exclude_patterns:
+            args.extend(["--exclude", pat])
+        if max_images and max_images > 0:
+            args.extend(["--max", str(max_images)])
+        proc = subprocess.Popen(
+            args,
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
         )
-        broadcast_filesystem_import_progress_event_sync("completed", get_filesystem_import_progress_state())
-        
-    except Exception as e:
-        error_msg = str(e)
-        result_dict["success"] = False
-        result_dict["error"] = error_msg
-        
-        update_filesystem_import_progress_state(
-            status="error",
-            error_messages=[error_msg]
-        )
+        stdout_parts: list[str] = []
+
+        def read_stderr():
+            try:
+                for line in iter(proc.stderr.readline, ""):
+                    if filesystem_import_cancelled.is_set():
+                        proc.terminate()
+                        return
+                    line = line.rstrip()
+                    if line:
+                        update_filesystem_import_progress_state(status_line=line)
+                        broadcast_filesystem_import_progress_event_sync("status", {"status_line": line})
+            except Exception:
+                pass
+
+        def read_stdout():
+            try:
+                while True:
+                    chunk = proc.stdout.read(8192)
+                    if not chunk:
+                        break
+                    stdout_parts.append(chunk)
+            except Exception:
+                pass
+
+        stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+        stdout_thread = threading.Thread(target=read_stdout, daemon=True)
+        stderr_thread.start()
+        stdout_thread.start()
+        stderr_thread.join()
+        stdout_thread.join()
+        stdout = "".join(stdout_parts)
+        if filesystem_import_cancelled.is_set():
+            proc.terminate()
+            proc.wait(timeout=10)
+            update_filesystem_import_progress_state(status="cancelled", status_line="Import cancelled.")
+            broadcast_filesystem_import_progress_event_sync("cancelled", get_filesystem_import_progress_state())
+        else:
+            proc.wait(timeout=120)
+            if proc.returncode != 0:
+                err_msg = (stdout or "").strip() or f"Process exited with code {proc.returncode}"
+                update_filesystem_import_progress_state(status="error", error_messages=[err_msg], status_line=err_msg)
+                broadcast_filesystem_import_progress_event_sync("error", get_filesystem_import_progress_state())
+            else:
+                total, proc_count, imp, upd, errs, err_msgs, status_message = _parse_filesystem_stdout(stdout or "")
+                update_filesystem_import_progress_state(
+                    status="completed",
+                    status_line=status_message,
+                    total_files=total,
+                    files_processed=proc_count,
+                    images_imported=imp,
+                    images_updated=upd,
+                    errors=errs,
+                    error_messages=err_msgs,
+                )
+                broadcast_filesystem_import_progress_event_sync("completed", get_filesystem_import_progress_state())
+    except FileNotFoundError as e:
+        update_filesystem_import_progress_state(status="error", error_messages=[str(e)], status_line=str(e))
         broadcast_filesystem_import_progress_event_sync("error", get_filesystem_import_progress_state())
-        
-        print(f"[Background Task] Error importing filesystem images: {error_msg}")
+    except Exception as e:
+        err_msg = str(e)
+        update_filesystem_import_progress_state(status="error", error_messages=[err_msg], status_line=err_msg)
+        broadcast_filesystem_import_progress_event_sync("error", get_filesystem_import_progress_state())
     finally:
-        # Mark processing as completed
+        state = get_filesystem_import_progress_state()
+        result = state.get("status", "error")
+        msg = (state.get("error_messages") or [None])[0] if result == "error" else None
+        _record_import_control_last_run("filesystem", result, msg)
         with filesystem_import_lock:
             filesystem_import_in_progress = False
 
@@ -3747,49 +4082,41 @@ def import_filesystem_images_background(
 @app.post("/facebook/albums/import", response_model=ImportFacebookAlbumsResponse)
 async def import_facebook_albums(
     request: ImportFacebookAlbumsRequest,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
 ):
-    """Import Facebook Albums from a directory structure.
+    """Import Facebook Albums from a directory structure using import-processor.
     
-    The system will automatically detect the export root directory by searching upward
-    from the directory_path for 'your_facebook_activity'.
+    Starts the import-processor in the background and returns immediately.
+    Connect to GET /facebook/albums/import/stream for real-time stderr status updates.
     
     Args:
         request: Import request containing directory_path
+        background_tasks: FastAPI background tasks
         
     Returns:
         Response indicating import has started
-        
-    Raises:
-        HTTPException: 400 if import is already in progress
     """
     global facebook_albums_import_in_progress
-    
+
     with facebook_albums_import_lock:
         if facebook_albums_import_in_progress:
             raise HTTPException(
                 status_code=400,
-                detail="Facebook Albums import is already in progress"
+                detail="Facebook Albums import is already in progress",
             )
-    
-    # Validate directory path
+
     directory_path = Path(request.directory_path)
     if not directory_path.exists() or not directory_path.is_dir():
         raise HTTPException(
             status_code=400,
             detail=f"Directory does not exist or is not a directory: {request.directory_path}"
         )
-    
-    # Prepare result dictionary for background task
-    result_dict = {}
-    
-    # Start background import task
+
     background_tasks.add_task(
-        import_facebook_albums_background,
+        import_facebook_albums_background_subprocess,
         str(directory_path),
-        result_dict
     )
-    
+
     return ImportFacebookAlbumsResponse(
         message="Facebook Albums import started",
         directory_path=request.directory_path,
@@ -3800,7 +4127,8 @@ async def import_facebook_albums(
         images_missing=0,
         missing_image_filenames=[],
         errors=0,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.utcnow(),
+        status_message=None,
     )
 
 
@@ -3942,16 +4270,15 @@ async def import_filesystem_images(
             detail=f"One or more directories do not exist or are not directories: {', '.join(invalid_paths)}"
         )
     
-    # Prepare result dictionary for background task
-    result_dict = {}
-    
-    # Start background import task with multiple directories
+    config = get_config()
+    exclude_patterns = config.get_filesystem_exclude_patterns()
+
+    # Start background import task
     background_tasks.add_task(
-        import_filesystem_images_background,
+        import_filesystem_background_subprocess,
         validated_paths,
         request.max_images,
-        request.create_thumb_and_get_exif,
-        result_dict
+        exclude_patterns,
     )
     
     return ImportFilesystemImagesResponse(
@@ -3990,6 +4317,15 @@ async def stream_filesystem_import_progress(request: Request):
             }
             yield f"data: {json.dumps(event_data)}\n\n"
             
+            # If already completed/cancelled/error, send final state and return
+            if initial_state.get("status") in ("completed", "cancelled", "error"):
+                final_event = {
+                    "type": initial_state["status"],
+                    "data": initial_state
+                }
+                yield f"data: {json.dumps(final_event)}\n\n"
+                return
+            
             # Keep connection alive and send events
             while True:
                 # Check if client disconnected
@@ -4000,6 +4336,9 @@ async def stream_filesystem_import_progress(request: Request):
                     # Wait for event with timeout
                     message = await asyncio.wait_for(client_queue.get(), timeout=1.0)
                     yield message
+                    progress_state = get_filesystem_import_progress_state()
+                    if progress_state.get("status") in ("completed", "cancelled", "error"):
+                        break
                 except asyncio.TimeoutError:
                     # Send keepalive
                     yield ": keepalive\n\n"
@@ -4059,26 +4398,42 @@ async def get_filesystem_import_status():
         }
 
 
-def process_thumbnails_background(result_dict: dict):
-    """Background function to process image thumbnails.
-    
-    Phase 1: Scan media_blob table - if thumbnail_data is not null, 
-             set processed=true in corresponding media_items table.
-    Phase 2: Scan media_items table - for items with processed=false 
-             and media_type starting with "image/", create thumbnails and 
-             set processed=true.
-    """
+def _parse_thumbnails_stdout(stdout: str) -> tuple[int, int, int, str]:
+    """Parse import-processor thumbnails stdout. Returns (total, processed, errors, status_message)."""
+    total = 0
+    processed = 0
+    errors = 0
+    m1 = re.search(r"Total items to process: (\d+)", stdout)
+    if m1:
+        total = int(m1.group(1))
+    m2 = re.search(r"Successfully processed: (\d+)", stdout)
+    if m2:
+        processed = int(m2.group(1))
+    m3 = re.search(r"Errors: (\d+)", stdout)
+    if m3:
+        errors = int(m3.group(1))
+    status_parts: list[str] = []
+    if total > 0:
+        status_parts.append(f"Total: {total}")
+    if processed > 0:
+        status_parts.append(f"Processed: {processed}")
+    if errors > 0:
+        status_parts.append(f"Errors: {errors}")
+    status_message = "Thumbnail processing completed. " + "; ".join(status_parts) if status_parts else "Thumbnail processing completed."
+    return (total, processed, errors, status_message)
+
+
+def process_thumbnails_background_subprocess(reprocess: bool = False):
+    """Background task: run import-processor thumbnails, stream stderr via SSE, broadcast completion."""
     global thumbnail_processing_in_progress
-    db = Database()
-    image_service = ImageService(db)
-    
-    # Mark processing as started
+
     with thumbnail_processing_lock:
         thumbnail_processing_in_progress = True
         thumbnail_processing_cancelled.clear()
-    
-    # Initialize progress state
+
     update_thumbnail_processing_progress_state(
+        status="in_progress",
+        status_line="Starting import-processor...",
         phase=None,
         phase1_scanned=0,
         phase1_updated=0,
@@ -4086,195 +4441,100 @@ def process_thumbnails_background(result_dict: dict):
         phase2_total=0,
         phase2_processed=0,
         phase2_errors=0,
-        status="in_progress",
-        error_message=None
     )
-    
-    # Broadcast initial progress event
-    broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
-    
+    broadcast_thumbnail_processing_event_sync("status", {"status_line": "Starting import-processor..."})
+
     try:
-        session = db.get_session()
+        binary = _get_import_processor_path()
+        cwd = binary.parent
+        args = [str(binary), "thumbnails"]
+        if reprocess:
+            args.append("--reprocess")
+        proc = subprocess.Popen(
+            args,
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        stdout_parts: list[str] = []
 
-        process_images_service = ProcessImagesService()
-        try:
-            # Phase 1: Update processed for items that already have thumbnails
-            update_thumbnail_processing_progress_state(phase="1")
-            broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
-            
-            # Query MediaBlob joined with MediaMetadata where thumbnail exists and not processed
-            blobs_with_unprocessed_metadata = session.query(MediaBlob, MediaMetadata).join(
-                MediaMetadata, MediaMetadata.media_blob_id == MediaBlob.id
-            ).filter(
-                MediaBlob.thumbnail_data.isnot(None),
-                MediaMetadata.processed == False
-            ).all()
-            
-            phase1_scanned = 0
-            phase1_updated = 0
-            
-            for blob, metadata in blobs_with_unprocessed_metadata:
-                # Check for cancellation
-                if thumbnail_processing_cancelled.is_set():
-                    update_thumbnail_processing_progress_state(status="cancelled")
-                    broadcast_thumbnail_processing_event_sync("cancelled", get_thumbnail_processing_progress_state())
-                    return
-                
-                phase1_scanned += 1
-                
-                # No separate query needed - metadata is already available
-                metadata.processed = True
-                phase1_updated += 1
-                
-                # Commit periodically (every 10 items)
-                if phase1_scanned % 10 == 0:
-                    session.commit()
-                    update_thumbnail_processing_progress_state(
-                        phase1_scanned=phase1_scanned,
-                        phase1_updated=phase1_updated
-                    )
-                    broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
-            
-            # Final commit for phase 1
-            session.commit()
-            update_thumbnail_processing_progress_state(
-                phase1_scanned=phase1_scanned,
-                phase1_updated=phase1_updated
-            )
-            broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
-            
-            # Phase 2: Create thumbnails for images without them
-            update_thumbnail_processing_progress_state(phase="2")
-            broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
-            
-            # Import create_thumbnail function
-            from ..imageimport.filesystemimport import create_thumbnail
-            
-            # Query MediaMetadata where processed=False and media_type starts with "image/"
-            items_needing_processing = session.query(MediaMetadata).filter(
-                MediaMetadata.processed == False,
-                MediaMetadata.media_type.like('image/%')
-            ).all()
-            
-            # Set total count for phase 2
-            phase2_total = len(items_needing_processing)
-            update_thumbnail_processing_progress_state(phase2_total=phase2_total)
-            broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
-            
-            phase2_scanned = 0
-            phase2_processed = 0
-            phase2_errors = 0
-            
-            for metadata_item in items_needing_processing:
-                # Check for cancellation
-                if thumbnail_processing_cancelled.is_set():
-                    session.commit()
-                    update_thumbnail_processing_progress_state(status="cancelled")
-                    broadcast_thumbnail_processing_event_sync("cancelled", get_thumbnail_processing_progress_state())
-                    return
-                
-                phase2_scanned += 1
-                
-                try:
-                    # Get MediaBlob
-                    blob = session.query(MediaBlob).filter(
-                        MediaBlob.id == metadata_item.media_blob_id
-                    ).first()
+        def read_stderr():
+            try:
+                for line in iter(proc.stderr.readline, ""):
+                    if thumbnail_processing_cancelled.is_set():
+                        proc.terminate()
+                        return
+                    line = line.rstrip()
+                    if line:
+                        update_thumbnail_processing_progress_state(status_line=line)
+                        broadcast_thumbnail_processing_event_sync("status", {"status_line": line})
+            except Exception:
+                pass
 
-                    if blob and blob.image_data:
+        def read_stdout():
+            try:
+                while True:
+                    chunk = proc.stdout.read(8192)
+                    if not chunk:
+                        break
+                    stdout_parts.append(chunk)
+            except Exception:
+                pass
 
-                        thumbnail_data, exif_data = process_images_service.create_thumb_and_get_exif(blob.image_data, process_thunbnail=True, process_exif=True, width=200)
-
-                        if thumbnail_data:
-                            blob.thumbnail_data = thumbnail_data
-                            metadata_item.processed = True
-                            phase2_processed += 1
-                        else:
-                            metadata_item.processed = False
-                            phase2_errors += 1
-
-                        if exif_data:
-                            metadata_item.description=exif_data.get('description') if exif_data else None
-                            metadata_item.year=exif_data.get('year') if exif_data else None
-                            metadata_item.month=exif_data.get('month') if exif_data else None
-                            # Ensure latitude/longitude are None (not empty strings) for float columns
-                            lat = exif_data.get('latitude') if exif_data else None
-                            lon = exif_data.get('longitude') if exif_data else None
-                            metadata_item.latitude=lat if lat not in ('', None) else None
-                            metadata_item.longitude=lon if lon not in ('', None) else None
-                            metadata_item.has_gps=exif_data.get('has_gps', False) if exif_data else False
-
-                       
-                    # else:
-                    #     # No image data, mark as processed to avoid retrying
-                    #     metadata_item.processed = True
-                    #     phase2_errors += 1
-                    
-                    # Commit periodically (every 50 items)
-                    if phase2_scanned % 10 == 0:
-                        session.commit()
-                        update_thumbnail_processing_progress_state(
-                            phase2_scanned=phase2_scanned,
-                            phase2_processed=phase2_processed,
-                            phase2_errors=phase2_errors
-                        )
-                        broadcast_thumbnail_processing_event_sync("progress", get_thumbnail_processing_progress_state())
-                
-                except Exception as e:
-                    # Handle errors gracefully - continue processing
-                    print(f"Error processing thumbnail for media_item {metadata_item.id}: {e}")
-                    phase2_errors += 1
-                    # Mark as processed to avoid retrying
-                    metadata_item.processed = True
-                    continue
-            
-            # Final commit for phase 2
-            session.commit()
-            update_thumbnail_processing_progress_state(
-                phase2_scanned=phase2_scanned,
-                phase2_processed=phase2_processed,
-                phase2_errors=phase2_errors,
-                status="completed"
-            )
-
-            session.execute(text("SELECT  update_location_regions()"))
-
-            broadcast_thumbnail_processing_event_sync("completed", get_thumbnail_processing_progress_state())
-            
-            result_dict.update({
-                "success": True,
-                "phase1_scanned": phase1_scanned,
-                "phase1_updated": phase1_updated,
-                "phase2_scanned": phase2_scanned,
-                "phase2_processed": phase2_processed,
-                "phase2_errors": phase2_errors
-            })
-        
-        except Exception as e:
-            error_msg = str(e)
-            print(f"Error in thumbnail processing: {error_msg}")
-            update_thumbnail_processing_progress_state(
-                status="error",
-                error_message=error_msg
-            )
-            broadcast_thumbnail_processing_event_sync("error", get_thumbnail_processing_progress_state())
-            result_dict.update({
-                "success": False,
-                "error": error_msg
-            })
-        
-        finally:
-            session.close()
-    
+        stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+        stdout_thread = threading.Thread(target=read_stdout, daemon=True)
+        stderr_thread.start()
+        stdout_thread.start()
+        stderr_thread.join()
+        stdout_thread.join()
+        stdout = "".join(stdout_parts)
+        if thumbnail_processing_cancelled.is_set():
+            proc.terminate()
+            proc.wait(timeout=10)
+            update_thumbnail_processing_progress_state(status="cancelled", status_line="Processing cancelled.")
+            broadcast_thumbnail_processing_event_sync("cancelled", get_thumbnail_processing_progress_state())
+        else:
+            proc.wait(timeout=600)
+            if proc.returncode != 0:
+                err_msg = (stdout or "").strip() or f"Process exited with code {proc.returncode}"
+                update_thumbnail_processing_progress_state(status="error", error_message=err_msg, status_line=err_msg)
+                broadcast_thumbnail_processing_event_sync("error", get_thumbnail_processing_progress_state())
+            else:
+                total, processed, errors, status_message = _parse_thumbnails_stdout(stdout or "")
+                update_thumbnail_processing_progress_state(
+                    status="completed",
+                    status_line=status_message,
+                    phase2_total=total,
+                    phase2_processed=processed,
+                    phase2_errors=errors,
+                )
+                broadcast_thumbnail_processing_event_sync("completed", get_thumbnail_processing_progress_state())
+    except FileNotFoundError as e:
+        update_thumbnail_processing_progress_state(status="error", error_message=str(e), status_line=str(e))
+        broadcast_thumbnail_processing_event_sync("error", get_thumbnail_processing_progress_state())
+    except Exception as e:
+        err_msg = str(e)
+        update_thumbnail_processing_progress_state(status="error", error_message=err_msg, status_line=err_msg)
+        broadcast_thumbnail_processing_event_sync("error", get_thumbnail_processing_progress_state())
     finally:
-        # Mark processing as complete
+        state = get_thumbnail_processing_progress_state()
+        result = state.get("status", "error")
+        msg = state.get("error_message") or state.get("status_line")
+        _record_import_control_last_run("thumbnails", result, msg)
         with thumbnail_processing_lock:
             thumbnail_processing_in_progress = False
 
 
 @app.post("/images/process-thumbnails")
-async def start_thumbnail_processing(background_tasks: BackgroundTasks):
+async def start_thumbnail_processing(
+    background_tasks: BackgroundTasks,
+    reprocess: bool = False,
+):
     """Start thumbnail processing.
+    
+    Args:
+        reprocess: If True, reprocess all image items including already processed (re-extract EXIF).
     
     Returns:
         Response indicating processing has started
@@ -4291,12 +4551,10 @@ async def start_thumbnail_processing(background_tasks: BackgroundTasks):
                 detail="Thumbnail processing is already in progress"
             )
     
-    result_dict = {}
-    
     # Start background processing task
     background_tasks.add_task(
-        process_thumbnails_background,
-        result_dict
+        process_thumbnails_background_subprocess,
+        reprocess,
     )
     
     return {
@@ -4329,6 +4587,15 @@ async def stream_thumbnail_processing_progress(request: Request):
             }
             yield f"data: {json.dumps(event_data)}\n\n"
             
+            # If already completed/cancelled/error, send final state and return
+            if initial_state.get("status") in ("completed", "cancelled", "error"):
+                final_event = {
+                    "type": initial_state["status"],
+                    "data": initial_state
+                }
+                yield f"data: {json.dumps(final_event)}\n\n"
+                return
+            
             # Keep connection alive and send events
             while True:
                 # Check if client disconnected
@@ -4339,6 +4606,9 @@ async def stream_thumbnail_processing_progress(request: Request):
                     # Wait for event with timeout
                     message = await asyncio.wait_for(client_queue.get(), timeout=1.0)
                     yield message
+                    progress_state = get_thumbnail_processing_progress_state()
+                    if progress_state.get("status") in ("completed", "cancelled", "error"):
+                        break
                 except asyncio.TimeoutError:
                     # Send keepalive
                     yield ": keepalive\n\n"
@@ -5590,7 +5860,7 @@ async def get_images_grid(
             
             if email:
                 # Get content type and size
-                content_type = media_item.image_type or "application/octet-stream"
+                content_type = media_item.media_type or "application/octet-stream"
                 media_blob = session.query(MediaBlob).filter(MediaBlob.id == media_item.media_blob_id).first()
                 size = len(media_blob.image_data) if media_blob and media_blob.image_data else None
                 
@@ -6128,209 +6398,6 @@ async def bulk_update_images(update_data: Dict[str, Any]):
             status_code=500,
             detail=f"Error bulk updating images: {str(e)}"
         )
-
-
-class ProcessImagesWithMagickResponse(BaseModel):
-    """Response model for processing images with ImageMagick."""
-    success: bool
-    message: str
-    images_processed: Optional[int] = None
-    errors: List[str] = []
-
-
-def process_images_with_magick_background(result_dict: dict):
-    """Background function to process images with ImageMagick.
-    
-    Args:
-        result_dict: Dictionary to store results
-    """
-    global magick_processing_in_progress
-    
-    # Mark processing as started
-    with magick_processing_lock:
-        magick_processing_in_progress = True
-        magick_processing_cancelled.clear()
-    
-    # Initialize progress state
-    magick_processing_progress.update({
-        "images_found": 0,
-        "images_processed": 0,
-        "images_created": 0,
-        "images_updated": 0,
-        "errors": 0,
-        "error_messages": [],
-        "current_image": None,
-        "status": "in_progress",
-        "error_message": None
-    })
-    
-    try:
-        image_service = ImageService(db=db)
-        
-        # Get count of unprocessed images
-        session = db.get_session()
-        try:
-            images_metadata = session.query(MediaMetadata).filter(
-                MediaMetadata.processed == False,
-                MediaMetadata.media_type.like('image/%')
-            ).all()
-            unprocessed_count = len(images_metadata)
-            magick_processing_progress["images_found"] = unprocessed_count
-        finally:
-            session.close()
-        
-        if not images_metadata:
-            magick_processing_progress["status"] = "completed"
-            result_dict["success"] = True
-            result_dict["message"] = "No unprocessed images found"
-            result_dict["images_processed"] = 0
-            result_dict["errors"] = []
-            return
-        
-        images_processed = 0
-        images_created = 0
-        images_updated = 0
-        errors = []
-        
-        # Process each image
-        for idx, image_metadata in enumerate(images_metadata):
-            # Check for cancellation
-            if magick_processing_cancelled.is_set():
-                magick_processing_progress["status"] = "cancelled"
-                result_dict["success"] = False
-                result_dict["message"] = "Processing was cancelled by user"
-                return
-            
-            magick_processing_progress["current_image"] = f"Image {image_metadata.id}"
-            magick_processing_progress["images_processed"] = idx + 1
-            
-            try:
-                image = image_service.storage.get_image_by_metadata_id(image_metadata.id)
-                if not image:
-                    error_msg = f"Image blob not found for metadata ID {image_metadata.id}"
-                    errors.append(error_msg)
-                    magick_processing_progress["errors"] += 1
-                    magick_processing_progress["error_messages"].append(error_msg)
-                    continue
-                
-                print(f"Processing image {image_metadata.id}. Description: {image_metadata.description} with Magick")
-                thumbnail_data = ImageService.create_thumbnail_from_bytes(image.image_data)
-                
-                if thumbnail_data:
-                    # Check if thumbnail already exists
-                    session = db.get_session()
-                    try:
-                        media_blob = session.query(MediaBlob).filter(MediaBlob.id == image_metadata.media_blob_id).first()
-                        if media_blob and media_blob.thumbnail_data:
-                            images_updated += 1
-                        else:
-                            images_created += 1
-                    finally:
-                        session.close()
-                    
-                    image_service.storage.update_image_thumbnail(image_id=image_metadata.id, thumbnail_data=thumbnail_data)
-                    images_processed += 1
-                    print(f"Done Processing image {image_metadata.id}. Description: {image_metadata.description} with Magick")
-                else:
-                    error_msg = f"Failed to create thumbnail for image {image_metadata.id}"
-                    errors.append(error_msg)
-                    magick_processing_progress["errors"] += 1
-                    magick_processing_progress["error_messages"].append(error_msg)
-                    
-            except Exception as e:
-                error_msg = f"Error processing image {image_metadata.id}: {str(e)}"
-                print(f"Error processing image {image_metadata.id}. Description: {image_metadata.description} with Magick: {e}")
-                errors.append(error_msg)
-                magick_processing_progress["errors"] += 1
-                magick_processing_progress["error_messages"].append(error_msg)
-                import traceback
-                traceback.print_exc()
-                continue
-        
-        # Update final progress state
-        magick_processing_progress["images_processed"] = images_processed
-        magick_processing_progress["images_created"] = images_created
-        magick_processing_progress["images_updated"] = images_updated
-        magick_processing_progress["status"] = "completed"
-        
-        result_dict["success"] = True
-        result_dict["message"] = f"Processing completed. Processed {images_processed} image(s)"
-        result_dict["images_processed"] = images_processed
-        result_dict["images_created"] = images_created
-        result_dict["images_updated"] = images_updated
-        result_dict["errors"] = errors
-        
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        magick_processing_progress["status"] = "error"
-        magick_processing_progress["error_message"] = str(e)
-        result_dict["success"] = False
-        result_dict["message"] = f"Error processing images: {str(e)}"
-        result_dict["errors"] = [str(e)]
-    finally:
-        with magick_processing_lock:
-            magick_processing_in_progress = False
-
-
-@app.post("/images/process-with-magick", response_model=ProcessImagesWithMagickResponse)
-async def process_images_with_magick(background_tasks: BackgroundTasks):
-    """Process unprocessed images with ImageMagick to create thumbnails (background task).
-    
-    Finds all images where processed=False and media_type starts with "image/",
-    then processes them using ImageMagick to create thumbnails in the background.
-    
-    Args:
-        background_tasks: FastAPI background tasks
-        
-    Returns:
-        ProcessImagesWithMagickResponse indicating task has started
-        
-    Raises:
-        HTTPException: 400 if processing is already in progress, 500 on error
-    """
-    global magick_processing_in_progress
-    
-    # Check if processing is already in progress
-    with magick_processing_lock:
-        if magick_processing_in_progress:
-            raise HTTPException(
-                status_code=400,
-                detail="ImageMagick processing is already in progress"
-            )
-    
-    # Get count of unprocessed images
-    session = db.get_session()
-    try:
-        unprocessed_count = session.query(MediaMetadata).filter(
-            MediaMetadata.processed == False,
-            MediaMetadata.media_type.like('image/%')
-        ).count()
-    finally:
-        session.close()
-    
-    # Prepare result dictionary for background task
-    result_dict = {
-        "success": False,
-        "message": "",
-        "images_processed": 0,
-        "images_created": 0,
-        "images_updated": 0,
-        "errors": []
-    }
-    
-    # Start background processing task
-    background_tasks.add_task(
-        process_images_with_magick_background,
-        result_dict
-    )
-    
-    return ProcessImagesWithMagickResponse(
-        success=True,
-        message=f"ImageMagick processing started. Found {unprocessed_count} unprocessed image(s)",
-        images_processed=unprocessed_count,
-        errors=[]
-    )
 
 
 @app.get("/images/{image_id}/metadata", response_model=MediaMetadataResponse)
@@ -7040,6 +7107,7 @@ class ImportFacebookPlacesResponse(BaseModel):
     places_created: int
     places_updated: int
     errors: List[str]
+    status_message: Optional[str] = None
 
 
 class FacebookPlaceResponse(BaseModel):
@@ -7064,179 +7132,391 @@ class FacebookPlacesListResponse(BaseModel):
     total: int
 
 
-def extract_places_from_data(data, places_list):
-    """Recursively extract all 'place' elements from nested data structures.
-    
-    Args:
-        data: The data structure to search (dict, list, or primitive)
-        places_list: List to append found places to
+def _get_import_processor_path() -> Path:
+    """Resolve path to import-processor binary. Uses IMPORT_PROCESSOR_PATH env if set."""
+    env_path = os.environ.get("IMPORT_PROCESSOR_PATH")
+    if env_path:
+        p = Path(env_path)
+        if p.exists():
+            return p
+    project_root = Path(__file__).resolve().parent.parent.parent
+    import_processor_dir = project_root / "import-processor"
+    if os.name == "nt":
+        binary = import_processor_dir / "import-processor.exe"
+    else:
+        binary = import_processor_dir / "import-processor"
+    if not binary.exists():
+        raise FileNotFoundError(
+            f"import-processor not found at {binary}. "
+            "Build it with: cd import-processor && go build -o import-processor ./cmd/import-processor"
+        )
+    return binary
+
+
+def _parse_facebook_places_stdout(stdout: str) -> tuple[int, int, int, list[str], str]:
+    """Parse import-processor facebook-places stdout. Returns (places_imported, places_created, places_updated, errors, status_message)."""
+    places_imported = 0
+    places_created = 0
+    places_updated = 0
+    errors: list[str] = []
+    status_parts: list[str] = []
+    match = re.search(
+        r"Places imported: (\d+) \(created: (\d+), updated: (\d+)\)",
+        stdout,
+    )
+    if match:
+        places_imported = int(match.group(1))
+        places_created = int(match.group(2))
+        places_updated = int(match.group(3))
+        status_parts.append(f"Places imported: {places_imported} (created: {places_created}, updated: {places_updated})")
+    in_errors = False
+    for line in stdout.splitlines():
+        line = line.rstrip()
+        if line == "Errors/warnings:":
+            in_errors = True
+            continue
+        if in_errors and line.startswith("  - "):
+            errors.append(line[4:].strip())
+    status_message = "Import completed successfully. " + "; ".join(status_parts) if status_parts else "Import completed."
+    if errors:
+        status_message += f" {len(errors)} error(s)/warning(s) reported."
+    return places_imported, places_created, places_updated, errors, status_message
+
+
+def import_facebook_places_background_subprocess(file_path: str):
+    """Background task: run import-processor facebook-places, stream stderr lines via SSE, broadcast completion."""
+    global facebook_places_import_in_progress
+
+    with facebook_places_import_lock:
+        facebook_places_import_in_progress = True
+        facebook_places_import_cancelled.clear()
+
+    update_facebook_places_progress_state(
+        status="in_progress",
+        status_line="Starting import-processor...",
+        places_imported=0,
+        places_created=0,
+        places_updated=0,
+        errors=[],
+    )
+    broadcast_facebook_places_progress_event_sync("status", {"status_line": "Starting import-processor..."})
+
+    try:
+        binary = _get_import_processor_path()
+        cwd = binary.parent
+        path_str = str(Path(file_path).resolve())
+        proc = subprocess.Popen(
+            [str(binary), "facebook-places", "--path", path_str],
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for line in iter(proc.stderr.readline, ""):
+            if facebook_places_import_cancelled.is_set():
+                proc.terminate()
+                proc.wait(timeout=10)
+                update_facebook_places_progress_state(status="cancelled", status_line="Import cancelled.")
+                broadcast_facebook_places_progress_event_sync("cancelled", get_facebook_places_progress_state())
+                break
+            line = line.rstrip()
+            if line:
+                update_facebook_places_progress_state(status_line=line)
+                broadcast_facebook_places_progress_event_sync("status", {"status_line": line})
+        stdout, _ = proc.communicate()
+        if proc.returncode != 0 and not facebook_places_import_cancelled.is_set():
+            err_msg = (stdout or "").strip() or f"Process exited with code {proc.returncode}"
+            update_facebook_places_progress_state(status="error", error_message=err_msg, status_line=err_msg)
+            broadcast_facebook_places_progress_event_sync("error", get_facebook_places_progress_state())
+        elif not facebook_places_import_cancelled.is_set():
+            places_imported, places_created, places_updated, errors, status_message = _parse_facebook_places_stdout(stdout or "")
+            update_facebook_places_progress_state(
+                status="completed",
+                status_line=status_message,
+                places_imported=places_imported,
+                places_created=places_created,
+                places_updated=places_updated,
+                errors=errors,
+            )
+            broadcast_facebook_places_progress_event_sync("completed", get_facebook_places_progress_state())
+    except FileNotFoundError as e:
+        update_facebook_places_progress_state(status="error", error_message=str(e), status_line=str(e))
+        broadcast_facebook_places_progress_event_sync("error", get_facebook_places_progress_state())
+    except Exception as e:
+        err_msg = str(e)
+        update_facebook_places_progress_state(status="error", error_message=err_msg, status_line=err_msg)
+        broadcast_facebook_places_progress_event_sync("error", get_facebook_places_progress_state())
+    finally:
+        state = get_facebook_places_progress_state()
+        _record_import_control_last_run("facebook_places", state.get("status", "error"), state.get("error_message") or state.get("status_line"))
+        with facebook_places_import_lock:
+            facebook_places_import_in_progress = False
+
+
+def _run_facebook_places_import(file_path: Path) -> tuple[int, int, int, list[str], str]:
+    """Run import-processor facebook-places (blocking) and parse stdout. Returns (imported, created, updated, errors, status_message)."""
+    binary = _get_import_processor_path()
+    cwd = binary.parent
+    path_str = str(file_path.resolve())
+    result = subprocess.run(
+        [str(binary), "facebook-places", "--path", path_str],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    parsed = _parse_facebook_places_stdout(stdout)
+    if result.returncode != 0:
+        err_msg = stderr.strip() or stdout.strip() or f"Process exited with code {result.returncode}"
+        raise RuntimeError(err_msg)
+    return parsed
+
+
+def _parse_facebook_albums_stdout(stdout: str) -> tuple[int, int, int, int, int, int, list[str], str]:
+    """Parse import-processor facebook-albums stdout. Returns (albums_processed, albums_imported, images_imported, images_found, images_missing, errors, missing_filenames, status_message)."""
+    albums_processed = 0
+    albums_imported = 0
+    images_imported = 0
+    images_found = 0
+    images_missing = 0
+    errors = 0
+    missing_filenames: list[str] = []
+    status_parts: list[str] = []
+    m1 = re.search(r"Processed (\d+) album\(s\)", stdout)
+    if m1:
+        albums_processed = int(m1.group(1))
+    m2 = re.search(r"Albums imported: (\d+)", stdout)
+    if m2:
+        albums_imported = int(m2.group(1))
+    m3 = re.search(r"Images imported: (\d+) \(found: (\d+), missing: (\d+)\)", stdout)
+    if m3:
+        images_imported = int(m3.group(1))
+        images_found = int(m3.group(2))
+        images_missing = int(m3.group(3))
+    m4 = re.search(r"Errors: (\d+)", stdout)
+    if m4:
+        errors = int(m4.group(1))
+    in_missing = False
+    for line in stdout.splitlines():
+        line = line.rstrip()
+        if line == "Missing image files:":
+            in_missing = True
+            continue
+        if in_missing and line.startswith("  - "):
+            missing_filenames.append(line[4:].strip())
+    if albums_processed > 0:
+        status_parts.append(f"Processed {albums_processed} album(s)")
+    if albums_imported > 0:
+        status_parts.append(f"Imported {albums_imported} album(s) with {images_imported} image(s)")
+    if images_found > 0 or images_missing > 0:
+        status_parts.append(f"Found {images_found}, {images_missing} missing")
+    if errors > 0:
+        status_parts.append(f"{errors} error(s)")
+    status_message = "Import completed successfully. " + "; ".join(status_parts) if status_parts else "Import completed."
+    return albums_processed, albums_imported, images_imported, images_found, images_missing, errors, missing_filenames, status_message
+
+
+def import_facebook_albums_background_subprocess(directory_path: str):
+    """Background task: run import-processor facebook-albums, stream stderr lines via SSE, broadcast completion."""
+    global facebook_albums_import_in_progress
+
+    with facebook_albums_import_lock:
+        facebook_albums_import_in_progress = True
+        facebook_albums_import_cancelled.clear()
+
+    update_facebook_albums_progress_state(
+        status="in_progress",
+        status_line="Starting import-processor...",
+        albums_processed=0,
+        total_albums=0,
+        albums_imported=0,
+        images_imported=0,
+        images_found=0,
+        images_missing=0,
+        missing_image_filenames=[],
+        errors=0,
+    )
+    broadcast_facebook_albums_progress_event_sync("status", {"status_line": "Starting import-processor..."})
+
+    try:
+        binary = _get_import_processor_path()
+        cwd = binary.parent
+        path_str = str(Path(directory_path).resolve())
+        proc = subprocess.Popen(
+            [str(binary), "facebook-albums", "--path", path_str],
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        # Read stderr line by line and broadcast each
+        for line in iter(proc.stderr.readline, ""):
+            if facebook_albums_import_cancelled.is_set():
+                proc.terminate()
+                proc.wait(timeout=10)
+                update_facebook_albums_progress_state(status="cancelled", status_line="Import cancelled.")
+                broadcast_facebook_albums_progress_event_sync("cancelled", get_facebook_albums_progress_state())
+                break
+            line = line.rstrip()
+            if line:
+                update_facebook_albums_progress_state(status_line=line)
+                broadcast_facebook_albums_progress_event_sync("status", {"status_line": line})
+        stdout, _ = proc.communicate()
+        if proc.returncode != 0 and not facebook_albums_import_cancelled.is_set():
+            err_msg = (stdout or "").strip() or f"Process exited with code {proc.returncode}"
+            update_facebook_albums_progress_state(status="error", error_message=err_msg, status_line=err_msg)
+            broadcast_facebook_albums_progress_event_sync("error", get_facebook_albums_progress_state())
+        elif not facebook_albums_import_cancelled.is_set():
+            albums_processed, albums_imported, images_imported, images_found, images_missing, errors, missing_filenames, status_message = _parse_facebook_albums_stdout(stdout or "")
+            update_facebook_albums_progress_state(
+                status="completed",
+                status_line=status_message,
+                albums_processed=albums_processed,
+                total_albums=albums_processed,
+                albums_imported=albums_imported,
+                images_imported=images_imported,
+                images_found=images_found,
+                images_missing=images_missing,
+                missing_image_filenames=missing_filenames,
+                errors=errors,
+            )
+            broadcast_facebook_albums_progress_event_sync("completed", get_facebook_albums_progress_state())
+    except FileNotFoundError as e:
+        update_facebook_albums_progress_state(status="error", error_message=str(e), status_line=str(e))
+        broadcast_facebook_albums_progress_event_sync("error", get_facebook_albums_progress_state())
+    except Exception as e:
+        err_msg = str(e)
+        update_facebook_albums_progress_state(status="error", error_message=err_msg, status_line=err_msg)
+        broadcast_facebook_albums_progress_event_sync("error", get_facebook_albums_progress_state())
+    finally:
+        state = get_facebook_albums_progress_state()
+        _record_import_control_last_run("facebook_albums", state.get("status", "error"), state.get("error_message") or state.get("status_line"))
+        with facebook_albums_import_lock:
+            facebook_albums_import_in_progress = False
+
+
+def _run_facebook_albums_import(directory_path: Path) -> tuple[int, int, int, int, int, int, list[str], str]:
+    """Run import-processor facebook-albums (blocking) and parse stdout.
+    Returns (albums_processed, albums_imported, images_imported, images_found, images_missing, errors, missing_filenames, status_message).
     """
-    if isinstance(data, dict):
-        # Check if this dict has a 'place' key
-        if 'place' in data and isinstance(data['place'], dict):
-            places_list.append(data['place'])
-        # Recursively search all values
-        for value in data.values():
-            extract_places_from_data(value, places_list)
-    elif isinstance(data, list):
-        # Recursively search all items in the list
-        for item in data:
-            extract_places_from_data(item, places_list)
+    binary = _get_import_processor_path()
+    cwd = binary.parent
+    path_str = str(directory_path.resolve())
+    result = subprocess.run(
+        [str(binary), "facebook-albums", "--path", path_str],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        timeout=3600,
+    )
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    parsed = _parse_facebook_albums_stdout(stdout)
+    if result.returncode != 0:
+        err_msg = stderr.strip() or stdout.strip() or f"Process exited with code {result.returncode}"
+        raise RuntimeError(err_msg)
+    return parsed
 
 
 @app.post("/facebook/import-places", response_model=ImportFacebookPlacesResponse)
-async def import_facebook_places(request: ImportFacebookPlacesRequest):
-    """Import places from a Facebook posts JSON file.
+async def import_facebook_places(
+    request: ImportFacebookPlacesRequest,
+    background_tasks: BackgroundTasks,
+):
+    """Import places from a Facebook posts JSON file using import-processor.
     
-    Extracts all 'place' elements from the JSON file and stores them in the database
-    using the Locations model.
-    
-    Args:
-        request: ImportFacebookPlacesRequest with file_path
-        
-    Returns:
-        ImportFacebookPlacesResponse with import statistics
-        
-    Raises:
-        HTTPException: If file doesn't exist or can't be parsed
+    Starts the import-processor in the background and returns immediately.
+    Connect to GET /facebook/import-places/stream for real-time stderr status updates.
     """
+    global facebook_places_import_in_progress
+
+    with facebook_places_import_lock:
+        if facebook_places_import_in_progress:
+            raise HTTPException(
+                status_code=400,
+                detail="Facebook Places import is already in progress",
+            )
+
     file_path = Path(request.file_path)
-    
-    # Validate file exists
     if not file_path.exists():
         raise HTTPException(
             status_code=404,
             detail=f"File not found: {request.file_path}"
         )
-    
     if not file_path.is_file():
         raise HTTPException(
             status_code=400,
             detail=f"Path is not a file: {request.file_path}"
         )
-    
-    places_imported = 0
-    places_created = 0
-    places_updated = 0
-    errors = []
-    
-    try:
-        # Read and parse JSON file
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        # Extract all places from the data structure
-        places_list = []
-        extract_places_from_data(data, places_list)
-        
-        places_imported = len(places_list)
-        
-        # Process each place
-        session = db.get_session()
-        try:
-            for place_data in places_list:
-                try:
-                    # Extract place information
-                    name = place_data.get('name', '').strip()
-                    if not name:
-                        errors.append(f"Skipped place with empty name: {place_data}")
-                        continue
-                    
-                    # Extract coordinates
-                    coordinate = place_data.get('coordinate', {})
-                    latitude = coordinate.get('latitude') if coordinate else None
-                    longitude = coordinate.get('longitude') if coordinate else None
-                    
-                    # Extract address
-                    address = place_data.get('address', '').strip() or None
-                    
-                    # Extract URL (can be used as source_reference)
-                    url = place_data.get('url', '').strip() or None
-                    
-                    # Check if place already exists (by name and coordinates if available)
-                    if latitude is not None and longitude is not None:
-                        # Use a small tolerance for coordinate matching (0.0001 degrees ≈ 11 meters)
-                        query = session.query(Locations).filter(
-                            Locations.name == name,
-                            func.abs(Locations.latitude - latitude) < 0.0001,
-                            func.abs(Locations.longitude - longitude) < 0.0001
-                        )
-                    else:
-                        # If no coordinates, match by name only (and places without coordinates)
-                        query = session.query(Locations).filter(
-                            Locations.name == name,
-                            Locations.latitude.is_(None),
-                            Locations.longitude.is_(None)
-                        )
-                    
-                    existing_location = query.first()
-                    
-                    if existing_location:
-                        # Update existing location
-                        existing_location.address = address or existing_location.address
-                        existing_location.latitude = latitude if latitude is not None else existing_location.latitude
-                        existing_location.longitude = longitude if longitude is not None else existing_location.longitude
-                        existing_location.source = 'facebook'
-                        existing_location.source_reference = url or existing_location.source_reference
-                        existing_location.updated_at = datetime.now()
-                        places_updated += 1
-                    else:
-                        # Create new location
-                        new_location = Locations(
-                            name=name,
-                            address=address,
-                            latitude=latitude,
-                            longitude=longitude,
-                            source='facebook',
-                            source_reference=url
-                        )
-                        session.add(new_location)
-                        places_created += 1
-                    
-                except Exception as e:
-                    error_msg = f"Error processing place {place_data.get('name', 'unknown')}: {str(e)}"
-                    errors.append(error_msg)
-                    print(f"[import_facebook_places] {error_msg}")
-                    import traceback
-                    traceback.print_exc()
-                    continue
-            
-            # Commit all changes
-            session.commit()
 
-            # Update location regions using the database function
-            # Execute using the engine connection directly
-            with db.engine.connect() as conn:
-                conn.execute(text("SELECT update_location_regions()"))
-                conn.commit()
-            
-        except Exception as e:
-            session.rollback()
-            raise HTTPException(
-                status_code=500,
-                detail=f"Database error: {str(e)}"
-            )
-        finally:
-            session.close()
-            
-    except json.JSONDecodeError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid JSON file: {str(e)}"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error reading file: {str(e)}"
-        )
-    
+    background_tasks.add_task(
+        import_facebook_places_background_subprocess,
+        str(file_path),
+    )
+
     return ImportFacebookPlacesResponse(
         success=True,
-        places_imported=places_imported,
-        places_created=places_created,
-        places_updated=places_updated,
-        errors=errors
+        places_imported=0,
+        places_created=0,
+        places_updated=0,
+        errors=[],
+        status_message="Import started",
     )
+
+
+@app.get("/facebook/import-places/stream")
+async def stream_facebook_places_import_progress(request: Request):
+    """Stream Facebook Places import progress via Server-Sent Events (stderr lines)."""
+    async def event_generator():
+        client_queue = asyncio.Queue()
+        with facebook_places_sse_clients_lock:
+            facebook_places_sse_clients.append(client_queue)
+        try:
+            initial_state = get_facebook_places_progress_state()
+            yield f"data: {json.dumps({'type': 'progress', 'data': initial_state})}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    message = await asyncio.wait_for(client_queue.get(), timeout=1.0)
+                    yield message
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+                except Exception as e:
+                    print(f"Error in Facebook Places SSE stream: {e}")
+                    break
+        finally:
+            with facebook_places_sse_clients_lock:
+                if client_queue in facebook_places_sse_clients:
+                    facebook_places_sse_clients.remove(client_queue)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/facebook/import-places/cancel")
+async def cancel_facebook_places_import():
+    """Cancel Facebook Places import if in progress."""
+    global facebook_places_import_in_progress
+    with facebook_places_import_lock:
+        if not facebook_places_import_in_progress:
+            return {"message": "No Facebook Places import in progress"}
+        facebook_places_import_cancelled.set()
+        return {"message": "Facebook Places import cancellation requested"}
+
+
+@app.get("/facebook/import-places/status")
+async def get_facebook_places_import_status():
+    """Get current status of Facebook Places import."""
+    global facebook_places_import_in_progress
+    progress_state = get_facebook_places_progress_state()
+    with facebook_places_import_lock:
+        return {
+            "in_progress": facebook_places_import_in_progress,
+            "cancelled": facebook_places_import_cancelled.is_set(),
+            **progress_state
+        }
 
 
 @app.get("/facebook/places", response_model=FacebookPlacesListResponse)
@@ -7741,6 +8021,86 @@ async def get_contacts(
         )
     finally:
         session.close()
+
+
+@app.post("/contacts/extract")
+async def extract_contacts():
+    """Extract contacts from messages table and populate the contacts table."""
+    session = db.get_session()
+    try:
+        sql = """
+        SELECT 
+            chat_session,
+            is_group_chat,
+            COUNT(CASE WHEN service = 'WhatsApp' THEN 1 END) AS number_of_whatsapp,
+            COUNT(CASE WHEN service = 'iMessage' THEN 1 END) AS number_of_imessage,
+            COUNT(CASE WHEN service = 'Facebook Messenger' THEN 1 END) AS number_of_facebook,
+            COUNT(CASE WHEN service = 'SMS' THEN 1 END) AS number_of_sms,
+            COUNT(CASE WHEN service = 'Instagram' THEN 1 END) AS number_of_insta,
+            COUNT(*) AS total
+        FROM 
+            messages
+        GROUP BY 
+            chat_session, is_group_chat
+        ORDER BY 
+            is_group_chat, total DESC
+        """
+        rows = session.execute(text(sql)).fetchall()
+        created = 0
+        updated = 0
+        for row in rows:
+            chat_session = row.chat_session
+            if not chat_session or not str(chat_session).strip():
+                continue
+            existing = session.query(Contacts).filter(Contacts.name == chat_session).first()
+            if existing:
+                existing.is_group = bool(row.is_group_chat)
+                existing.numwhatsapp = row.number_of_whatsapp or 0
+                existing.numimessages = row.number_of_imessage or 0
+                existing.numfacebook = row.number_of_facebook or 0
+                existing.numsms = row.number_of_sms or 0
+                existing.numinstagram = row.number_of_insta or 0
+                existing.total = row.total or 0
+                if row.number_of_whatsapp and row.number_of_whatsapp > 0:
+                    existing.whatsappid = existing.whatsappid or chat_session
+                if row.number_of_imessage and row.number_of_imessage > 0:
+                    existing.imessageid = existing.imessageid or chat_session
+                if row.number_of_sms and row.number_of_sms > 0:
+                    existing.smsid = existing.smsid or chat_session
+                if row.number_of_facebook and row.number_of_facebook > 0:
+                    existing.facebookid = existing.facebookid or chat_session
+                if row.number_of_insta and row.number_of_insta > 0:
+                    existing.instagramid = existing.instagramid or chat_session
+                updated += 1
+            else:
+                contact = Contacts(
+                    name=chat_session,
+                    is_group=bool(row.is_group_chat),
+                    numwhatsapp=row.number_of_whatsapp or 0,
+                    numimessages=row.number_of_imessage or 0,
+                    numfacebook=row.number_of_facebook or 0,
+                    numsms=row.number_of_sms or 0,
+                    numinstagram=row.number_of_insta or 0,
+                    total=row.total or 0,
+                    whatsappid=chat_session if (row.number_of_whatsapp or 0) > 0 else None,
+                    imessageid=chat_session if (row.number_of_imessage or 0) > 0 else None,
+                    smsid=chat_session if (row.number_of_sms or 0) > 0 else None,
+                    facebookid=chat_session if (row.number_of_facebook or 0) > 0 else None,
+                    instagramid=chat_session if (row.number_of_insta or 0) > 0 else None,
+                )
+                session.add(contact)
+                created += 1
+        session.commit()
+        return {"created": created, "updated": updated}
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error extracting contacts: {str(e)}"
+        )
+    finally:
+        session.close()
+
 
 def find_likely_matching_contacts():
     """Find likely matching contacts."""

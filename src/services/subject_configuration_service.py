@@ -1,5 +1,6 @@
 """Subject Configuration service for managing subject name and system instructions."""
 
+import os
 from typing import Optional
 from datetime import datetime, timezone
 from pathlib import Path
@@ -218,6 +219,29 @@ class SubjectConfigurationService:
             )
             session.add(subject_contact)
 
+    def update_writing_style_ai(self, writing_style_ai: Optional[str]) -> Optional[SubjectConfiguration]:
+        """Update the writing_style_ai field of the subject configuration.
+        
+        Args:
+            writing_style_ai: The AI-generated writing style summary (markdown), or None to clear
+            
+        Returns:
+            Updated SubjectConfiguration if one exists, None otherwise
+        """
+        session = self.db.get_session()
+        try:
+            configuration = session.query(SubjectConfiguration).first()
+            if not configuration:
+                return None
+            configuration.writing_style_ai = writing_style_ai.strip() if writing_style_ai and writing_style_ai.strip() else None
+            configuration.updated_at = datetime.now(timezone.utc)
+            session.commit()
+            session.refresh(configuration)
+            session.expunge(configuration)
+            return configuration
+        finally:
+            session.close()
+
     def get_subject_name(self) -> Optional[str]:
         """Get the current subject name.
         
@@ -337,9 +361,16 @@ In the json structure, include the the full pathname or URI of any attachments o
             else:
                 # Create new configuration with both instructions from files
                 chat_instructions = self._load_chat_instructions_from_file()
+
+                #get the default subject name and family name from the environment variables
+                default_subject_name = os.getenv("DEFAULT_SUBJECT_NAME")
+                default_subject_family_name = os.getenv("DEFAULT_SUBJECT_FAMILY_NAME")
+                default_gender = os.getenv("DEFAULT_SUBJECT_GENDER")
+
                 configuration = SubjectConfiguration(
-                    subject_name="Dave",  # Default subject name
-                    gender="Male",  # Default gender
+                    subject_name=default_subject_name,  # Default subject name
+                    gender=default_gender,  # Default gender
+                    family_name=default_subject_family_name,  # Default family name
                     system_instructions=chat_instructions,
                     core_system_instructions=core_instructions
                 )

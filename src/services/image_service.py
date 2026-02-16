@@ -360,32 +360,6 @@ class ImageService:
             filename=filename
         )
 
-    def find_and_process_images_with_magick(self):
-        """Find and process images with ImageMagick."""
-        # Find MediaMetadata where processed=False and media_type starts with "image/"
-        images_metadata = self.db.get_session().query(MediaMetadata).filter(
-            MediaMetadata.processed == False,
-            MediaMetadata.media_type.like('image/%')
-        ).all()
-        print(f"Found {len(images_metadata)} images to process with ImageMagick")
-
-        if not images_metadata:
-            raise NotFoundError(f"Images with IDs  not found")
-
-        for image_metadata in images_metadata:
-
-            image = self.storage.get_image_by_metadata_id(image_metadata.id)
-            if not image:
-                raise NotFoundError(f"Image with ID {image_metadata.id} not found")
-            print(f"Processing image {image_metadata.id}. Description: {image_metadata.description} with Magick")
-            try:
-                thumbnail_data = ImageService.create_thumbnail_from_bytes(image.image_data)
-            except Exception as e:
-                print(f"Error processing image {image_metadata.id}. Description: {image_metadata.description} with Magick: {e}")
-                continue
-            print(f"Done Processing image {image_metadata.id}. Description: {image_metadata.description} with Magick")
-            image.thumbnail_data = thumbnail_data
-            self.storage.update_image_thumbnail(image_id=image.id, thumbnail_data=thumbnail_data)
 
     @staticmethod
     def to_response_model(image: MediaMetadata) -> dict:
