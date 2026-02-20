@@ -1,6 +1,6 @@
 # import-processor
 
-Museum of Dave import processor - a CLI tool for importing WhatsApp messages, iMessage conversations, Facebook Messenger messages, Facebook albums, Facebook places, Instagram messages, and processing media thumbnails/EXIF data.
+Museum of Dave import processor - a CLI tool for importing WhatsApp messages, iMessage conversations, Facebook Messenger messages, Facebook albums, Facebook places, Instagram messages, merging/normalising contacts, and processing media thumbnails/EXIF data.
 
 ## Commands
 
@@ -172,6 +172,81 @@ import-processor thumbnails --list
 import-processor thumbnails --reprocess
 ```
 
+### contacts-normalise
+
+Merge contact records by grouping emails and names that refer to the same person. Uses fuzzy name matching, email normalization, exclusions, and optional email match sets. Writes to the contacts database table. STDIN is not supported.
+
+**Input sources:** JSON file or PostgreSQL (when `CONTACTS_QUERY` is set in .env)
+
+```bash
+# From JSON file
+import-processor contacts input.json
+
+# From database (requires CONTACTS_QUERY in .env)
+import-processor contacts
+
+# With custom exclusions and email matches
+import-processor contacts -exclusions exclusions.json -email-matches email_matches.json input.json
+```
+
+**Flags:**
+- `-workers N` - Number of concurrent workers (default: CPU count)
+- `-classifications FILE` - JSON file mapping rel_type values (friend, family, colleague, etc.) to contact names. Applied after contacts are written to the database. Default: email_classifications.json
+- `-email-matches FILE` - JSON file with absolute email match sets
+- `-exclusions FILE` - JSON file with email and name exclusion patterns (default: built-in list)
+
+Output is always written to the contacts database table. Database config is required.
+
+**Requirements:**
+- Either: positional arg (file path) OR `CONTACTS_QUERY` in .env for database mode
+- `CONTACTS_RELATIONSHIP_QUERY` in .env for relationship finding (optional; relationships and social media are always processed when configured)
+- Database config (DB_HOST, etc.) required (always writes to contacts table)
+
+**Input format (JSON):**
+```json
+[
+  {"email": "john@example.com", "names": ["John Doe", "John"]},
+  {"email": "jdoe@example.com", "names": ["John Doe"]}
+]
+```
+
+**Email match sets (`-email-matches`):**
+```json
+[
+  {"primary_name": "Dave Burton", "emails": ["dave@a.com", "dave@b.com"]}
+]
+```
+
+**Exclusions (`-exclusions`):**
+```json
+{
+  "email": ["no-reply", "noreply", "marketing"],
+  "name": ["undisclosed", "marketing"]
+}
+```
+A record is excluded if the email contains any `email` pattern or the name contains any `name` pattern. Built-in defaults used if no file provided.
+
+**Email classifications (`-classifications`, applied after contacts are written to the database):**
+```json
+{
+  "friend": ["Jane Doe", "John Smith"],
+  "family": ["Mum", "Dad"],
+  "colleague": [],
+  "acquaintance": [],
+  "business": [],
+  "social": [],
+  "promotional": [],
+  "spam": [],
+  "important": [],
+  "unknown": []
+}
+```
+Each key is a rel_type value. Names are matched against contact `name` and `alternative_names` (case-insensitive). Matching contacts are updated to set `rel_type` to that value.
+
+**Output:** Written to the contacts database table (id, name, alternative_names, email, numwhatsapp, numimessages, etc.). Internal JSON format uses the same structure.
+
+**Config files:** `email_matches.json`, `exclusions.json`, and `email_classifications.json` in the import-processor directory serve as reference defaults.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and configure:
@@ -185,6 +260,8 @@ Copy `.env.example` to `.env` and configure:
 - **INSTAGRAM_DIRECTORY_PATH** - Path to Instagram messages directory (optional if using `--path`)
 - **FILESYSTEM_IMPORT_DIRECTORIES** - Comma-separated paths for filesystem import (optional if using `--path`)
 - **FILESYSTEM_EXCLUDE_PATTERNS** - Comma-separated exclude patterns (optional)
+- **CONTACTS_QUERY** - SQL query for contact records (required for contacts-normalise database mode). Must return single column with comma-separated entries. Supported formats: `"Name <email@example.com>"`, `"email@example.com (Name)"`, `"email@example.com"`
+- **CONTACTS_RELATIONSHIP_QUERY** - SQL query for relationships (required for contacts-normalise `-relationship`). Must return `from` and `to` columns with email addresses
 
 ## Build
 

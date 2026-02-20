@@ -5272,3 +5272,196 @@ body {
         width: 100%;
     }
 }
+
+/* --- Relationships Modal (inline graph from rel.html) --- */
+.relationships-modal-content {
+    width: 95vw;
+    max-width: 95vw;
+    max-height: 95vh;
+    height: 95vh;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #f4f7f9;
+}
+
+.relationships-modal-content .rel-dashboard {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 15px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    align-items: start;
+}
+
+.relationships-modal-content .rel-control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.relationships-modal-content .rel-control-group label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #666;
+}
+
+.relationships-modal-content .rel-hub-label {
+    color: #1a73e8 !important;
+    font-weight: bold !important;
+}
+
+.relationships-modal-content .rel-checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px 16px;
+    font-size: 12px;
+    font-weight: normal;
+    text-transform: none;
+}
+
+.relationships-modal-content .rel-checkbox-grid label {
+    font-size: 12px;
+    font-weight: normal;
+    text-transform: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.relationships-modal-content .rel-control-group input[type="text"] {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    width: 180px;
+}
+
+.relationships-modal-content .rel-btn-row {
+    display: flex;
+    gap: 10px;
+}
+
+.relationships-modal-content .rel-btn {
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.relationships-modal-content .rel-btn-primary {
+    background: #1a73e8;
+    color: white;
+}
+
+.relationships-modal-content .rel-btn-secondary {
+    background: #e8eaed;
+    color: #3c4043;
+}
+
+.relationships-modal-content .rel-main-layout {
+    display: flex;
+    gap: 20px;
+    flex: 1;
+    min-height: 0;
+}
+
+.relationships-modal-content .rel-cy-container {
+    position: relative;
+    height: 100%;
+    flex-grow: 1;
+    min-height: 300px;
+    border-radius: 12px;
+    border: 1px solid #ddd;
+    overflow: hidden;
+    background: white;
+}
+
+.relationships-modal-content #rel-cy {
+    width: 100%;
+    height: 100%;
+}
+
+.relationships-modal-content .rel-legend {
+    width: 220px;
+    flex-shrink: 0;
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid #ddd;
+    font-size: 13px;
+}
+
+.relationships-modal-content .rel-node-details {
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.relationships-modal-content .rel-legend-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+    gap: 10px;
+}
+
+.relationships-modal-content .rel-circle {
+    border-radius: 50%;
+    background: #4285f4;
+}
+
+.relationships-modal-content .rel-circle.rel-subject {
+    width: 24px;
+    height: 24px;
+    background: #1a73e8;
+    border: 2px solid #000;
+}
+
+.relationships-modal-content .rel-circle.rel-influential {
+    width: 18px;
+    height: 18px;
+}
+
+.relationships-modal-content .rel-circle.rel-standard {
+    width: 10px;
+    height: 10px;
+}
+
+.relationships-modal-content .rel-line {
+    height: 4px;
+    background: #4285f4;
+    border-radius: 2px;
+}
+
+.relationships-modal-content .rel-line.rel-strong {
+    width: 30px;
+    height: 6px;
+}
+
+.relationships-modal-content .rel-line.rel-weak {
+    width: 30px;
+    height: 2px;
+    background: #e0e0e0;
+}
+
+.relationships-modal-content .rel-tip {
+    font-size: 11px;
+    color: #777;
+    margin-top: 15px;
+}
+
+.relationships-modal-content .rel-balloon {
+    position: absolute;
+    display: none;
+    background: rgba(33, 37, 41, 0.95);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    pointer-events: none;
+    z-index: 1000;
+    font-size: 13px;
+}

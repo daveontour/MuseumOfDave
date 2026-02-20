@@ -15,6 +15,8 @@
     <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <!-- Font Awesome for icons (optional, but nice for buttons) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Cytoscape for relationship graph -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
 </head>
 
 <body>
@@ -134,6 +136,9 @@
                     </button>
                     <button type="button" class="more-options-btn" id="contacts-sidebar-btn">
                         <i class="fas fa-address-book"></i> Contacts
+                    </button>
+                    <button type="button" class="more-options-btn" id="relationships-btn">
+                        <i class="fas fa-project-diagram"></i> Relationships
                     </button>
 
                 </div>
@@ -1480,6 +1485,73 @@
                     </div>
                     <!-- Document List -->
                     <div class="reference-documents-list" id="reference-documents-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Relationships Modal -->
+        <div id="relationships-modal" class="modal">
+            <div class="modal-content relationships-modal-content">
+                <button id="close-relationships-modal" class="modal-close-btn">&times;</button>
+                <div class="rel-dashboard">
+
+                    <div class="rel-control-group rel-type-filters">
+                        <label>Contact Types Filters</label>
+                        <div class="rel-checkbox-grid">
+                            <label><input type="checkbox" id="rel-type-friend" checked class="rel-type-cb"> Friend</label>
+                            <label><input type="checkbox" id="rel-type-family" checked class="rel-type-cb"> Family</label>
+                            <label><input type="checkbox" id="rel-type-colleague" checked class="rel-type-cb"> Colleague</label>
+                            <label><input type="checkbox" id="rel-type-acquaintance" checked class="rel-type-cb"> Acquaintance</label>
+                            <label><input type="checkbox" id="rel-type-business" checked class="rel-type-cb"> Business</label>
+                            <label><input type="checkbox" id="rel-type-social" checked class="rel-type-cb"> Social</label>
+                            <label><input type="checkbox" id="rel-type-promotional" checked class="rel-type-cb"> Promotional</label>
+                            <label><input type="checkbox" id="rel-type-unknown" checked class="rel-type-cb"> Unknown</label>
+                        </div>
+                    </div>
+                    <div class="rel-control-group rel-source-filters">
+                        <label>Source Filters</label>
+                        <div class="rel-checkbox-grid">
+                            <label><input type="checkbox" id="rel-source-email" checked class="rel-source-cb"> Email</label>
+                            <label><input type="checkbox" id="rel-source-facebook" checked class="rel-source-cb"> Facebook</label>
+                            <label><input type="checkbox" id="rel-source-whatsapp" checked class="rel-source-cb"> WhatsApp</label>
+                            <label><input type="checkbox" id="rel-source-sms-imessage" checked class="rel-source-cb"> SMS/iMessage</label>
+                            <label><input type="checkbox" id="rel-source-instagram" checked class="rel-source-cb"> Instagram</label>
+                        </div>
+                    </div>
+                    <div class="rel-control-group">
+                        <button type="button" class="rel-btn rel-btn-primary" id="rel-apply-filters-btn">Apply Filters</button>
+                        <button type="button" class="rel-btn rel-btn-primary" id="rel-pin-center-btn">Pin &amp; Center Hub</button>
+                        <button type="button" class="rel-btn rel-btn-primary" id="rel-fit-all-btn">Fit All</button>
+                    </div>
+                    <div class="rel-control-group">
+                        <label>Search Person</label>
+                        <input type="text" id="rel-search-input" placeholder="Type a name...">
+                    </div>
+                    <div class="rel-control-group">
+                        <label>Min Relationship Strength: <span id="rel-str-val">1</span></label>
+                        <input type="range" id="rel-filter-slider" min="1" max="10" value="1">
+                        <label>Base NodeSize: <span id="rel-size-val">20</span>px</label>
+                        <input type="range" id="rel-size-slider" min="10" max="40" value="20">
+
+                    </div>
+
+
+                </div>
+                <div class="rel-main-layout">
+                    <div class="rel-cy-container"><div id="rel-cy"></div><div id="rel-balloon" class="rel-balloon"></div></div>
+                    <div class="rel-legend">
+                        <div id="rel-node-details" class="rel-node-details" style="margin-bottom: 1em; padding: 0.75em; background: #f8f9fa; border-radius: 6px; min-height: 3em; font-size: 0.9em;">
+                            <em style="color: #666;">Click a person to view details</em>
+                        </div>
+                        <h4 style="margin-top:0">Map Legend</h4>
+                        <div class="rel-legend-item"><div class="rel-circle rel-subject"></div> <strong>Subject</strong></div>
+                        <div class="rel-legend-item"><div class="rel-circle rel-influential"></div> Influential</div>
+                        <div class="rel-legend-item"><div class="rel-circle rel-standard"></div> Standard</div>
+                        <hr>
+                        <div class="rel-legend-item"><div class="rel-line rel-strong"></div> Strong (8-10)</div>
+                        <div class="rel-legend-item"><div class="rel-line rel-weak"></div> Weak (1-3)</div>
+                        <p class="rel-tip"><em>Tip: Hover over a person to Focus on their network.</em></p>
+                    </div>
                 </div>
             </div>
         </div>

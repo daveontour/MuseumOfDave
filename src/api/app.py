@@ -1,5 +1,6 @@
 """FastAPI HTTP Server."""
 
+import math
 import os
 import re
 import subprocess
@@ -7707,6 +7708,186 @@ class RelationshipsListResponse(BaseModel):
     total: int
 
 
+class RelationshipGraphNode(BaseModel):
+    """Node for the relationship graph."""
+    id: str
+    name: str
+    contact_type: Optional[str] = None  # friend, family, colleague, acquaintance, business, social, promotional, unknown
+
+
+class RelationshipGraphLink(BaseModel):
+    """Link/edge for the relationship graph."""
+    source: str
+    target: str
+    strength: int
+
+
+class RelationshipGraphSampleResponse(BaseModel):
+    """Response model for sample relationship graph data (mocked)."""
+    nodes: List[RelationshipGraphNode]
+    links: List[RelationshipGraphLink]
+
+
+VALID_REL_TYPES = frozenset(
+    ["friend", "family", "colleague", "acquaintance", "business", "social", "promotional", "spam", "important", "unknown"]
+)
+
+# Source filter: SQL condition template for contact (use to_contact. or from_contact. as prefix)
+SOURCE_TO_CONDITION = {
+    "email": "({p}numemails > 0 OR ({p}email IS NOT NULL AND {p}email != ''))",
+    "facebook": "({p}numfacebook > 0 OR ({p}facebookid IS NOT NULL AND {p}facebookid != ''))",
+    "whatsapp": "({p}numwhatsapp > 0 OR ({p}whatsappid IS NOT NULL AND {p}whatsappid != ''))",
+    "sms-imessage": "({p}numsms > 0 OR {p}smsid IS NOT NULL OR {p}numimessages > 0 OR {p}imessageid IS NOT NULL)",
+    "instagram": "({p}numinstagram > 0 OR ({p}instagramid IS NOT NULL AND {p}instagramid != ''))",
+}
+
+# Map source filter to relationship.type values (r.type in the relationships table)
+SOURCE_TO_RELATIONSHIP_TYPES = {
+    "email": ["email"],
+    "facebook": ["facebook"],
+    "whatsapp": ["whatsapp"],
+    "sms-imessage": ["sms", "imessage"],
+    "instagram": ["instagram"],
+}
+
+
+# Source keys to SQL condition for contacts (no prefix)
+SOURCE_TO_CONTACT_CONDITION = {
+    "email": "numemails > 0",
+    "facebook": "numfacebook > 0",
+    "whatsapp": "numwhatsapp > 0",
+    "sms-imessage": "(numsms > 0 OR numimessages > 0)",
+    "instagram": "numinstagram > 0",
+}
+
+SOURCE_TO_SUM_CONDITION = {
+    "email": "COALESCE(numemails, 0)",
+    "facebook": "COALESCE(numfacebook, 0)",
+    "whatsapp": "COALESCE(numwhatsapp, 0)",
+    "sms-imessage": "COALESCE(numsms, 0) + COALESCE(numimessages, 0)",
+    "instagram": "COALESCE(numinstagram, 0)",
+}
+
+
+def _get_relationship_graph_from_db(types: Optional[List[str]] = None, sources: Optional[List[str]] = None) -> RelationshipGraphSampleResponse:
+    """Fetch relationship graph data from database (filtered contacts as nodes)."""
+    valid_types = [t for t in (types or []) if t in VALID_REL_TYPES]
+    valid_sources = [s for s in (sources or []) if s in SOURCE_TO_CONTACT_CONDITION]
+
+    # Types: default to friend, acquaintance, unknown; or use provided filter
+    if valid_types:
+        type_placeholders = ", ".join(f"'{t}'" for t in valid_types)
+        type_clause = f"rel_type IN ({type_placeholders})"
+    else:
+        type_clause = "rel_type IN ('friend', 'acquaintance', 'unknown')"
+
+    # Sources: default to any activity; or require at least one of the selected sources
+    if valid_sources:
+        source_conds = [SOURCE_TO_CONTACT_CONDITION[s] for s in valid_sources]
+        source_clause = " OR ".join(source_conds)
+        sum_clause = " + ".join(SOURCE_TO_SUM_CONDITION[s] for s in valid_sources)
+    else:
+        source_clause = "numwhatsapp > 0 OR numemails > 0 OR numimessages > 0 OR numsms > 0 OR numfacebook > 0 OR numinstagram > 0"
+        sum_clause = "COALESCE(numemails, 0) + COALESCE(numfacebook, 0) + COALESCE(numwhatsapp, 0) + COALESCE(numsms, 0) + COALESCE(numimessages, 0) + COALESCE(numinstagram, 0)"
+    sql = f"""
+        SELECT
+            id,
+            name,
+            rel_type,
+            is_group,
+            (numimessages > 0) AS has_imessage,
+            (numwhatsapp > 0) AS has_whatsapp,
+            (numemails > 0) AS has_email,
+            (numfacebook > 0) AS has_facebook,
+            (numsms > 0) AS has_sms_imessage,
+            (numinstagram > 0) AS has_instagram,
+            numemails,
+            numimessages,
+            numfacebook,
+            numwhatsapp,
+            numsms,
+            numinstagram,
+            {sum_clause} as total
+        FROM contacts
+        WHERE (id = 0 OR (
+            {type_clause}
+            AND ({source_clause}) 
+            AND (({sum_clause}) > 3)
+        ))
+        ORDER BY total DESC
+        LIMIT 500
+    """
+
+    print(sql)
+
+    session = db.get_session()
+    try:
+        rows = session.execute(text(sql)).fetchall()
+    finally:
+        session.close()
+
+    # Build nodes: subject (id=0) first if present, then others
+    nodes = []
+    subject_name = "Subject"
+    node_totals = {}  # node_id -> total for link strength
+    for row in rows:
+        cid = row.id
+        name = row.name or ""
+        rel_type = row.rel_type or "unknown"
+        total = getattr(row, "total", None) or 0
+        if cid == 0:
+            subject_name = name or subject_name
+        node_id = "0" if cid == 0 else (name or str(cid))
+        nodes.append(RelationshipGraphNode(id=node_id, name=name or str(cid), contact_type=rel_type))
+        if cid != 0:
+            node_totals[node_id] = total
+
+    # Subject first if not already
+    if nodes and nodes[0].id != "0":
+        subject_node = next((n for n in nodes if n.id == "0"), None)
+        if subject_node:
+            nodes = [subject_node] + [n for n in nodes if n.id != "0"]
+        else:
+            nodes = [RelationshipGraphNode(id="0", name=subject_name, contact_type=None)] + nodes
+
+    if not nodes:
+        sess = db.get_session()
+        try:
+            sub = sess.execute(text("SELECT name FROM contacts WHERE id = 0")).fetchone()
+            if sub and sub[0]:
+                subject_name = sub[0]
+        finally:
+            sess.close()
+        nodes = [RelationshipGraphNode(id="0", name=subject_name, contact_type=None)]
+
+    # Add link from each non-subject node to subject, strength = contact total (ln-scaled 1-10)
+    links = []
+    max_raw = max(node_totals.values()) if node_totals else 1
+    ln_max = math.log(max_raw + 1)
+    for node in nodes:
+        if node.id != "0":
+            raw = node_totals.get(node.id, 0)
+            if ln_max > 0:
+                strength = round(1 + 9 * math.log(raw + 1) / ln_max)
+            else:
+                strength = 1
+            strength = max(1, min(10, strength))
+            links.append(RelationshipGraphLink(source=node.id, target="0", strength=strength))
+
+    return RelationshipGraphSampleResponse(nodes=nodes, links=links)
+
+
+@app.get("/relationships/sample", response_model=RelationshipGraphSampleResponse)
+async def get_relationships_sample(
+    types: Optional[str] = Query(None, description="Comma-separated contact types: friend, family, colleague, acquaintance, business, social, promotional, unknown"),
+    sources: Optional[str] = Query(None, description="Comma-separated sources: email, facebook, whatsapp, sms-imessage, instagram")
+):
+    """Return relationship graph data from database (relationships involving contact id 0)."""
+    type_list = [t.strip().lower() for t in types.split(",") if t.strip()] if types else None
+    source_list = [s.strip().lower() for s in sources.split(",") if s.strip()] if sources else None
+    return _get_relationship_graph_from_db(types=type_list, sources=source_list)
+
+
 @app.post("/relationships/create-contacts-from-chat-sessions", response_model=CreateContactsFromChatSessionsResponse)
 async def create_contacts_from_chat_sessions():
     """Create contact entries from distinct combinations of chat_session and service values in the messages table.
@@ -8021,6 +8202,95 @@ async def get_contacts(
         )
     finally:
         session.close()
+
+
+REL_TYPE_KEYS = [
+    "friend", "family", "colleague", "acquaintance", "business",
+    "social", "promotional", "spam", "important", "unknown"
+]
+
+
+class UpdateClassificationRequest(BaseModel):
+    """Request to update a contact's classification."""
+    name: str
+    classification: str  # friend, family, colleague, acquaintance, business, social, promotional, spam, unknown
+
+
+def _get_email_classifications_path() -> Path:
+    """Path to email_classifications.json in import-processor directory."""
+    return Path(__file__).resolve().parent.parent.parent / "import-processor" / "email_classifications.json"
+
+
+def _migrate_classifications_to_rel_type(data: dict) -> dict:
+    """Convert old is_* keys to rel_type keys (friend, family, etc.)."""
+    old_to_new = {
+        "is_friend": "friend", "is_family": "family", "is_colleague": "colleague",
+        "is_acquaintance": "acquaintance", "is_business": "business", "is_social": "social",
+        "is_promotional": "promotional", "is_spam": "spam", "is_important": "important",
+        "is_unknown": "unknown",
+    }
+    migrated = {}
+    for k, v in data.items():
+        new_key = old_to_new.get(k, k)
+        if isinstance(v, list):
+            migrated[new_key] = v
+        else:
+            migrated[new_key] = v
+    for key in REL_TYPE_KEYS:
+        if key not in migrated:
+            migrated[key] = []
+    return migrated
+
+
+@app.patch("/contacts/update-classification")
+async def update_contact_classification(req: UpdateClassificationRequest):
+    """Update a contact's classification in the database and email_classifications.json."""
+    classification = (req.classification or "").strip().lower()
+    if not classification or classification not in VALID_REL_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid classification '{req.classification}'. Must be one of: friend, family, colleague, acquaintance, business, social, promotional, spam, important, unknown"
+        )
+
+    session = db.get_session()
+    try:
+        contact = session.query(Contacts).filter(Contacts.name == req.name).first()
+        if not contact:
+            raise HTTPException(status_code=404, detail=f"Contact not found: {req.name}")
+        if contact.id == 0:
+            raise HTTPException(status_code=400, detail="Cannot change classification of the subject (contact id=0)")
+
+        contact.rel_type = classification
+        session.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"Database update failed: {str(e)}")
+    finally:
+        session.close()
+
+    # Update email_classifications.json (new format: keys = rel_type values)
+    classifications_path = _get_email_classifications_path()
+    try:
+        data = {}
+        if classifications_path.exists():
+            with open(classifications_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data = _migrate_classifications_to_rel_type(data)
+        else:
+            data = {k: [] for k in REL_TYPE_KEYS}
+        for key in REL_TYPE_KEYS:
+            data[key] = [n for n in data[key] if n.strip().lower() != req.name.strip().lower()]
+        if classification != "unknown":
+            if req.name not in data[classification]:
+                data[classification].append(req.name)
+        with open(classifications_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update email_classifications.json: {str(e)}")
+
+    return {"message": "Classification updated", "name": req.name, "classification": classification}
 
 
 @app.post("/contacts/extract")

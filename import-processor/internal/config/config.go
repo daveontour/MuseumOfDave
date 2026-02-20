@@ -27,6 +27,10 @@ type Config struct {
 	FilesystemImportDirectories string
 	// FilesystemExcludePatterns is comma-separated fnmatch patterns
 	FilesystemExcludePatterns string
+	// ContactsQuery is SQL query for contact records (single column, comma-separated entries). Required for contacts-normalise database mode.
+	ContactsQuery string
+	// ContactsRelationshipQuery is SQL query for relationships (from, to columns). Required for contacts-normalise -relationship flag.
+	ContactsRelationshipQuery string
 }
 
 // DatabaseConfig holds database connection settings
@@ -65,6 +69,8 @@ func Load() (*Config, error) {
 	cfg.InstagramDirectoryPath = os.Getenv("INSTAGRAM_DIRECTORY_PATH")
 	cfg.FilesystemImportDirectories = os.Getenv("FILESYSTEM_IMPORT_DIRECTORIES")
 	cfg.FilesystemExcludePatterns = os.Getenv("FILESYSTEM_EXCLUDE_PATTERNS")
+	cfg.ContactsQuery = os.Getenv("CONTACTS_QUERY")
+	cfg.ContactsRelationshipQuery = os.Getenv("CONTACTS_RELATIONSHIP_QUERY")
 
 	return cfg, nil
 }

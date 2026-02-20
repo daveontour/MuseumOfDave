@@ -16,8 +16,9 @@ import (
 
 	"import-processor/internal/config"
 	"import-processor/internal/database"
-	facebookalbumsimport "import-processor/internal/import/facebookalbums"
+	contactsimport "import-processor/internal/import/contacts"
 	facebookimport "import-processor/internal/import/facebook"
+	facebookalbumsimport "import-processor/internal/import/facebookalbums"
 	facebookplacesimport "import-processor/internal/import/facebookplaces"
 	filesystemimport "import-processor/internal/import/filesystem"
 	imessageimport "import-processor/internal/import/imessage"
@@ -32,14 +33,15 @@ Usage:
   import-processor <command> [options]
 
 Commands:
-  whatsapp     Import WhatsApp messages from CSV directory
-  imessage     Import iMessage conversations from CSV directory
-  facebook         Import Facebook Messenger messages from JSON directory
-  facebook-albums  Import Facebook albums from JSON directory
-  facebook-places  Import Facebook places from posts JSON file(s)
-  instagram       Import Instagram messages from JSON directory
-  filesystem   Import images from filesystem directories
-  thumbnails   Process thumbnails and EXIF for media items
+  whatsapp          Import WhatsApp messages from CSV directory
+  imessage          Import iMessage conversations from CSV directory
+  facebook          Import Facebook Messenger messages from JSON directory
+  facebook-albums   Import Facebook albums from JSON directory
+  facebook-places   Import Facebook places from posts JSON file(s)
+  instagram        Import Instagram messages from JSON directory
+  filesystem        Import images from filesystem directories
+  thumbnails        Process thumbnails and EXIF for media items
+  contacts        Merge contact records (emails/names) into normalized output
 
 Run "import-processor <command> -h" for options per command.
 `
@@ -68,6 +70,8 @@ func main() {
 		runFilesystem()
 	case "thumbnails":
 		runThumbnails()
+	case "contacts":
+		runContactsNormalise()
 	case "-h", "--help", "help":
 		fmt.Print(helpSummary)
 		os.Exit(0)
@@ -789,7 +793,63 @@ func runInstagram() {
 	}
 }
 
-// stringSlice implements flag.Value for repeatable string flags
+func runContactsNormalise() {
+	fs := flag.NewFlagSet("contacts-normalise", flag.ExitOnError)
+	workers := fs.Int("workers", runtime.NumCPU(), "number of concurrent workers")
+	classificationsFile := fs.String("classifications", "email_classifications.json", "JSON file mapping boolean columns to contact names (applied after contacts are written)")
+	emailMatchesFile := fs.String("email-matches", "email_matches.json", "JSON file containing sets of email addresses that are absolute matches")
+	exclusionsFile := fs.String("exclusions", "", "JSON file containing email and name exclusion patterns (default: built-in list)")
+	fs.Parse(os.Args[2:])
+
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	// Determine input source: positional arg or database
+	positionalArg := ""
+	if fs.NArg() > 0 {
+		positionalArg = fs.Arg(0)
+	}
+	if fs.NArg() > 1 {
+		log.Fatalf("error: too many arguments (flags must come before positional arguments)")
+	}
+
+	// File input takes precedence over database when positional arg is provided
+	useDB := cfg.ContactsQuery != "" && positionalArg == ""
+	if !useDB && positionalArg == "" {
+		log.Fatalf("No input specified. Provide input.json or set CONTACTS_QUERY in .env for database mode")
+	}
+
+	// Always connect to DB (we always write to contacts table)
+	db, err := database.NewDB(cfg)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close()
+
+	contactsQuery := ""
+	if useDB {
+		contactsQuery = cfg.ContactsQuery
+	}
+	opts := contactsimport.RunOptions{
+		Workers:             *workers,
+		InputFile:           positionalArg,
+		EmailMatchesFile:    strings.TrimSpace(*emailMatchesFile),
+		ExclusionsFile:      strings.TrimSpace(*exclusionsFile),
+		ClassificationsFile: strings.TrimSpace(*classificationsFile),
+		ContactsQuery:       contactsQuery,
+		RelationshipQuery:   cfg.ContactsRelationshipQuery,
+		ContactsDB:          db,
+	}
+
+	ctx := context.Background()
+	if err := contactsimport.RunContactsNormalise(ctx, opts); err != nil {
+		log.Fatalf("Contacts normalise failed: %v", err)
+	}
+	fmt.Fprintln(os.Stderr, "Contacts normalise completed successfully")
+}
+
 type stringSlice []string
 
 func (s *stringSlice) String() string { return strings.Join(*s, ",") }
@@ -1110,7 +1170,7 @@ func processThumbnailsAndExif(ctx context.Context, db *database.DB, reprocess bo
 
 		if mediaType == nil || !strings.HasPrefix(strings.ToLower(*mediaType), "image/") {
 			skippedCount++
-		if scannedCount%500 == 0 {
+			if scannedCount%500 == 0 {
 				fmt.Fprintf(os.Stderr, "  Scanned %d rows, collected %d image items, skipped %d non-image items...\n",
 					scannedCount, len(workItems), skippedCount)
 			}
@@ -1170,14 +1230,14 @@ func processThumbnailsAndExif(ctx context.Context, db *database.DB, reprocess bo
 				statsMutex.Lock()
 				if result.Success {
 					processedCount++
-				if processedCount%25 == 0 {
+					if processedCount%25 == 0 {
 						percentage := float64(processedCount) / float64(len(workItems)) * 100
 						fmt.Fprintf(os.Stderr, "Progress: %d/%d items processed (%.1f%%) | Worker %d processed %d items | Errors: %d\n",
 							processedCount, len(workItems), percentage, workerID, workerProcessed, errorCount)
 					}
 				} else {
 					errorCount++
-				if result.Error != nil {
+					if result.Error != nil {
 						fmt.Fprintf(os.Stderr, "Error processing media item %d (blob %d, worker %d): %v\n",
 							work.MediaItemID, work.BlobID, workerID, result.Error)
 					}
