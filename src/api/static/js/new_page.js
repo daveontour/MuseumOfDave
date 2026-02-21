@@ -7603,9 +7603,8 @@ ${textContent}
                         throw new Error(err.detail || `HTTP ${response.status}`);
                     }
                     const data = await response.json();
-                    await loadContacts();
-                    if (data.created || data.updated) {
-                        alert(`Extracted: ${data.created || 0} created, ${data.updated || 0} updated`);
+                    if (data.status === 'started') {
+                        alert('Contacts extract started. Open Import Controls tab for progress.');
                     }
                 } catch (err) {
                     console.error('Error extracting contacts:', err);
@@ -7781,19 +7780,19 @@ ${textContent}
                         ['Instagram', node.data('num_instagram')]
                     ].filter(([, n]) => n != null && n > 0);
                     let html = `<strong>${nodeName}</strong><br>`;
+                    if (connections.length > 0) {
+                        connections.forEach(c => {
+                            html += `<span style="color:#666">Connection strength ${c.strength}/10</span><br/>`;
+                        });
+                    }
                     if (counts.length > 0) {
                         html += '<div style="margin-top: 0.5em; font-size: 1em; color: #555;">';
+                        html += '<label style="display:block; margin-top: 0.75em; font-weight: 600;">Number of Messages:</label>';
                         html += '<ul style="margin: 0.5em 0 0 1.2em; padding: 0;">';
                         html += counts.map(([label, n]) => `<li>${label}: ${n}</li>`).join(' ');
                         html += '</ul>';
                     }
-                    if (connections.length > 0) {
-                        html += '<ul style="margin: 0.5em 0 0 1.2em; padding: 0;">';
-                        connections.forEach(c => {
-                            html += `<li><span style="color:#666">Connection strength ${c.strength}/10</span></li>`;
-                        });
-                        html += '</ul>';
-                    }
+ 
                     if (nodeId !== '0') {
                         html += '<label style="display:block; margin-top: 0.75em; font-weight: 600;">Contact Type:</label>';
                         html += '<div id="rel-contact-type-radios" style="margin-top: 0.25em; display: flex; flex-wrap: wrap; gap: 0.5em;">';
@@ -7881,6 +7880,16 @@ ${textContent}
                     style: [
                         { selector: 'node', style: { 'background-color': '#4285f4', 'label': 'data(name)', 'font-size': '10px', 'text-valign': 'bottom', 'text-margin-y': 4 } },
                         { selector: 'node[id="0"]', style: { 'background-color': '#1a73e8', 'border-width': 3, 'border-color': '#000', 'z-index': 1000 } },
+                        { selector: 'node[contact_type="friend"]', style: { 'background-color': '#4CAF50' } },
+                        { selector: 'node[contact_type="family"]', style: { 'background-color': '#E91E63' } },
+                        { selector: 'node[contact_type="colleague"]', style: { 'background-color': '#FF9800' } },
+                        { selector: 'node[contact_type="acquaintance"]', style: { 'background-color': '#2196F3' } },
+                        { selector: 'node[contact_type="business"]', style: { 'background-color': '#607D8B' } },
+                        { selector: 'node[contact_type="social"]', style: { 'background-color': '#9C27B0' } },
+                        { selector: 'node[contact_type="promotional"]', style: { 'background-color': '#FFC107' } },
+                        { selector: 'node[contact_type="spam"]', style: { 'background-color': '#9E9E9E' } },
+                        { selector: 'node[contact_type="important"]', style: { 'background-color': '#00BCD4' } },
+                        { selector: 'node[contact_type="unknown"]', style: { 'background-color': '#BDBDBD' } },
                         { selector: 'edge', style: { 'width': 'data(strength)', 'line-color': '#e0e0e0', 'curve-style': 'bezier', 'opacity': 0.6 } },
                         { selector: 'edge[source="0"], edge[target="0"]', style: { 'line-color': '#bbdefb' } },
                         { selector: '.hidden', style: { 'display': 'none' } },
@@ -10484,7 +10493,8 @@ ${textContent}
                         facebook_albums: 'import-last-run-facebook_albums',
                         facebook_places: 'import-last-run-facebook_places',
                         filesystem: 'import-last-run-filesystem',
-                        thumbnails: 'import-last-run-thumbnails'
+                        thumbnails: 'import-last-run-thumbnails',
+                        contacts: 'import-last-run-contacts'
                     };
                     for (const [importType, elementId] of Object.entries(mapping)) {
                         const el = document.getElementById(elementId);
@@ -10958,7 +10968,8 @@ ${textContent}
                 facebook_albums: '/facebook/albums/import/cancel',
                 facebook_places: '/facebook/import-places/cancel',
                 filesystem: '/images/import/cancel',
-                thumbnails: '/images/process-thumbnails/cancel'
+                thumbnails: '/images/process-thumbnails/cancel',
+                contacts: '/contacts/extract/cancel'
             };
 
             function setImportStatus(text, isError = false) {
@@ -11007,6 +11018,8 @@ ${textContent}
                         const p1 = `Phase 1: ${data.phase1_scanned || 0} scanned, ${data.phase1_updated || 0} updated`;
                         const p2 = `Phase 2: ${data.phase2_scanned || 0}/${data.phase2_total || 0} scanned, ${data.phase2_processed || 0} processed, ${data.phase2_errors || 0} errors`;
                         return data.phase === '2' ? `${p1} | ${p2}` : p1;
+                    case 'contacts':
+                        return data.status_line || 'Processing contacts...';
                     default:
                         return JSON.stringify(data).substring(0, 100);
                 }
@@ -11037,7 +11050,8 @@ ${textContent}
                 facebook_albums: { needsInput: true, title: 'Facebook Albums Import', fields: [{ id: 'directory_path', key: 'facebook_albums_import_directory', label: 'Export Directory', placeholder: 'e.g., G:\\My Drive\\meta-2026-Jan-11\\your_facebook_activity\\posts', required: true }], run: async (vals) => { const r = await fetch('/facebook/albums/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ directory_path: vals.directory_path }) }); return r; }, stream: '/facebook/albums/import/stream' },
                 facebook_places: { needsInput: true, title: 'Facebook Places Import', fields: [{ id: 'file_path', key: 'facebook_places_import_file', label: 'Facebook Posts JSON File', placeholder: 'e.g., G:\\My Drive\\meta-2026-Jan-11\\your_posts__check_ins__photos_and_videos_1.json', required: true }], run: async (vals) => { const r = await fetch('/facebook/import-places', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_path: vals.file_path }) }); return r; }, stream: '/facebook/import-places/stream' },
                 filesystem: { needsInput: true, title: 'Filesystem Image Import', fields: [{ id: 'root_directory', key: 'filesystem_import_directory', label: 'Root Directory(ies)', placeholder: 'e.g., C:\\Users\\Dave\\Pictures; D:\\Photos', required: true }, { id: 'max_images', key: 'filesystem_import_max_images', label: 'Max Images (Optional)', placeholder: 'Leave empty for all', required: false, type: 'number' }], run: async (vals) => { const body = { root_directory: vals.root_directory, create_thumb_and_get_exif: false }; if (vals.max_images) body.max_images = parseInt(vals.max_images, 10); const r = await fetch('/images/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return r; }, stream: '/images/import/stream' },
-                thumbnails: { needsInput: false, title: 'Image Processing', run: async () => { const r = await fetch('/images/process-thumbnails', { method: 'POST' }); return r; }, stream: '/images/process-thumbnails/stream' }
+                thumbnails: { needsInput: false, title: 'Image Processing', run: async () => { const r = await fetch('/images/process-thumbnails', { method: 'POST' }); return r; }, stream: '/images/process-thumbnails/stream' },
+                contacts: { needsInput: false, title: 'Contacts Merge', run: async () => { const r = await fetch('/contacts/extract', { method: 'POST' }); return r; }, stream: '/contacts/extract/stream' }
             };
 
             async function showEmailProcessingModal(onSubmit) {
@@ -11229,8 +11243,8 @@ ${textContent}
             }
 
             async function checkInitialImportStatus() {
-                const types = ['email_processing','imessage','whatsapp','facebook','instagram','facebook_albums','facebook_places','filesystem','thumbnails'];
-                const statusEndpoints = { email_processing: '/emails/process/status', imessage: '/imessages/import/status', whatsapp: '/whatsapp/import/status', facebook: '/facebook/import/status', instagram: '/instagram/import/status', facebook_albums: '/facebook/albums/import/status', facebook_places: '/facebook/import-places/status', filesystem: '/images/import/status', thumbnails: '/images/process-thumbnails/status' };
+                const types = ['email_processing','imessage','whatsapp','facebook','instagram','facebook_albums','facebook_places','filesystem','thumbnails','contacts'];
+                const statusEndpoints = { email_processing: '/emails/process/status', imessage: '/imessages/import/status', whatsapp: '/whatsapp/import/status', facebook: '/facebook/import/status', instagram: '/instagram/import/status', facebook_albums: '/facebook/albums/import/status', facebook_places: '/facebook/import-places/status', filesystem: '/images/import/status', thumbnails: '/images/process-thumbnails/status', contacts: '/contacts/extract/status' };
                 for (const t of types) {
                     try {
                         const r = await fetch(statusEndpoints[t]);

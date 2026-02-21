@@ -246,6 +246,23 @@ thumbnail_processing_progress: Dict[str, Any] = {
 thumbnail_processing_sse_clients: List[asyncio.Queue] = []
 thumbnail_processing_sse_clients_lock = threading.Lock()
 
+# ---------------------------------------------------------------------------
+# Contacts extract (import-processor contacts) state
+# ---------------------------------------------------------------------------
+
+contacts_extract_lock = threading.Lock()
+contacts_extract_cancelled = threading.Event()
+contacts_extract_in_progress = False
+
+contacts_extract_progress: Dict[str, Any] = {
+    "status": "idle",  # idle, in_progress, completed, cancelled, error
+    "error_message": None,
+    "status_line": None,
+}
+
+contacts_extract_sse_clients: List[asyncio.Queue] = []
+contacts_extract_sse_clients_lock = threading.Lock()
+
 
 # ---------------------------------------------------------------------------
 # Helper: record import run results
@@ -685,6 +702,50 @@ def broadcast_thumbnail_processing_event_sync(event_type: str, data: Dict[str, A
         for client in disconnected_clients:
             if client in thumbnail_processing_sse_clients:
                 thumbnail_processing_sse_clients.remove(client)
+
+
+# ---------------------------------------------------------------------------
+# Contacts extract state functions
+# ---------------------------------------------------------------------------
+
+def update_contacts_extract_progress_state(**kwargs):
+    """Thread-safe function to update contacts extract progress state."""
+    global contacts_extract_progress
+    with contacts_extract_lock:
+        for key, value in kwargs.items():
+            if key in contacts_extract_progress:
+                contacts_extract_progress[key] = value
+
+
+def get_contacts_extract_progress_state() -> Dict[str, Any]:
+    """Thread-safe function to get current contacts extract progress state."""
+    global contacts_extract_progress
+    with contacts_extract_lock:
+        return contacts_extract_progress.copy()
+
+
+def broadcast_contacts_extract_event_sync(event_type: str, data: Dict[str, Any]):
+    """Thread-safe function to queue contacts extract progress event for SSE clients."""
+    global contacts_extract_sse_clients
+    event_data = {
+        "type": event_type,
+        "data": data
+    }
+    message = f"data: {json.dumps(event_data)}\n\n"
+
+    with contacts_extract_sse_clients_lock:
+        disconnected_clients = []
+        for client_queue in contacts_extract_sse_clients:
+            try:
+                client_queue.put_nowait(message)
+            except asyncio.QueueFull:
+                pass
+            except Exception:
+                disconnected_clients.append(client_queue)
+
+        for client in disconnected_clients:
+            if client in contacts_extract_sse_clients:
+                contacts_extract_sse_clients.remove(client)
 
 
 # ---------------------------------------------------------------------------

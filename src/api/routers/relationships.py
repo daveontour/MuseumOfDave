@@ -1,64 +1,27 @@
 """Relationship and contact routes."""
+import asyncio
 import json
 import math
+import os
+import subprocess
+import threading
 from pathlib import Path
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy import text
-from sqlalchemy.orm import joinedload
 
-from ...database.models import Contacts, Relationship, IMessage
-from ...services.relationship_service import RelationshipService
+from ...database.models import Contacts, IMessage
 from ..deps import db
+from .. import state as import_state
 
 router = APIRouter()
 
 # ---------------------------------------------------------------------------
 # Pydantic models
 # ---------------------------------------------------------------------------
-
-class CreateContactsFromChatSessionsResponse(BaseModel):
-    """Response model for creating contacts from chat sessions."""
-    message: str
-    total_sessions: int
-    contacts_created: int
-    contacts_existing: int
-    errors: List[str] = []
-
-
-class CreateContactsFromEmailsResponse(BaseModel):
-    """Response model for creating contacts from emails."""
-    message: str
-    total_addresses: int
-    contacts_created: int
-    contacts_existing: int
-    errors: List[str] = []
-
-
-class MatchedContactPair(BaseModel):
-    """Model for a pair of matched contacts."""
-    contact_id_1: int
-    name_1: str
-    contact_id_2: int
-    name_2: str
-    match_reason: str
-
-
-class MergeContactsResponse(BaseModel):
-    """Response model for merging contacts."""
-    message: str
-    matched_contacts: List[MatchedContactPair]
-    contacts_merged: int
-
-
-class ContactInfo(BaseModel):
-    """Contact information model."""
-    id: int
-    name: str
-    email: Optional[str] = None
-
 
 class ContactResponse(BaseModel):
     """Response model for a contact."""
@@ -112,28 +75,6 @@ class ContactResponseShort(BaseModel):
 class ContactsListResponse(BaseModel):
     """Response model for list of contacts."""
     contacts: List[ContactResponseShort]
-    total: int
-
-
-class RelationshipResponse(BaseModel):
-    """Response model for a relationship."""
-    id: int
-    source: ContactInfo
-    target: ContactInfo
-    type: str
-    description: Optional[str] = None
-    ai_description: Optional[str] = None
-    strength: Optional[int] = None
-    is_active: bool
-    is_personal: bool
-    is_deleted: bool
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-
-
-class RelationshipsListResponse(BaseModel):
-    """Response model for list of relationships."""
-    relationships: List[RelationshipResponse]
     total: int
 
 
@@ -363,228 +304,6 @@ def _get_relationship_graph_from_db(types: Optional[List[str]] = None, sources: 
     return RelationshipGraphSampleResponse(nodes=nodes, links=links)
 
 
-def find_likely_matching_contacts():
-    """Find likely matching contacts."""
-
-    sql = """WITH normalized_contacts AS (
-    SELECT
-        id,
-        name,
-        -- Lowercase email for case-insensitive match
-        LOWER(email) as clean_email,
-        -- Lowercase name for matching
-        LOWER(name) as clean_name,
-
-        -- IMPROVED CLEANING LOGIC:
-        -- 1. Strip non-digits.
-        -- 2. Check if the result is at least 7 digits long.
-        -- 3. If valid, keep it; otherwise set to NULL.
-        CASE
-            WHEN LENGTH(REGEXP_REPLACE(whatsappid, '\D', '', 'g')) >= 7
-            THEN REGEXP_REPLACE(whatsappid, '\D', '', 'g')
-            ELSE NULL
-        END as clean_whatsapp,
-
-        CASE
-            WHEN LENGTH(REGEXP_REPLACE(smsid, '\D', '', 'g')) >= 7
-            THEN REGEXP_REPLACE(smsid, '\D', '', 'g')
-            ELSE NULL
-        END as clean_sms,
-
-        CASE
-            WHEN LENGTH(REGEXP_REPLACE(imessageid, '\D', '', 'g')) >= 7
-            THEN REGEXP_REPLACE(imessageid, '\D', '', 'g')
-            ELSE NULL
-        END as clean_imessage
-
-    FROM contacts
-)
-SELECT
-    A.id AS contact_id_1,
-    A.name AS name_1,
-    B.id AS contact_id_2,
-    B.name AS name_2,
-    CASE
-        WHEN A.clean_email = B.clean_email THEN 'Shared Email'
-        WHEN A.clean_name = B.clean_name THEN 'Exact Name Match'
-        -- Check if any phone number in A matches any phone number in B
-        WHEN (A.clean_whatsapp IS NOT NULL AND A.clean_whatsapp IN (B.clean_whatsapp, B.clean_sms, B.clean_imessage)) OR
-             (A.clean_sms IS NOT NULL AND A.clean_sms IN (B.clean_whatsapp, B.clean_sms, B.clean_imessage)) OR
-             (A.clean_imessage IS NOT NULL AND A.clean_imessage IN (B.clean_whatsapp, B.clean_sms, B.clean_imessage))
-             THEN 'Shared Phone Number'
-        ELSE 'Unknown'
-    END AS match_reason
-FROM normalized_contacts A
-JOIN normalized_contacts B ON A.id < B.id
-WHERE
-    (A.clean_email = B.clean_email AND A.clean_email IS NOT NULL)
-    OR
-    (A.clean_name = B.clean_name AND A.clean_name IS NOT NULL)
-    OR
-    (   -- Cross-check all phone columns against each other
-        (A.clean_whatsapp IS NOT NULL AND A.clean_whatsapp IN (B.clean_whatsapp, B.clean_sms, B.clean_imessage)) OR
-        (A.clean_sms IS NOT NULL AND A.clean_sms IN (B.clean_whatsapp, B.clean_sms, B.clean_imessage)) OR
-        (A.clean_imessage IS NOT NULL AND A.clean_imessage IN (B.clean_whatsapp, B.clean_sms, B.clean_imessage))
-    )
-ORDER BY A.id;"""
-
-    session = db.get_session()
-    try:
-        contacts = session.execute(text(sql)).fetchall()
-        return contacts
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error finding likely matching contacts: {str(e)}"
-        )
-    finally:
-        session.close()
-
-
-def merge_two_contacts(contact_id_1: int, contact_id_2: int):
-    """Merge two contacts."""
-
-    session = db.get_session()
-    try:
-        contact_1 = session.query(Contacts).filter(Contacts.id == contact_id_1).first()
-        contact_2 = session.query(Contacts).filter(Contacts.id == contact_id_2).first()
-
-        if  contact_1 and  contact_2:
-            # pass
-            # raise HTTPException(
-            #     status_code=404,
-            #     detail=f"Contact with ID {contact_id_1} or {contact_id_2} not found"
-            # )
-
-        #merge the contacts
-
-            def choose_better_name(name1: str, name2: str) -> str:
-                """Choose the better name and fix capitalization.
-
-                Prefers names that don't look like email addresses.
-                Applies title case capitalization.
-                """
-                def is_email_like(name: str) -> bool:
-                    """Check if name looks like an email address."""
-                    if not name:
-                        return True
-                    return '@' in name or '.' in name.split()[-1] if name.split() else False
-
-                def fix_capitalization(name: str) -> str:
-                    """Fix capitalization to title case, handling special cases."""
-                    if not name:
-                        return name
-
-                    # Don't modify if it looks like an email
-                    if '@' in name:
-                        return name
-
-                    # Split into words and capitalize each
-                    words = name.split()
-                    capitalized_words = []
-
-                    for word in words:
-                        # Handle common prefixes (Mc, Mac, O', etc.)
-                        if len(word) > 2 and word[1:2].islower():
-                            # Already has mixed case, preserve it
-                            capitalized_words.append(word)
-                        elif word.lower() in ['van', 'de', 'der', 'von', 'la', 'le', 'du', 'da', 'di', 'del', 'della']:
-                            # Keep lowercase for common prefixes
-                            capitalized_words.append(word.lower())
-                        elif word.startswith("Mc") and len(word) > 2:
-                            # McName -> McName
-                            capitalized_words.append(word[0] + word[1].upper() + word[2:].lower())
-                        elif word.startswith("Mac") and len(word) > 3:
-                            # MacName -> MacName
-                            capitalized_words.append(word[:3] + word[3:].capitalize())
-                        elif word.startswith("O'") and len(word) > 2:
-                            # O'Name -> O'Name
-                            capitalized_words.append(word[:2] + word[2:].capitalize())
-                        else:
-                            # Standard title case
-                            capitalized_words.append(word.capitalize())
-
-                    return ' '.join(capitalized_words)
-
-                # Choose the better name
-                name1_is_email = is_email_like(name1)
-                name2_is_email = is_email_like(name2)
-
-                if name1_is_email and not name2_is_email:
-                    # name2 is better
-                    return fix_capitalization(name2)
-                elif name2_is_email and not name1_is_email:
-                    # name1 is better
-                    return fix_capitalization(name1)
-                elif not name1_is_email and not name2_is_email:
-                    # Both are valid names, prefer the longer one (more complete)
-                    if len(name1.strip()) >= len(name2.strip()):
-                        return fix_capitalization(name1)
-                    else:
-                        return fix_capitalization(name2)
-                else:
-                    # Both look like emails, use name1 and fix capitalization
-                    return fix_capitalization(name1)
-
-            # Choose the better name
-            name1 = contact_1.name or ""
-            name2 = contact_2.name or ""
-            chosen_name = choose_better_name(name1, name2)
-
-            # Determine which name was chosen and add the other to alternative_names
-            # Compare normalized versions to see which one was selected
-            name1_normalized = name1.strip().lower()
-            name2_normalized = name2.strip().lower()
-            chosen_normalized = chosen_name.strip().lower()
-
-            # Add the name that wasn't chosen to alternative_names
-            if chosen_normalized == name1_normalized and name2:
-                # name1 was chosen, add name2 to alternatives
-                other_name = name2
-            elif chosen_normalized == name2_normalized and name1:
-                # name2 was chosen, add name1 to alternatives
-                other_name = name1
-            else:
-                # If names are the same or one is empty, just use the chosen name
-                other_name = None
-
-            contact_1.name = chosen_name
-            if other_name and other_name.strip():
-                # Don't add if the alternative name is the same as the chosen name
-                if other_name.strip().lower() != chosen_name.strip().lower():
-                    if contact_1.alternative_names:
-                        # Check if other_name is already in alternative_names
-                        alt_names_list = [n.strip() for n in contact_1.alternative_names.split(',')]
-                        if other_name.strip() not in alt_names_list:
-                            contact_1.alternative_names = f"{contact_1.alternative_names}, {other_name}"
-                    else:
-                        contact_1.alternative_names = other_name
-            contact_1.email = f"{contact_1.email}, {contact_2.email}"
-            contact_1.numemails = contact_1.numemails + contact_2.numemails
-            contact_1.facebookid = f"{contact_1.facebookid}, {contact_2.facebookid}"
-            contact_1.numfacebook = contact_1.numfacebook + contact_2.numfacebook
-            contact_1.whatsappid = f"{contact_1.whatsappid}, {contact_2.whatsappid}"
-            contact_1.numwhatsapp = contact_1.numwhatsapp + contact_2.numwhatsapp
-            contact_1.imessageid = f"{contact_1.imessageid}, {contact_2.imessageid}"
-            contact_1.numimessages = contact_1.numimessages + contact_2.numimessages
-            contact_1.smsid = f"{contact_1.smsid}, {contact_2.smsid}"
-            contact_1.numsms = contact_1.numsms + contact_2.numsms
-            contact_1.instagramid = f"{contact_1.instagramid}, {contact_2.instagramid}"
-            contact_1.numinstagram = contact_1.numinstagram + contact_2.numinstagram
-            session.commit()
-
-            #delete the second contact
-            session.delete(contact_2)
-            session.commit()
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error merging contacts: {str(e)}"
-        )
-    finally:
-        session.close()
-
-
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -599,202 +318,6 @@ async def get_relationship_strength(
     type_list = [t.strip().lower() for t in types.split(",") if t.strip()] if types else None
     source_list = [s.strip().lower() for s in sources.split(",") if s.strip()] if sources else None
     return _get_relationship_graph_from_db(types=type_list, sources=source_list, max_nodes=max_nodes)
-
-
-@router.post("/relationships/create-contacts-from-chat-sessions", response_model=CreateContactsFromChatSessionsResponse)
-async def create_contacts_from_chat_sessions():
-    """Create contact entries from distinct combinations of chat_session and service values in the messages table.
-
-    This endpoint:
-    1. Retrieves all distinct combinations of chat_session and service from the messages table
-    2. Creates a contact entry for each chat_session/service combination
-    3. Uses the chat_session value as the contact name
-    4. Sets service-specific fields based on the service type:
-       - iMessage: sets imessageid and numimessages
-       - SMS: sets smsid and numsms
-       - WhatsApp: sets whatsappid and numwhatsapp
-       - Facebook Messenger: sets facebookid and numfacebook
-       - Instagram: sets instagramid and numinstagram
-    5. Skips sessions with less than 2 messages
-
-    Returns:
-        CreateContactsFromChatSessionsResponse with statistics:
-        - total_sessions: Total number of distinct chat_session/service combinations found
-        - contacts_created: Number of new contacts created
-        - contacts_existing: Number of contacts that already existed (currently always 0)
-        - errors: List of error messages if any
-
-    Raises:
-        HTTPException: 500 on error
-    """
-    relationship_service = RelationshipService(db=db)
-    try:
-        stats = relationship_service.create_contacts_from_chat_sessions()
-
-        return CreateContactsFromChatSessionsResponse(
-            message=f"Processed {stats['total_sessions']} chat sessions. Created {stats['contacts_created']} new contacts, {stats['contacts_existing']} already existed.",
-            total_sessions=stats['total_sessions'],
-            contacts_created=stats['contacts_created'],
-            contacts_existing=stats['contacts_existing'],
-            errors=stats['errors']
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error creating contacts from chat sessions: {str(e)}"
-        )
-
-
-@router.post("/relationships/create-contacts-from-emails", response_model=CreateContactsFromEmailsResponse)
-async def create_contacts_from_emails():
-    """Create contact entries from distinct email addresses in the emails table.
-
-    This endpoint:
-    1. Retrieves all distinct from_address values from the emails table
-    2. Retrieves all distinct to_addresses values and splits comma-separated addresses
-    3. Creates a contact entry for each unique email address that doesn't already exist
-    4. Uses the email address as the contact name and email field
-
-    Returns:
-        CreateContactsFromEmailsResponse with statistics:
-        - total_addresses: Total number of unique email addresses found
-        - contacts_created: Number of new contacts created
-        - contacts_existing: Number of contacts that already existed
-        - errors: List of error messages if any
-
-    Raises:
-        HTTPException: 500 on error
-    """
-    relationship_service = RelationshipService(db=db)
-    try:
-        stats = relationship_service.create_contacts_from_emails()
-
-        return CreateContactsFromEmailsResponse(
-            message=f"Processed {stats['total_addresses']} unique email addresses. Created {stats['contacts_created']} new contacts, {stats['contacts_existing']} already existed.",
-            total_addresses=stats['total_addresses'],
-            contacts_created=stats['contacts_created'],
-            contacts_existing=stats['contacts_existing'],
-            errors=stats['errors']
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error creating contacts from emails: {str(e)}"
-        )
-
-
-@router.get("/relationships", response_model=RelationshipsListResponse)
-async def get_relationships(
-    source_id: Optional[int] = Query(None, description="Filter by source contact ID"),
-    target_id: Optional[int] = Query(None, description="Filter by target contact ID"),
-    contact_id: Optional[int] = Query(None, description="Filter by contact ID (as source or target)"),
-    type: Optional[str] = Query(None, description="Filter by relationship type"),
-    is_active: Optional[bool] = Query(None, description="Filter by active status"),
-    is_personal: Optional[bool] = Query(None, description="Filter by personal status"),
-    include_deleted: bool = Query(False, description="Include deleted relationships"),
-    limit: Optional[int] = Query(100, description="Maximum number of relationships to return", ge=1, le=1000),
-    offset: Optional[int] = Query(0, description="Number of relationships to skip", ge=0)
-):
-    """Retrieve relationships between contacts.
-
-    Returns relationships with source and target contact information (id, name, email).
-
-    Args:
-        source_id: Optional filter by source contact ID
-        target_id: Optional filter by target contact ID
-        contact_id: Optional filter by contact ID (returns relationships where contact is source or target)
-        type: Optional filter by relationship type
-        is_active: Optional filter by active status
-        is_personal: Optional filter by personal status
-        include_deleted: Whether to include deleted relationships (default: False)
-        limit: Maximum number of relationships to return (default: 100, max: 1000)
-        offset: Number of relationships to skip for pagination (default: 0)
-
-    Returns:
-        RelationshipsListResponse with list of relationships and total count
-    """
-    session = db.get_session()
-    try:
-        # Base query
-        query = session.query(Relationship)
-
-        # Apply filters
-        if source_id is not None:
-            query = query.filter(Relationship.source_id == source_id)
-
-        if target_id is not None:
-            query = query.filter(Relationship.target_id == target_id)
-
-        if contact_id is not None:
-            query = query.filter(
-                (Relationship.source_id == contact_id) | (Relationship.target_id == contact_id)
-            )
-
-        if type is not None:
-            query = query.filter(Relationship.type.ilike(f'%{type}%'))
-
-        if is_active is not None:
-            query = query.filter(Relationship.is_active == is_active)
-
-        if is_personal is not None:
-            query = query.filter(Relationship.is_personal == is_personal)
-
-        if not include_deleted:
-            query = query.filter(Relationship.is_deleted == False)
-
-        # Get total count before pagination
-        total = query.count()
-
-        # Apply pagination and eager load contacts
-        relationships = query.options(
-            joinedload(Relationship.source),
-            joinedload(Relationship.target)
-        ).order_by(Relationship.created_at.desc()).offset(offset).limit(limit).all()
-
-        # Convert to response models
-        relationships_list = []
-        for rel in relationships:
-            # Access source and target contacts (already loaded via joinedload)
-            source_contact = rel.source
-            target_contact = rel.target
-
-            if source_contact and target_contact:
-                relationships_list.append(
-                    RelationshipResponse(
-                        id=rel.id,
-                        source=ContactInfo(
-                            id=source_contact.id,
-                            name=source_contact.name,
-                            email=source_contact.email
-                        ),
-                        target=ContactInfo(
-                            id=target_contact.id,
-                            name=target_contact.name,
-                            email=target_contact.email
-                        ),
-                        type=rel.type,
-                        description=rel.description,
-                        ai_description=rel.ai_description,
-                        strength=rel.strength,
-                        is_active=rel.is_active,
-                        is_personal=rel.is_personal,
-                        is_deleted=rel.is_deleted,
-                        created_at=rel.created_at,
-                        updated_at=rel.updated_at
-                    )
-                )
-
-        return RelationshipsListResponse(
-            relationships=relationships_list,
-            total=total
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error retrieving relationships: {str(e)}"
-        )
-    finally:
-        session.close()
 
 
 @router.get("/contacts", response_model=ContactsListResponse)
@@ -968,121 +491,221 @@ async def update_contact_classification(req: UpdateClassificationRequest):
     return {"message": "Classification updated", "name": req.name, "classification": classification}
 
 
-@router.post("/contacts/extract")
-async def extract_contacts():
-    """Extract contacts from messages table and populate the contacts table."""
-    session = db.get_session()
+def _get_import_processor_path() -> Path:
+    """Resolve path to import-processor binary."""
+    env_path = os.environ.get("IMPORT_PROCESSOR_PATH")
+    if env_path:
+        p = Path(env_path)
+        if p.exists():
+            return p
+    project_root = Path(__file__).resolve().parent.parent.parent.parent
+    import_processor_dir = project_root / "import-processor"
+    if os.name == "nt":
+        binary = import_processor_dir / "import-processor.exe"
+    else:
+        binary = import_processor_dir / "import-processor"
+    if not binary.exists():
+        raise FileNotFoundError(
+            f"import-processor not found at {binary}. "
+            "Build it with: cd import-processor && go build -o import-processor ./cmd/import-processor"
+        )
+    return binary
+
+
+def _contacts_extract_background_subprocess():
+    """Background task: run import-processor contacts, stream stderr via SSE."""
+    with import_state.contacts_extract_lock:
+        import_state.contacts_extract_in_progress = True
+    import_state.contacts_extract_cancelled.clear()
+
+    import_state.update_contacts_extract_progress_state(
+        status="in_progress",
+        status_line="Starting import-processor contacts...",
+        error_message=None,
+    )
+    import_state.broadcast_contacts_extract_event_sync(
+        "status", {"status_line": "Starting import-processor contacts..."}
+    )
+
     try:
-        sql = """
-        SELECT
-            chat_session,
-            is_group_chat,
-            COUNT(CASE WHEN service = 'WhatsApp' THEN 1 END) AS number_of_whatsapp,
-            COUNT(CASE WHEN service = 'iMessage' THEN 1 END) AS number_of_imessage,
-            COUNT(CASE WHEN service = 'Facebook Messenger' THEN 1 END) AS number_of_facebook,
-            COUNT(CASE WHEN service = 'SMS' THEN 1 END) AS number_of_sms,
-            COUNT(CASE WHEN service = 'Instagram' THEN 1 END) AS number_of_insta,
-            COUNT(*) AS total
-        FROM
-            messages
-        GROUP BY
-            chat_session, is_group_chat
-        ORDER BY
-            is_group_chat, total DESC
-        """
-        rows = session.execute(text(sql)).fetchall()
-        created = 0
-        updated = 0
-        for row in rows:
-            chat_session = row.chat_session
-            if not chat_session or not str(chat_session).strip():
-                continue
-            existing = session.query(Contacts).filter(Contacts.name == chat_session).first()
-            if existing:
-                existing.is_group = bool(row.is_group_chat)
-                existing.numwhatsapp = row.number_of_whatsapp or 0
-                existing.numimessages = row.number_of_imessage or 0
-                existing.numfacebook = row.number_of_facebook or 0
-                existing.numsms = row.number_of_sms or 0
-                existing.numinstagram = row.number_of_insta or 0
-                existing.total = row.total or 0
-                if row.number_of_whatsapp and row.number_of_whatsapp > 0:
-                    existing.whatsappid = existing.whatsappid or chat_session
-                if row.number_of_imessage and row.number_of_imessage > 0:
-                    existing.imessageid = existing.imessageid or chat_session
-                if row.number_of_sms and row.number_of_sms > 0:
-                    existing.smsid = existing.smsid or chat_session
-                if row.number_of_facebook and row.number_of_facebook > 0:
-                    existing.facebookid = existing.facebookid or chat_session
-                if row.number_of_insta and row.number_of_insta > 0:
-                    existing.instagramid = existing.instagramid or chat_session
-                updated += 1
-            else:
-                contact = Contacts(
-                    name=chat_session,
-                    is_group=bool(row.is_group_chat),
-                    numwhatsapp=row.number_of_whatsapp or 0,
-                    numimessages=row.number_of_imessage or 0,
-                    numfacebook=row.number_of_facebook or 0,
-                    numsms=row.number_of_sms or 0,
-                    numinstagram=row.number_of_insta or 0,
-                    total=row.total or 0,
-                    whatsappid=chat_session if (row.number_of_whatsapp or 0) > 0 else None,
-                    imessageid=chat_session if (row.number_of_imessage or 0) > 0 else None,
-                    smsid=chat_session if (row.number_of_sms or 0) > 0 else None,
-                    facebookid=chat_session if (row.number_of_facebook or 0) > 0 else None,
-                    instagramid=chat_session if (row.number_of_insta or 0) > 0 else None,
+        binary = _get_import_processor_path()
+        cwd = binary.parent
+        args = [str(binary), "contacts"]
+        proc = subprocess.Popen(
+            args,
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        stdout_parts: list[str] = []
+
+        def read_stderr():
+            try:
+                for line in iter(proc.stderr.readline, ""):
+                    if import_state.contacts_extract_cancelled.is_set():
+                        proc.terminate()
+                        return
+                    line = line.rstrip()
+                    if line:
+                        import_state.update_contacts_extract_progress_state(status_line=line)
+                        import_state.broadcast_contacts_extract_event_sync("status", {"status_line": line})
+            except Exception:
+                pass
+
+        def read_stdout():
+            try:
+                while True:
+                    chunk = proc.stdout.read(8192)
+                    if not chunk:
+                        break
+                    stdout_parts.append(chunk)
+            except Exception:
+                pass
+
+        stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+        stdout_thread = threading.Thread(target=read_stdout, daemon=True)
+        stderr_thread.start()
+        stdout_thread.start()
+        stderr_thread.join()
+        stdout_thread.join()
+        stdout = "".join(stdout_parts)
+
+        if import_state.contacts_extract_cancelled.is_set():
+            proc.terminate()
+            proc.wait(timeout=10)
+            import_state.update_contacts_extract_progress_state(
+                status="cancelled", status_line="Contacts extract cancelled."
+            )
+            import_state.broadcast_contacts_extract_event_sync(
+                "cancelled", import_state.get_contacts_extract_progress_state()
+            )
+        else:
+            proc.wait(timeout=300)
+            if proc.returncode != 0:
+                err_msg = (stdout or "").strip() or f"Process exited with code {proc.returncode}"
+                import_state.update_contacts_extract_progress_state(
+                    status="error", error_message=err_msg, status_line=err_msg
                 )
-                session.add(contact)
-                created += 1
-        session.commit()
-        return {"created": created, "updated": updated}
+                import_state.broadcast_contacts_extract_event_sync(
+                    "error", import_state.get_contacts_extract_progress_state()
+                )
+            else:
+                state = import_state.get_contacts_extract_progress_state()
+                status_line = state.get("status_line") or "Contacts extract completed successfully."
+                import_state.update_contacts_extract_progress_state(
+                    status="completed", status_line=status_line
+                )
+                import_state.broadcast_contacts_extract_event_sync(
+                    "completed", import_state.get_contacts_extract_progress_state()
+                )
+    except FileNotFoundError as e:
+        import_state.update_contacts_extract_progress_state(
+            status="error", error_message=str(e), status_line=str(e)
+        )
+        import_state.broadcast_contacts_extract_event_sync(
+            "error", import_state.get_contacts_extract_progress_state()
+        )
     except Exception as e:
-        session.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error extracting contacts: {str(e)}"
+        err_msg = str(e)
+        import_state.update_contacts_extract_progress_state(
+            status="error", error_message=err_msg, status_line=err_msg
+        )
+        import_state.broadcast_contacts_extract_event_sync(
+            "error", import_state.get_contacts_extract_progress_state()
         )
     finally:
-        session.close()
+        state = import_state.get_contacts_extract_progress_state()
+        result = state.get("status", "error")
+        msg = state.get("error_message") or state.get("status_line")
+        import_state._record_import_control_last_run("contacts", result, msg)
+        with import_state.contacts_extract_lock:
+            import_state.contacts_extract_in_progress = False
 
 
-@router.get("/merge-contacts", response_model=MergeContactsResponse)
-async def merge_contacts():
-    """Merge likely matching contacts.
+@router.post("/contacts/extract")
+async def extract_contacts(background_tasks: BackgroundTasks):
+    """Run import-processor contacts subcommand to merge/normalise contacts from database.
 
-    Returns:
-        MergeContactsResponse with:
-        - message: Summary message
-        - matched_contacts: List of matched contact pairs
-        - contacts_merged: Number of contact pairs merged
+    Starts the import-processor in the background and returns immediately.
+    Connect to GET /contacts/extract/stream for progress updates via SSE.
     """
-    likely_matching_contacts = find_likely_matching_contacts()
-    matched_contacts_list = []
-    contacts_merged = 0
+    with import_state.contacts_extract_lock:
+        if import_state.contacts_extract_in_progress:
+            raise HTTPException(
+                status_code=400,
+                detail="Contacts extract is already in progress"
+            )
 
-    for row in likely_matching_contacts:
-        contact_id_1, name_1, contact_id_2, name_2, match_reason = row
+    background_tasks.add_task(_contacts_extract_background_subprocess)
+    return {"message": "Contacts extract started", "status": "started"}
 
-        # Add to matched contacts list
-        matched_contacts_list.append(MatchedContactPair(
-            contact_id_1=contact_id_1,
-            name_1=name_1,
-            contact_id_2=contact_id_2,
-            name_2=name_2,
-            match_reason=match_reason
-        ))
 
-        # Merge the contacts
-        if contact_id_1 < contact_id_2:
-            merge_two_contacts(contact_id_1, contact_id_2)
-        else:
-            merge_two_contacts(contact_id_2, contact_id_1)
+@router.get("/contacts/extract/stream")
+async def stream_contacts_extract_progress(request: Request):
+    """Stream contacts extract progress via Server-Sent Events (SSE)."""
+    async def event_generator():
+        client_queue = asyncio.Queue()
+        with import_state.contacts_extract_sse_clients_lock:
+            import_state.contacts_extract_sse_clients.append(client_queue)
 
-        contacts_merged += 1
+        try:
+            initial_state = import_state.get_contacts_extract_progress_state()
+            event_data = {"type": "progress", "data": initial_state}
+            yield f"data: {json.dumps(event_data)}\n\n"
 
-    return MergeContactsResponse(
-        message=f"Found {len(matched_contacts_list)} matching contact pairs. Merged {contacts_merged} pairs.",
-        matched_contacts=matched_contacts_list,
-        contacts_merged=contacts_merged
-    )
+            if initial_state.get("status") in ("completed", "cancelled", "error"):
+                return
+
+            while True:
+                try:
+                    if await request.is_disconnected():
+                        break
+                    message = await asyncio.wait_for(client_queue.get(), timeout=1.0)
+                    yield message
+                    progress_state = import_state.get_contacts_extract_progress_state()
+                    if progress_state.get("status") in ("completed", "cancelled", "error"):
+                        break
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+                except Exception:
+                    break
+        finally:
+            with import_state.contacts_extract_sse_clients_lock:
+                if client_queue in import_state.contacts_extract_sse_clients:
+                    import_state.contacts_extract_sse_clients.remove(client_queue)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.get("/contacts/extract/status")
+async def get_contacts_extract_status():
+    """Get current contacts extract status."""
+    with import_state.contacts_extract_lock:
+        in_progress = import_state.contacts_extract_in_progress
+    state = import_state.get_contacts_extract_progress_state()
+    return {
+        "in_progress": in_progress,
+        "cancelled": import_state.contacts_extract_cancelled.is_set(),
+        **state,
+    }
+
+
+@router.post("/contacts/extract/cancel")
+async def cancel_contacts_extract():
+    """Cancel contacts extract if in progress."""
+    with import_state.contacts_extract_lock:
+        if not import_state.contacts_extract_in_progress:
+            return {
+                "message": "No contacts extract is currently in progress",
+                "cancelled": False,
+            }
+
+    import_state.contacts_extract_cancelled.set()
+    return {
+        "message": "Contacts extract cancellation requested.",
+        "cancelled": True,
+    }
+
+

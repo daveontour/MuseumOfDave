@@ -649,6 +649,7 @@
                                     <tr data-import="facebook_places"><td style="padding: 10px; border-bottom: 1px solid #eee;">Facebook Places Import</td><td id="import-last-run-facebook_places" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" data-import="facebook_places"><i class="fas fa-play"></i> Execute</button></td></tr>
                                     <tr data-import="filesystem"><td style="padding: 10px; border-bottom: 1px solid #eee;">Filesystem Image Import</td><td id="import-last-run-filesystem" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" data-import="filesystem"><i class="fas fa-play"></i> Execute</button></td></tr>
                                     <tr data-import="thumbnails"><td style="padding: 10px; border-bottom: 1px solid #eee;">Image Processing (Thumbnails)</td><td id="import-last-run-thumbnails" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" data-import="thumbnails"><i class="fas fa-play"></i> Execute</button></td></tr>
+                                    <tr data-import="contacts"><td style="padding: 10px; border-bottom: 1px solid #eee;">Contacts Merge</td><td id="import-last-run-contacts" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" data-import="contacts"><i class="fas fa-play"></i> Execute</button></td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -1546,11 +1547,11 @@
                         <div class="rel-legend-item"><div class="rel-circle rel-subject"></div> <strong>Subject</strong></div>
                         <div class="rel-legend-item"><div class="rel-circle rel-influential"></div> Influential</div>
                         <div class="rel-legend-item"><div class="rel-circle rel-standard"></div> Standard</div>
-                        <hr>
+                        <!-- <hr>
                         <div class="rel-legend-item"><div class="rel-line rel-strong"></div> Strong (8-10)</div>
-                        <div class="rel-legend-item"><div class="rel-line rel-weak"></div> Weak (1-3)</div>
+                        <div class="rel-legend-item"><div class="rel-line rel-weak"></div> Weak (1-3)</div> -->
 
-                        <div id="rel-node-details" class="rel-node-details" style="margin-bottom: 1em; padding: 0.75em; background: #f8f9fa; border-radius: 6px; min-height: 3em; font-size: 1.8em;">
+                        <div id="rel-node-details" class="rel-node-details" style="margin-bottom: 1em; padding: 0.75em; background: #f8f9fa; border-radius: 6px; min-height: 3em; font-size: 1.2em;">
                             <em style="color: #666;">Click a person to view details</em>
                         </div>
                     </div>
@@ -1914,7 +1915,16 @@
         </div>
     </div>
 
-    <script src="/static/js/new_page.js"></script>
+    <script src="/static/js/new_page/foundation.js" defer></script>
+    <script src="/static/js/new_page/chat.js" defer></script>
+    <script src="/static/js/new_page/modals-core.js" defer></script>
+    <script src="/static/js/new_page/modals-media.js" defer></script>
+    <script src="/static/js/new_page/modals-email.js" defer></script>
+    <script src="/static/js/new_page/modals-comms.js" defer></script>
+    <script src="/static/js/new_page/modals-people.js" defer></script>
+    <script src="/static/js/new_page/modals-settings.js" defer></script>
+    <script src="/static/js/new_page/interviewer.js" defer></script>
+    <script src="/static/js/new_page/app.js" defer></script>
     <script src="/static/js/leaflet.js"></script>
     <script src="/static/js/images_grid.js"></script>
     <script>
