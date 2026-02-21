@@ -5359,6 +5359,12 @@ body {
     color: white;
 }
 
+.relationships-modal-content .rel-btn:disabled {
+    background: #ccc;
+    color: #888;
+    cursor: not-allowed;
+}
+
 .relationships-modal-content .rel-btn-secondary {
     background: #e8eaed;
     color: #3c4043;
@@ -5388,7 +5394,7 @@ body {
 }
 
 .relationships-modal-content .rel-legend {
-    width: 220px;
+    width: 300px;
     flex-shrink: 0;
     background: white;
     padding: 20px;
@@ -5398,7 +5404,7 @@ body {
 }
 
 .relationships-modal-content .rel-node-details {
-    max-height: 180px;
+    max-height: 400px;
     overflow-y: auto;
 }
 

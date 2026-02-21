@@ -7648,9 +7648,12 @@ ${textContent}
             async function fetchData() {
                 const typeParam = getTypeFilterParams();
                 const sourceParam = getSourceFilterParams();
-                const url = new URL('/relationships/sample', window.location.origin);
+                const maxNodesSlider = document.getElementById('rel-max-nodes-slider');
+                const maxNodes = maxNodesSlider ? parseInt(maxNodesSlider.value, 10) : 100;
+                const url = new URL('/relationship/strength', window.location.origin);
                 if (typeParam) url.searchParams.set('types', typeParam);
                 if (sourceParam) url.searchParams.set('sources', sourceParam);
+                url.searchParams.set('max_nodes', String(maxNodes));
                 const response = await fetch(url.toString());
                 if (!response.ok) throw new Error('Failed to load relationship data');
                 return response.json();
@@ -7665,20 +7668,24 @@ ${textContent}
                 const baseSize = parseFloat(sizeSlider.value);
                 const hub = cy.getElementById('0');
 
-                cy.elements().removeClass('hidden');
-                cy.edges().forEach(e => { if (e.data('strength') < threshold) e.addClass('hidden'); });
+                cy.edges().forEach(e => {
+                    if (e.data('strength') < threshold) e.addClass('hidden');
+                    else e.removeClass('hidden');
+                });
 
+                cy.nodes().forEach(n => {
+                    const hasVisibleEdge = n.connectedEdges().some(e => !e.hasClass('hidden'));
+                    if (!hasVisibleEdge) n.addClass('hidden');
+                    else n.removeClass('hidden');
+                });
 
-                cy.nodes().forEach(n => { if (n.connectedEdges(':visible').length === 0) n.addClass('hidden'); });
-                
-
-                const visible = cy.nodes(':visible');
+                const visible = cy.nodes().filter(n => !n.hasClass('hidden'));
                 if (visible.length > 0) {
-                    const degrees = visible.map(n => n.connectedEdges(':visible').length);
+                    const degrees = visible.map(n => n.connectedEdges().filter(e => !e.hasClass('hidden')).length);
                     const min = Math.min(...degrees), max = Math.max(...degrees);
                     const maxSize = baseSize * 4;
                     visible.forEach(n => {
-                        const deg = n.connectedEdges(':visible').length;
+                        const deg = n.connectedEdges().filter(e => !e.hasClass('hidden')).length;
                         let s = baseSize;
                         if(max !== min) s = baseSize + (deg - min) * (maxSize - baseSize) / (max - min);
                         n.style({'width': s, 'height': s});
@@ -7712,12 +7719,14 @@ ${textContent}
                 if (!balloon || !cy) return;
 
                 if (searchInput) {
-                    searchInput.addEventListener('input', (e) => {
-                        const text = e.target.value.toLowerCase();
+                    const doSearch = () => {
+                        const text = searchInput.value.toLowerCase().trim();
                         if (!text) return;
                         const found = cy.nodes().filter(n => n.data('name').toLowerCase().includes(text));
                         if (found.length > 0) { cy.animate({ center: { eles: found[0] }, zoom: 1.2, duration: 400 }); found[0].select(); }
-                    });
+                    };
+                    searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+                    searchInput.addEventListener('blur', doSearch);
                 }
 
                 cy.on('mouseover', 'node', function(e) {
@@ -7759,22 +7768,35 @@ ${textContent}
                     const nodeId = node.id();
                     const nodeName = node.data('name');
                     const currentType = node.data('contact_type') || 'unknown';
-                    const edges = node.connectedEdges(':visible');
+                    const edges = node.connectedEdges().filter(e => !e.hasClass('hidden'));
                     const connections = edges.map(edge => {
                         const other = edge.source().id() === nodeId ? edge.target() : edge.source();
                         return { name: other.data('name'), strength: edge.data('strength') };
                     });
-                    let html = `<strong>${nodeName}</strong><br>Connections: ${connections.length}`;
+                    const counts = [
+                        ['Email', node.data('num_emails')],
+                        ['Facebook', node.data('num_facebook')],
+                        ['WhatsApp', node.data('num_whatsapp')],
+                        ['SMS/iMessage', (node.data('num_sms') || 0) + (node.data('num_imessages') || 0)],
+                        ['Instagram', node.data('num_instagram')]
+                    ].filter(([, n]) => n != null && n > 0);
+                    let html = `<strong>${nodeName}</strong><br>`;
+                    if (counts.length > 0) {
+                        html += '<div style="margin-top: 0.5em; font-size: 1em; color: #555;">';
+                        html += '<ul style="margin: 0.5em 0 0 1.2em; padding: 0;">';
+                        html += counts.map(([label, n]) => `<li>${label}: ${n}</li>`).join(' ');
+                        html += '</ul>';
+                    }
                     if (connections.length > 0) {
                         html += '<ul style="margin: 0.5em 0 0 1.2em; padding: 0;">';
                         connections.forEach(c => {
-                            html += `<li>${c.name} <span style="color:#666">(strength ${c.strength}/10)</span></li>`;
+                            html += `<li><span style="color:#666">Connection strength ${c.strength}/10</span></li>`;
                         });
                         html += '</ul>';
                     }
                     if (nodeId !== '0') {
                         html += '<label style="display:block; margin-top: 0.75em; font-weight: 600;">Contact Type:</label>';
-                        html += '<select id="rel-contact-type-select" style="margin-top: 0.25em; width: 100%; padding: 4px 8px; font-size: 0.9em;">';
+                        html += '<select id="rel-contact-type-select" style="margin-top: 0.25em; width: 100%; padding: 4px 8px; font-size: 1em;">';
                         CONTACT_TYPES.forEach(t => {
                             const label = t.charAt(0).toUpperCase() + t.slice(1);
                             html += `<option value="${t}" ${t === currentType ? 'selected' : ''}>${label}</option>`;
@@ -7826,6 +7848,9 @@ ${textContent}
 
                 if (filterSlider && strVal) filterSlider.oninput = function() { strVal.innerText = this.value; updateGraph(); };
                 if (sizeSlider && sizeVal) sizeSlider.oninput = function() { sizeVal.innerText = this.value; updateGraph(); };
+                const maxNodesSlider = document.getElementById('rel-max-nodes-slider');
+                const maxNodesVal = document.getElementById('rel-max-nodes-val');
+                if (maxNodesSlider && maxNodesVal) maxNodesSlider.oninput = function() { maxNodesVal.innerText = this.value; };
 
             }
 
@@ -7880,12 +7905,21 @@ ${textContent}
             function init() {
                 if (DOM.closeRelationshipsModalBtn) DOM.closeRelationshipsModalBtn.addEventListener('click', close);
                 if (DOM.relationshipsModal) DOM.relationshipsModal.addEventListener('click', (e) => { if (e.target === DOM.relationshipsModal) close(); });
-                const pinBtn = document.getElementById('rel-pin-center-btn');
                 const fitBtn = document.getElementById('rel-fit-all-btn');
                 const applyBtn = document.getElementById('rel-apply-filters-btn');
-                if (pinBtn) pinBtn.addEventListener('click', reLayout);
                 if (fitBtn) fitBtn.addEventListener('click', resetView);
-                if (applyBtn) applyBtn.addEventListener('click', () => { initGraph(); });
+                if (applyBtn) {
+                    applyBtn.addEventListener('click', () => {
+                        initGraph();
+                        applyBtn.disabled = true;
+                    });
+                    const enableApplyOnFilterChange = () => { applyBtn.disabled = false; };
+                    document.querySelectorAll('.rel-type-cb, .rel-source-cb').forEach(el => {
+                        el.addEventListener('change', enableApplyOnFilterChange);
+                    });
+                    const maxNodesSlider = document.getElementById('rel-max-nodes-slider');
+                    if (maxNodesSlider) maxNodesSlider.addEventListener('input', enableApplyOnFilterChange);
+                }
             }
 
             return { init, open, close };

@@ -1228,6 +1228,7 @@ async def root():
             "POST /relationships/create-contacts-from-chat-sessions": "Create contact entries from distinct chat_session values in the messages table",
             "POST /relationships/create-contacts-from-emails": "Create contact entries from distinct email addresses in the emails table",
             "GET /relationships": "Retrieve relationships between contacts with contact information (id, name, email)",
+            "GET /relationship/strength": "Return relationship graph data (nodes and links) for strength visualization",
             "GET /contacts": "Retrieve contacts with all fields including id, name, and email",
             "GET /facebook/albums/{album_id}/images": "Get all images for a specific Facebook album",
             "GET /facebook/albums/images/{image_id}": "Get image data for a specific Facebook album image",
@@ -7769,7 +7770,7 @@ SOURCE_TO_SUM_CONDITION = {
 }
 
 
-def _get_relationship_graph_from_db(types: Optional[List[str]] = None, sources: Optional[List[str]] = None) -> RelationshipGraphSampleResponse:
+def _get_relationship_graph_from_db(types: Optional[List[str]] = None, sources: Optional[List[str]] = None, max_nodes: int = 100) -> RelationshipGraphSampleResponse:
     """Fetch relationship graph data from database (filtered contacts as nodes)."""
     valid_types = [t for t in (types or []) if t in VALID_REL_TYPES]
     valid_sources = [s for s in (sources or []) if s in SOURCE_TO_CONTACT_CONDITION]
@@ -7815,7 +7816,7 @@ def _get_relationship_graph_from_db(types: Optional[List[str]] = None, sources: 
             AND (({sum_clause}) > 3)
         ))
         ORDER BY total DESC
-        LIMIT 500
+        LIMIT {max(1, min(max_nodes, 1000))}
     """
 
     print(sql)
@@ -7877,15 +7878,16 @@ def _get_relationship_graph_from_db(types: Optional[List[str]] = None, sources: 
     return RelationshipGraphSampleResponse(nodes=nodes, links=links)
 
 
-@app.get("/relationships/sample", response_model=RelationshipGraphSampleResponse)
-async def get_relationships_sample(
+@app.get("/relationship/strength", response_model=RelationshipGraphSampleResponse)
+async def get_relationship_strength(
     types: Optional[str] = Query(None, description="Comma-separated contact types: friend, family, colleague, acquaintance, business, social, promotional, unknown"),
-    sources: Optional[str] = Query(None, description="Comma-separated sources: email, facebook, whatsapp, sms-imessage, instagram")
+    sources: Optional[str] = Query(None, description="Comma-separated sources: email, facebook, whatsapp, sms-imessage, instagram"),
+    max_nodes: int = Query(100, description="Maximum number of nodes to return", ge=1, le=1000)
 ):
     """Return relationship graph data from database (relationships involving contact id 0)."""
     type_list = [t.strip().lower() for t in types.split(",") if t.strip()] if types else None
     source_list = [s.strip().lower() for s in sources.split(",") if s.strip()] if sources else None
-    return _get_relationship_graph_from_db(types=type_list, sources=source_list)
+    return _get_relationship_graph_from_db(types=type_list, sources=source_list, max_nodes=max_nodes)
 
 
 @app.post("/relationships/create-contacts-from-chat-sessions", response_model=CreateContactsFromChatSessionsResponse)

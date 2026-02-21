@@ -1519,17 +1519,18 @@
                         </div>
                     </div>
                     <div class="rel-control-group">
-                        <button type="button" class="rel-btn rel-btn-primary" id="rel-apply-filters-btn">Apply Filters</button>
-                        <button type="button" class="rel-btn rel-btn-primary" id="rel-pin-center-btn">Pin &amp; Center Hub</button>
-                        <button type="button" class="rel-btn rel-btn-primary" id="rel-fit-all-btn">Fit All</button>
+                        <button type="button" class="rel-btn rel-btn-primary" id="rel-apply-filters-btn" disabled>Apply Filters</button>
+                        <button type="button" class="rel-btn rel-btn-primary" id="rel-fit-all-btn">Fit and Centre</button>
                     </div>
                     <div class="rel-control-group">
                         <label>Search Person</label>
                         <input type="text" id="rel-search-input" placeholder="Type a name...">
                     </div>
                     <div class="rel-control-group">
-                        <label>Min Relationship Strength: <span id="rel-str-val">1</span></label>
-                        <input type="range" id="rel-filter-slider" min="1" max="10" value="1">
+                        <label>Maximum Number of Nodes: <span id="rel-max-nodes-val">100</span></label>
+                        <input type="range" id="rel-max-nodes-slider" min="10" max="2000" value="100">
+                        <label>Min Relationship Strength: <span id="rel-str-val">3</span></label>
+                        <input type="range" id="rel-filter-slider" min="0" max="10" value="3">
                         <label>Base NodeSize: <span id="rel-size-val">20</span>px</label>
                         <input type="range" id="rel-size-slider" min="10" max="40" value="20">
 
@@ -1540,9 +1541,7 @@
                 <div class="rel-main-layout">
                     <div class="rel-cy-container"><div id="rel-cy"></div><div id="rel-balloon" class="rel-balloon"></div></div>
                     <div class="rel-legend">
-                        <div id="rel-node-details" class="rel-node-details" style="margin-bottom: 1em; padding: 0.75em; background: #f8f9fa; border-radius: 6px; min-height: 3em; font-size: 0.9em;">
-                            <em style="color: #666;">Click a person to view details</em>
-                        </div>
+
                         <h4 style="margin-top:0">Map Legend</h4>
                         <div class="rel-legend-item"><div class="rel-circle rel-subject"></div> <strong>Subject</strong></div>
                         <div class="rel-legend-item"><div class="rel-circle rel-influential"></div> Influential</div>
@@ -1550,7 +1549,10 @@
                         <hr>
                         <div class="rel-legend-item"><div class="rel-line rel-strong"></div> Strong (8-10)</div>
                         <div class="rel-legend-item"><div class="rel-line rel-weak"></div> Weak (1-3)</div>
-                        <p class="rel-tip"><em>Tip: Hover over a person to Focus on their network.</em></p>
+
+                        <div id="rel-node-details" class="rel-node-details" style="margin-bottom: 1em; padding: 0.75em; background: #f8f9fa; border-radius: 6px; min-height: 3em; font-size: 1.8em;">
+                            <em style="color: #666;">Click a person to view details</em>
+                        </div>
                     </div>
                 </div>
             </div>
