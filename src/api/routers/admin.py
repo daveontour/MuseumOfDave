@@ -1,0 +1,222 @@
+"""Admin, system, and utility routes."""
+from datetime import datetime
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+
+from ...database.models import ImportControlLastRun, IMessage, MessageAttachment, MediaMetadata, MediaBlob, Attachment, AlbumMedia, FacebookAlbum
+from ...config import get_config
+from ..deps import db, templates
+
+router = APIRouter()
+
+# ---------------------------------------------------------------------------
+# Pydantic models
+# ---------------------------------------------------------------------------
+
+class MessageResponse(BaseModel):
+    """Generic message response."""
+    message: str
+    timestamp: datetime
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
+@router.get("/")
+async def root():
+    """Root endpoint - returns a welcome message."""
+    return {
+        "message": "Welcome to the Museum of Dave API",
+        "endpoints": {
+            "GET /": "This endpoint",
+            "GET /health": "Health check endpoint",
+            "POST /emails/process": "Process emails from a list of labels",
+            "POST /emails/process/cancel": "Cancel email processing if in progress",
+            "GET /emails/process/status": "Get current email processing status",
+            "POST /imessages/import": "Import iMessages from a directory structure",
+            "GET /imessages/import/stream": "Stream iMessage import progress via SSE",
+            "POST /imessages/import/cancel": "Cancel iMessage import if in progress",
+            "GET /imessages/import/status": "Get current iMessage import status",
+            "GET /imessages/chat-sessions": "Get list of unique chat session names",
+            "GET /imessages/conversation/{chat_session}": "Get all messages for a specific chat session",
+            "DELETE /imessages/conversation/{chat_session}": "Delete a conversation",
+            "GET /imessages/{message_id}/attachment": "Get attachment content for a message",
+            "POST /chat/generate": "Generate a chat response using ChatService with Gemini LLM",
+            "POST /writing-style/summarize": "Summarize Dave Burton's writing style from a random sample of 5000 messages",
+            "POST /whatsapp/import": "Import WhatsApp messages from a directory structure",
+            "GET /whatsapp/import/stream": "Stream WhatsApp import progress via SSE",
+            "POST /whatsapp/import/cancel": "Cancel WhatsApp import if in progress",
+            "GET /whatsapp/import/status": "Get current WhatsApp import status",
+            "POST /facebook/import": "Import Facebook Messenger messages from a directory structure",
+            "GET /facebook/import/stream": "Stream Facebook Messenger import progress via SSE",
+            "POST /facebook/import/cancel": "Cancel Facebook Messenger import if in progress",
+            "GET /facebook/import/status": "Get current Facebook Messenger import status",
+            "POST /instagram/import": "Import Instagram messages from a directory structure",
+            "GET /instagram/import/stream": "Stream Instagram import progress via SSE",
+            "POST /instagram/import/cancel": "Cancel Instagram import if in progress",
+            "GET /instagram/import/status": "Get current Instagram import status",
+            "POST /facebook/albums/import": "Import Facebook Albums from a directory structure",
+            "GET /facebook/albums/import/stream": "Stream Facebook Albums import progress via SSE",
+            "POST /facebook/albums/import/cancel": "Cancel Facebook Albums import if in progress",
+            "GET /facebook/albums/import/status": "Get current Facebook Albums import status",
+            "GET /facebook/albums": "Get list of all Facebook albums",
+            "POST /facebook/import-places": "Import Facebook places from a posts JSON file",
+            "GET /facebook/import-places/stream": "Stream Facebook Places import progress via SSE",
+            "POST /facebook/import-places/cancel": "Cancel Facebook Places import if in progress",
+            "GET /facebook/import-places/status": "Get current Facebook Places import status",
+            "GET /facebook/places": "Retrieve Facebook places imported from Facebook posts JSON",
+            "POST /relationships/create-contacts-from-chat-sessions": "Create contact entries from distinct chat_session values in the messages table",
+            "POST /relationships/create-contacts-from-emails": "Create contact entries from distinct email addresses in the emails table",
+            "GET /relationships": "Retrieve relationships between contacts with contact information (id, name, email)",
+            "GET /relationship/strength": "Return relationship graph data (nodes and links) for strength visualization",
+            "GET /contacts": "Retrieve contacts with all fields including id, name, and email",
+            "GET /facebook/albums/{album_id}/images": "Get all images for a specific Facebook album",
+            "GET /facebook/albums/images/{image_id}": "Get image data for a specific Facebook album image",
+            "GET /emails/{email_id}/html": "Get email HTML content by ID",
+            "GET /emails/{email_id}/text": "Get email plain text content by ID",
+            "GET /emails/{email_id}/snippet": "Get email snippet by ID",
+            "GET /emails/{email_id}/metadata": "Get email metadata by ID",
+            "GET /emails/label": "Get metadata for all emails with given labels (query param: labels)",
+            "GET /emails/folders": "Get list of available folders/labels from email server",
+            "GET /emails/search": "Search emails by metadata criteria (from, to, month, year, subject, to_from, has_attachments)",
+            "GET /attachments/{attachment_id}": "Get attachment content",
+            "GET /attachments/random": "Get random attachment with email metadata",
+            "GET /attachments/by-id": "Get attachment by ID order (query param: offset)",
+            "GET /attachments/by-size": "Get attachment by size order (query params: order=asc|desc, offset)",
+            "GET /attachments/count": "Get total count of attachments",
+            "GET /attachments/{attachment_id}/info": "Get attachment info with email metadata",
+            "DELETE /attachments/{attachment_id}": "Delete an attachment",
+            "GET /attachments-viewer": "Attachment viewer web page",
+            "GET /attachments/images": "Get images for grid display (query params: page, page_size, order, direction)",
+            "GET /attachments-images-grid": "Image grid viewer web page"
+        }
+    }
+
+
+@router.get("/new-page", response_class=HTMLResponse)
+async def new_page(request: Request):
+    """Serve the new page."""
+    return templates.TemplateResponse(
+        "new_page.html",
+        {"request": request}
+    )
+
+
+@router.get("/rel", response_class=HTMLResponse)
+async def rel_page(request: Request):
+    """Serve the new page."""
+    return templates.TemplateResponse(
+        "rel.html",
+        {"request": request}
+    )
+
+
+@router.get("/health")
+async def health_check():
+    """Health check endpoint - returns server status."""
+    return MessageResponse(
+        message="Server is running",
+        timestamp=datetime.now()
+    )
+
+
+@router.get("/api/import-control-last-run")
+async def get_import_control_last_run():
+    """Get last run time and result for each import control.
+
+    Returns a dict keyed by import_type (whatsapp, facebook, instagram, imessage,
+    facebook_albums, facebook_places, filesystem, thumbnails) with last_run_at (ISO),
+    result (success/error/cancelled), and result_message.
+    """
+    session = db.get_session()
+    try:
+        rows = session.query(ImportControlLastRun).all()
+        return {
+            r.import_type: {
+                "last_run_at": r.last_run_at.isoformat(),
+                "result": r.result,
+                "result_message": r.result_message,
+            }
+            for r in rows
+        }
+    finally:
+        session.close()
+
+
+@router.get("/api/control-defaults")
+async def get_control_defaults():
+    """Get default values for control tab inputs from environment variables.
+
+    Returns:
+        Dictionary of default values for all control tab inputs
+    """
+    config = get_config()
+    return config.get_control_defaults()
+
+
+@router.delete("/admin/empty-media-tables")
+async def empty_media_tables():
+    """Empty the attachments, media_blob, media_items, messages, and message_attachments tables.
+
+    WARNING: This permanently deletes all data from these tables.
+
+    Returns:
+        Dictionary with deletion counts for each table
+    """
+    session = db.get_session()
+    try:
+        # Delete in order to respect foreign key constraints
+        # 1. Delete message_attachments first (references messages and media_items)
+        message_attachment_count = session.query(MessageAttachment).count()
+        session.query(MessageAttachment).delete()
+
+        # 2. Delete messages
+        message_count = session.query(IMessage).count()
+        session.query(IMessage).delete()
+
+        # 3. Delete media_items (references media_blob)
+        media_item_count = session.query(MediaMetadata).count()
+        session.query(MediaMetadata).delete()
+
+        # 4. Delete media_blob
+        media_blob_count = session.query(MediaBlob).count()
+        session.query(MediaBlob).delete()
+
+        # 5. Delete attachments (old table, may not exist)
+        attachment_count = 0
+        try:
+            attachment_count = session.query(Attachment).count()
+            session.query(Attachment).delete()
+        except Exception:
+            # Table might not exist, ignore
+            pass
+
+        #6. Delete album_media (Facebook album images are now in unified media system)
+        album_media_count = session.query(AlbumMedia).count()
+        session.query(AlbumMedia).delete()
+
+        #7. Delete facebook_albums
+        facebook_album_count = session.query(FacebookAlbum).count()
+        session.query(FacebookAlbum).delete()
+
+        session.commit()
+
+        return {
+            "message": "Tables emptied successfully",
+            "deleted_counts": {
+                "message_attachments": message_attachment_count,
+                "messages": message_count,
+                "media_items": media_item_count,
+                "media_blob": media_blob_count,
+                "attachments": attachment_count,
+                "album_media": album_media_count,
+                "facebook_albums": facebook_album_count
+            }
+        }
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"Error emptying tables: {str(e)}")
+    finally:
+        session.close()

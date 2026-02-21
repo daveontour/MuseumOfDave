@@ -96,6 +96,11 @@ class MessageAttachment(Base):
     message = relationship("IMessage", back_populates="media_attachments")
     media_item = relationship("MediaMetadata", foreign_keys=[media_item_id])
 
+    __table_args__ = (
+        Index('idx_message_attachments_message_id', 'message_id'),
+        Index('idx_message_attachments_media_item_id', 'media_item_id'),
+    )
+
 
 class AlbumMedia(Base):
     """Junction table linking Facebook albums to media items."""
@@ -136,6 +141,13 @@ class IMessage(Base):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     media_attachments = relationship("MessageAttachment", back_populates="message", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index('idx_messages_chat_session', 'chat_session'),
+        Index('idx_messages_sender_name', 'sender_name'),
+        Index('idx_messages_service', 'service'),
+        Index('idx_messages_processed', 'processed'),
+    )
 
 
 class FacebookAlbum(Base):
@@ -187,7 +199,6 @@ class MediaMetadata(Base):
     title = Column(String(1000), nullable=True)
     author = Column(String(500), nullable=True)
     tags = Column(Text, nullable=True)
-    description = Column(Text, nullable=True)
     categories = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
     available_for_task = Column(Boolean, default=False, nullable=False)
@@ -215,12 +226,19 @@ class MediaMetadata(Base):
     source=Column(String(255), nullable=True)
     source_reference=Column(String(500), nullable=True)
     media_blob = relationship("MediaBlob", back_populates="media_metadata", uselist=False, cascade="all, delete")
-    
+
     # Relationship to messages via MessageAttachment junction table
     message_attachments = relationship("MessageAttachment", foreign_keys="MessageAttachment.media_item_id", back_populates="media_item")
-    
+
     # Relationship to albums via AlbumMedia junction table
     album_media = relationship("AlbumMedia", foreign_keys="AlbumMedia.media_item_id")
+
+    __table_args__ = (
+        Index('idx_media_items_processed', 'processed'),
+        Index('idx_media_items_source', 'source'),
+        Index('idx_media_items_media_type', 'media_type'),
+        Index('idx_media_items_year_month', 'year', 'month'),
+    )
 
 class MediaBlob(Base):
     """Media Blob model."""
@@ -285,6 +303,11 @@ class Contacts(Base):
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
+    __table_args__ = (
+        Index('idx_contacts_email', 'email'),
+        Index('idx_contacts_name', 'name'),
+        Index('idx_contacts_rel_type', 'rel_type'),
+    )
 
 
 class Relationship(Base):

@@ -245,18 +245,31 @@ class RelationshipService:
                                 unique_addresses.add(address)
             
             stats["total_addresses"] = len(unique_addresses)
-            
+
+            # Pre-load all existing contacts into memory to avoid per-address queries
+            all_contacts = session.query(Contacts).all()
+            existing_by_email = {c.email.lower(): c for c in all_contacts if c.email}
+            existing_by_name = {c.name.lower(): c for c in all_contacts if c.name}
+
+            # Pre-compute email counts for all from_addresses in one query
+            from sqlalchemy import case, func as sa_func
+            email_count_from = dict(
+                session.query(Email.from_address, sa_func.count(Email.id))
+                .filter(Email.from_address.isnot(None))
+                .group_by(Email.from_address)
+                .all()
+            )
+
             # Create contacts for each address that doesn't exist
             for email_address in unique_addresses:
                 # Parse the email address to get the name and email address
                 name, parsed_email = self.parse_email_address(email_address)
 
-                if name and parsed_email:                #continue if the email address or name contains no-reply or noreply or no-response or noresponse or no-reply@ or noreply@ or no-response@ or noresponse@
+                if name and parsed_email:
                     if "no-reply" in parsed_email.lower() or "noreply" in parsed_email.lower() or "no-response" in parsed_email.lower() or "noresponse" in parsed_email.lower() or "no-reply@" in parsed_email.lower() or "noreply@" in parsed_email.lower() or "no-response@" in parsed_email.lower() or "noresponse@" in parsed_email.lower():
                         continue
                     if "no-reply" in name.lower() or "noreply" in name.lower() or "no-response" in name.lower() or "noresponse" in name.lower() or "no-reply@" in name.lower() or "noreply@" in name.lower() or "no-response@" in name.lower() or "noresponse@" in name.lower():
                         continue
-                    #continue if the name or email address contains @aol
                     if "@aol" in parsed_email.lower() or "@aol" in name.lower():
                         continue
                     if "marketing" in parsed_email.lower():
@@ -279,8 +292,6 @@ class RelationshipService:
                         continue
                     if "accounts@" in parsed_email.lower() or "accounts@" in name.lower():
                         continue
-                    if "info@" in parsed_email.lower() or "info@" in name.lower():
-                        continue
                     if "hello@" in parsed_email.lower():
                         continue
                     if "undisclosed" in parsed_email.lower() or "undisclosed" in name.lower():
@@ -292,39 +303,24 @@ class RelationshipService:
                     if "thales" in parsed_email.lower():
                         continue
                 else:
-                    print (f"Name or email address is not valid: {name},  {parsed_email}, {email_address}")
+                    print(f"Name or email address is not valid: {name},  {parsed_email}, {email_address}")
                     continue
-
-
 
                 # Use parsed email if available, otherwise use original
                 contact_email = parsed_email if parsed_email else email_address
                 # Use parsed name if available, otherwise use email as name
                 contact_name = name if name else contact_email
-                
-                try:
-                    # Check if contact already exists (by email address first, then by name)
-                    existing_contact = None
-                    if contact_email:
-                        existing_contact = session.query(Contacts).filter(
-                            Contacts.email == contact_email
-                        ).first()
-                    
-                    if not existing_contact and contact_name:
-                        existing_contact = session.query(Contacts).filter(
-                            Contacts.name == contact_name
-                        ).first()
 
-                    #count the number of emails where the email address is in the to_addresses field of the emails table or the from_address field of the emails table
-                    email_count = session.query(Email).filter(
-                        or_(
-                            Email.to_addresses.like(f"%{contact_email}%"),
-                            Email.from_address.like(f"%{contact_email}%")
-                        )
-                    ).count()
+                try:
+                    # Check in-memory dicts instead of per-address DB queries
+                    existing_contact = existing_by_email.get(contact_email.lower())
+                    if not existing_contact and contact_name:
+                        existing_contact = existing_by_name.get(contact_name.lower())
+
+                    # Use pre-computed count from from_address; fall back to 0
+                    email_count = email_count_from.get(contact_email, 0)
                     if email_count < 2:
                         print(f"Skipping contact {contact_name} with email {contact_email} because it has less than 2 emails")
-                        #continue if the number of emails where the email address is in the to_addresses field of the emails table or the from_address field of the emails table is less than 5
                         continue
 
                     if existing_contact:
@@ -338,8 +334,11 @@ class RelationshipService:
                             numemails=email_count
                         )
                         session.add(new_contact)
+                        # Keep in-memory index up to date for subsequent iterations
+                        existing_by_email[contact_email.lower()] = new_contact
+                        existing_by_name[contact_name.lower()] = new_contact
                         stats["contacts_created"] += 1
-                        
+
                 except Exception as e:
                     error_msg = f"Error creating contact for email '{email_address}': {str(e)}"
                     stats["errors"].append(error_msg)
@@ -772,7 +771,8 @@ class RelationshipService:
         output = self.build_output(groups)
         print("Number of output: ", len(output))
         #output the output to a file
-        with open('C:\\Users\\dave_\\OneDrive\Desktop\\combined_by_name_fuzzy.json', 'w') as f:
+        output_path = Path(__file__).resolve().parent.parent.parent / "combined_by_name_fuzzy.json"
+        with open(output_path, 'w') as f:
             json.dump(output, f, indent=2)
      
 

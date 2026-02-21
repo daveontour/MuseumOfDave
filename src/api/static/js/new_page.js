@@ -7796,19 +7796,24 @@ ${textContent}
                     }
                     if (nodeId !== '0') {
                         html += '<label style="display:block; margin-top: 0.75em; font-weight: 600;">Contact Type:</label>';
-                        html += '<select id="rel-contact-type-select" style="margin-top: 0.25em; width: 100%; padding: 4px 8px; font-size: 1em;">';
+                        html += '<div id="rel-contact-type-radios" style="margin-top: 0.25em; display: flex; flex-wrap: wrap; gap: 0.5em;">';
                         CONTACT_TYPES.forEach(t => {
                             const label = t.charAt(0).toUpperCase() + t.slice(1);
-                            html += `<option value="${t}" ${t === currentType ? 'selected' : ''}>${label}</option>`;
+                            const checked = t === currentType ? ' checked' : '';
+                            html += `<label style="display: inline-flex; align-items: center; gap: 0.25em; cursor: pointer;"><input type="radio" name="rel-contact-type" value="${t}"${checked}> ${label}</label>`;
                         });
-                        html += '</select>';
+                        html += '</div>';
                     }
                     detailsPanel.innerHTML = html;
                     if (nodeId !== '0') {
-                        const select = document.getElementById('rel-contact-type-select');
-                        if (select) {
-                            select.addEventListener('change', async function() {
-                                const newType = this.value;
+                        let lastSavedType = currentType;
+                        const radioContainer = document.getElementById('rel-contact-type-radios');
+                        if (radioContainer) {
+                            radioContainer.addEventListener('change', async function(e) {
+                                const radio = e.target;
+                                if (radio.type !== 'radio' || radio.name !== 'rel-contact-type') return;
+                                const newType = radio.value;
+                                if (newType === lastSavedType) return;
                                 try {
                                     const res = await fetch('/contacts/update-classification', {
                                         method: 'PATCH',
@@ -7821,6 +7826,7 @@ ${textContent}
                                         throw new Error(msg);
                                     }
                                     node.data('contact_type', newType);
+                                    lastSavedType = newType;
                                     if (typeof UI !== 'undefined' && UI.displayError) UI.displayError(null);
                                 } catch (err) {
                                     if (typeof UI !== 'undefined' && UI.displayError) {
@@ -7828,7 +7834,8 @@ ${textContent}
                                     } else {
                                         alert('Failed to save: ' + (err.message || 'Unknown error'));
                                     }
-                                    select.value = currentType;
+                                    const prevRadio = radioContainer.querySelector(`input[value="${lastSavedType}"]`);
+                                    if (prevRadio) prevRadio.checked = true;
                                 }
                             });
                         }
