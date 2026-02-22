@@ -1,0 +1,122 @@
+{
+    "categories": [
+
+{
+    "category":"Early Life",
+    "suggestions": [
+        {
+            "title": "Tales of  Dave's early life",
+            "prompt": "Tell me about Dave's early life"
+        }
+    ]
+},
+{
+    "category":"Love Life",
+    "suggestions": [
+        {
+            "title": "Early Life",
+            "prompt": "Tell me about Dave's early love interest. Refer to his bio and any emails or chats"
+        },
+        {
+            "title": "Time in Hong Kong",
+            "prompt": "Tell me about Dave's Love life in Hong Kong. Refer to his bio and any emails or chats"
+        },
+        {
+            "title": "Just list them all",
+            "prompt": "List all of Dave's love interests and relationships with a short description of each. Refer to his bio and any emails or chats"
+        },
+        {
+            "title": "Rated Impact of Women on Dave",
+            "prompt": "Show me all the names of the women who have sad significant impact on Dave and rate their impact out of 10"
+        },
+        {
+            "title": "Desperation and Infatuation",
+            "prompt": "List Dave's most significant love interests and relationships with a detailed description of each. Refer to his bio and any emails or chats"
+        },
+        {
+            "title": "Imagined Conversations",
+            "prompt": "Give an imagined conversation between Dave and one of his love interests. Refer to his bio and any emails or chats"
+        },
+        {
+            "title": "Imagined Relationships",
+            "prompt": "Give an imagined story about one of Dave's relationships which may have turned out differently. Refer to his bio and any emails or chats"
+        }
+    ]
+},
+{
+    "category":"Tell me a story",
+    "suggestions": [
+        {
+            "title": "Sport",
+            "prompt": "Make up a story about Dave's sporting achievements. Refer to his bio and any emails or chats"
+        },
+        {
+            "title": "Career",
+            "prompt": "Make up a story about Dave's career. Refer to his bio and any emails or chats"
+        },
+        {
+            "title": "Creative & Artistic Endevours",
+            "prompt": "Make up a story about Dave's creative or artistic achievements. Refer to his bio and any emails or chats"
+        },
+        {
+            "title": "Biogaphy Chapter Title",
+            "prompt": "What would the 10 chapter titles be for Dave's biography?"
+        },
+        {
+            "title": "Biogaphy Chapter Title  - with subtitles",
+            "prompt": "What would the 10 chapter titles be for Dave's biography? Include a subtitle of a relevant woman's name in each chapter"
+        },
+        {
+            "title": "Write a 2000 word story",
+            "prompt": "Write a 2000 word story in the third person focussing on Dave's live in one of the places he lived. Be creative, but also be true to Dave's nature and the relationship he has with any people you mention. Use the get_all_chat_messages_by_contact() tool, search_emails_by_content() tool and search_emails_by_contact() tool to get context and to understand the relationships with people who might be involved. The story should involve at least 2 conversations with different people and one with 4 four that dave knows. Any dialog should be in the style of Aaron Sorkin. The story should take place over 6 months have have 2 plotlines that run through the entire thread of the story, but do not refer to the plotlines in the story or the 6 month period. The story should not reference work other than in passing and should relate to non work activities. If possible refer to events happening in the wider world."
+        }
+    ]
+},
+{
+    "category":"Facebook",
+    "suggestions": [
+        {
+            "title": "Travel Destination",
+            "prompt": "Show me the details for one of Dave's travel related post"
+        },
+        {
+            "title": "Theatre",
+            "prompt": "Show me the details of one of Dave's theatre related post"
+        },
+        {
+            "title": "Summary of posts",
+            "prompt": "Summarise the types of things Dave posts about on Facebook with 3 specific examples"
+        },
+        {
+            "title": "Summary of random chat",
+            "prompt": "Get a list of all the one-to-one Facebook messenger chats and then select one chattter at random and give me a summary of the messages and the details of one particular message"
+        },
+
+        {
+            "title": "View Facebook Albums",
+            "prompt": "-Initiates LocalProcessing-",
+            "function": "showFBAlbumsOptions"          
+        }
+    ]
+},{
+    "category":"I've Been Everywhere",
+    "suggestions": [
+        {
+            "title": "Where has Dave been?",
+            "prompt": "-Initiates LocalProcessing-",
+            "function": "openGeoModal"          
+        },
+        {
+            "title": "View Email Gallery",
+            "prompt": "-Initiates LocalProcessing-",
+            "function": "showEmailGallery"          
+        },
+        {
+            "title": "View Image Gallery",
+            "prompt": "-Initiates LocalProcessing-",
+            "function": "showImageGallery"          
+        }
+    ]
+}
+]
+}

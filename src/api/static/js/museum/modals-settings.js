@@ -546,7 +546,7 @@ Modals.ReferenceDocumentsNotification = (() => {
         }
 
         async function checkAndShow(callback) {
-            debugger;
+         
             proceedCallback = callback;
             
             // Check if we should show the notification
@@ -1151,6 +1151,24 @@ Modals.SubjectConfiguration = (() => {
             }
         }
 
+        function _renderPsychologicalProfileMarkdown(text) {
+            if (!DOM.psychologicalProfileDisplay) return;
+            if (!text || !text.trim()) {
+                DOM.psychologicalProfileDisplay.innerHTML = '<span style="color: #999;">No psychological profile yet. Click "Generate Psychological Profile" to analyze messages.</span>';
+                return;
+            }
+            try {
+                if (typeof marked !== 'undefined') {
+                    DOM.psychologicalProfileDisplay.innerHTML = marked.parse(text);
+                } else {
+                    DOM.psychologicalProfileDisplay.textContent = text;
+                }
+            } catch (e) {
+                console.error('Error rendering psychological profile markdown:', e);
+                DOM.psychologicalProfileDisplay.textContent = text;
+            }
+        }
+
         async function requestWritingStyle() {
             if (!DOM.requestWritingStyleBtn || !DOM.writingStyleLoading || !DOM.writingStyleDisplay) return;
             DOM.requestWritingStyleBtn.disabled = true;
@@ -1169,6 +1187,27 @@ Modals.SubjectConfiguration = (() => {
             } finally {
                 DOM.requestWritingStyleBtn.disabled = false;
                 DOM.writingStyleLoading.style.display = 'none';
+            }
+        }
+
+        async function requestPsychologicalProfile() {
+            if (!DOM.requestPsychologicalProfileBtn || !DOM.psychologicalProfileLoading || !DOM.psychologicalProfileDisplay) return;
+            DOM.requestPsychologicalProfileBtn.disabled = true;
+            DOM.psychologicalProfileLoading.style.display = 'block';
+            DOM.psychologicalProfileDisplay.innerHTML = '';
+            try {
+                const response = await fetch('/psychological-profile/summarize', { method: 'POST' });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Failed to generate psychological profile');
+                }
+                _renderPsychologicalProfileMarkdown(data.profile || '');
+            } catch (error) {
+                console.error('Error requesting psychological profile:', error);
+                DOM.psychologicalProfileDisplay.innerHTML = `<span style="color: #c00;">Error: ${error.message}</span>`;
+            } finally {
+                DOM.requestPsychologicalProfileBtn.disabled = false;
+                DOM.psychologicalProfileLoading.style.display = 'none';
             }
         }
 
@@ -1233,7 +1272,6 @@ Modals.SubjectConfiguration = (() => {
                 exploreDaveWorldHeading.textContent = `Explore ${subjectName}'s World`;
             }
 
-            debugger;
 
             const daveImage = document.querySelector('.voice-icon[alt="dave"]');
             const admireImage = document.querySelector('.voice-icon[alt="secret-admirer"]');
@@ -1391,6 +1429,9 @@ Modals.SubjectConfiguration = (() => {
                         if (DOM.writingStyleDisplay) {
                             _renderWritingStyleMarkdown(config.writing_style_ai || '');
                         }
+                        if (DOM.psychologicalProfileDisplay) {
+                            _renderPsychologicalProfileMarkdown(config.psychological_profile_ai || '');
+                        }
                         if (DOM.systemInstructionsTextarea) {
                             DOM.systemInstructionsTextarea.value = config.system_instructions || '';
                         }
@@ -1429,6 +1470,9 @@ Modals.SubjectConfiguration = (() => {
                     }
                     if (DOM.writingStyleDisplay) {
                         _renderWritingStyleMarkdown(config.writing_style_ai || '');
+                    }
+                    if (DOM.psychologicalProfileDisplay) {
+                        _renderPsychologicalProfileMarkdown(config.psychological_profile_ai || '');
                     }
                     return;
                 }
@@ -1547,6 +1591,9 @@ Modals.SubjectConfiguration = (() => {
             // Writing style generate button
             if (DOM.requestWritingStyleBtn) {
                 DOM.requestWritingStyleBtn.addEventListener('click', () => requestWritingStyle());
+            }
+            if (DOM.requestPsychologicalProfileBtn) {
+                DOM.requestPsychologicalProfileBtn.addEventListener('click', () => requestPsychologicalProfile());
             }
 
             // Button in Settings tab to edit configuration

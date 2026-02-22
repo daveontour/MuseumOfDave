@@ -1538,7 +1538,7 @@ async def get_locations():
 @router.get("/images/{image_id}")
 async def get_image_content(
     image_id: int,
-    type: str = Query("blob", regex="^(blob|metadata)$", description="Type of ID: 'blob' for media_blob.id or 'metadata' for media_items.id"),
+    type: str = Query("blob", pattern="^(blob|metadata)$", description="Type of ID: 'blob' for media_blob.id or 'metadata' for media_items.id"),
     preview: bool = Query(False, description="If True, return thumbnail instead of full image"),
     convert_heic_to_jpg: bool = Query(True, description="If True, convert HEIC images to JPG format before returning")
 ):

@@ -193,6 +193,25 @@ Summary:"""
             print(f"[GeminiService.summarize_writing_style] Error: {str(e)}")
             raise
 
+    def summarize_psychological_profile(self, messages_data: Dict[str, Any]) -> str:
+        """Generate a psychological profile from message content using Gemini LLM.
+
+        Reads an optional 'input_prompt' key from messages_data to override the
+        default psychological-profile prompt, then delegates to summarize_conversation_general.
+        """
+        input_prompt = (messages_data or {}).get(
+            "input_prompt",
+            "Based on the following messages, provide a psychological profile of the person. "
+            "Consider personality traits, communication patterns, values, interests, emotional tendencies, "
+            "and any other psychological dimensions evident from the text. "
+            "Write in clear, structured markdown suitable for use by an LLM to understand the person's psychology.",
+        )
+        try:
+            return self.summarize_conversation_general(messages_data, input_prompt)
+        except Exception as e:
+            print(f"[GeminiService.summarize_psychological_profile] Error: {str(e)}")
+            raise
+
     
     def _format_conversation_for_prompt(self, messages_data: Dict[str, Any]) -> str:
         """Format conversation data into a readable text format for the prompt.
@@ -271,6 +290,8 @@ class ChatService:
         self.voice = "expert"
 
         self.mood = "neutral"
+        self.psychological_profile = None
+        self.writing_style = None
         self.voice_instructions = None  # Will be loaded when database is set
         self.system_prompt = None  # Will be loaded when database is set
         self.session_turns = []  # List of {"user_input": str, "response_text": str}
@@ -306,6 +327,13 @@ class ChatService:
         """Sets the mood for the session."""
         self.mood = mood
 
+    def set_psychological_profile(self, psychological_profile: str):
+        """Sets the psychological profile for the session."""
+        self.psychological_profile = psychological_profile
+
+    def set_writing_style(self, writing_style: str):
+        """Sets the writing style for the session."""
+        self.writing_style = writing_style
 
     def set_database(self, db: Database):
         """Set the database instance for retrieving reference documents."""
@@ -1063,6 +1091,8 @@ class ChatService:
 
         if self.voice == "dave":
             prompt_parts.append(f"IMPORTANT:Your current mood is {self.mood}")
+            prompt_parts.append(f"IMPORTANT:Your current psychological profile is {self.psychological_profile}")
+            prompt_parts.append(f"IMPORTANT:Your current writing style is {self.writing_style}")
         
         if companionMode:
                 prompt_parts.append(f"""IMPORTANT:You are in companion mode. You are talking to a user who is your friend and companion. 

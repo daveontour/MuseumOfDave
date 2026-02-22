@@ -110,6 +110,11 @@ class UpdateClassificationRequest(BaseModel):
     classification: str  # friend, family, colleague, acquaintance, business, social, promotional, spam, unknown
 
 
+class BulkDeleteContactsRequest(BaseModel):
+    """Request to delete multiple contacts by ID."""
+    ids: List[int]
+
+
 # ---------------------------------------------------------------------------
 # Constants / helpers
 # ---------------------------------------------------------------------------
@@ -320,6 +325,11 @@ async def get_relationship_strength(
     return _get_relationship_graph_from_db(types=type_list, sources=source_list, max_nodes=max_nodes)
 
 
+ALLOWED_CONTACT_ORDER_COLUMNS = frozenset(
+    {"id", "name", "email", "numsms", "numwhatsapp", "numimessages", "numinstagram", "numfacebook"}
+)
+
+
 @router.get("/contacts", response_model=ContactsListResponse)
 async def get_contacts(
     name: Optional[str] = Query(None, description="Filter by name (partial match, case-insensitive)"),
@@ -334,7 +344,9 @@ async def get_contacts(
     is_non_profit: Optional[bool] = Query(None, description="Filter by is_non_profit flag"),
     is_educational: Optional[bool] = Query(None, description="Filter by is_educational flag"),
     limit: Optional[int] = Query(0, description="Maximum number of contacts to return (0 for all)", ge=0, le=1000),
-    offset: Optional[int] = Query(0, description="Number of contacts to skip", ge=0)
+    offset: Optional[int] = Query(0, description="Number of contacts to skip", ge=0),
+    order_by: Optional[str] = Query("name", description="Column to sort by"),
+    order: Optional[str] = Query("asc", description="Sort direction: asc or desc")
 ):
     """Retrieve contacts from the database.
 
@@ -400,11 +412,22 @@ async def get_contacts(
         # Get total count before pagination
         total = query.count()
 
+        # Apply ordering
+        order_col = order_by.lower() if order_by else "name"
+        order_dir = order.lower() if order else "asc"
+        if order_col not in ALLOWED_CONTACT_ORDER_COLUMNS:
+            order_col = "name"
+        if order_dir not in ("asc", "desc"):
+            order_dir = "asc"
+        order_attr = getattr(Contacts, order_col)
+        if order_dir == "desc":
+            order_attr = order_attr.desc()
+
         # Apply pagination
         if limit > 0:
-            contacts = query.order_by(Contacts.name).offset(offset).limit(limit).all()
+            contacts = query.order_by(order_attr).offset(offset).limit(limit).all()
         else:
-            contacts = query.order_by(Contacts.name).offset(offset).all()
+            contacts = query.order_by(order_attr).offset(offset).all()
 
         # Convert to response models
         contacts_list = [
@@ -436,6 +459,53 @@ async def get_contacts(
             status_code=500,
             detail=f"Error retrieving contacts: {str(e)}"
         )
+    finally:
+        session.close()
+
+
+@router.post("/contacts/bulk-delete")
+async def bulk_delete_contacts(req: BulkDeleteContactsRequest):
+    """Delete multiple contacts by ID. Skips subject (id=0) and non-existent IDs."""
+    if not req.ids:
+        return {"message": "No contacts to delete", "deleted": [], "skipped": []}
+    ids = [i for i in req.ids if i != 0]
+    if not ids:
+        return {"message": "Cannot delete the subject (id=0)", "deleted": [], "skipped": req.ids}
+    session = db.get_session()
+    try:
+        deleted = []
+        for contact_id in ids:
+            contact = session.query(Contacts).filter(Contacts.id == contact_id).first()
+            if contact:
+                session.delete(contact)
+                deleted.append(contact_id)
+        session.commit()
+        return {"message": f"Deleted {len(deleted)} contact(s)", "deleted": deleted, "skipped": [i for i in ids if i not in deleted]}
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting contacts: {str(e)}")
+    finally:
+        session.close()
+
+
+@router.delete("/contacts/{contact_id}")
+async def delete_contact(contact_id: int):
+    """Delete a contact by ID. Cannot delete the subject (id=0)."""
+    if contact_id == 0:
+        raise HTTPException(status_code=400, detail="Cannot delete the subject (contact id=0)")
+    session = db.get_session()
+    try:
+        contact = session.query(Contacts).filter(Contacts.id == contact_id).first()
+        if not contact:
+            raise HTTPException(status_code=404, detail=f"Contact not found: id={contact_id}")
+        session.delete(contact)
+        session.commit()
+        return {"message": "Contact deleted", "id": contact_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting contact: {str(e)}")
     finally:
         session.close()
 
@@ -520,11 +590,11 @@ def _contacts_extract_background_subprocess():
 
     import_state.update_contacts_extract_progress_state(
         status="in_progress",
-        status_line="Starting import-processor contacts...",
+        status_line="Starting contacts import and normalisation...",
         error_message=None,
     )
     import_state.broadcast_contacts_extract_event_sync(
-        "status", {"status_line": "Starting import-processor contacts..."}
+        "status", {"status_line": "Starting contacts import and normalisation..."}
     )
 
     try:
@@ -567,13 +637,21 @@ def _contacts_extract_background_subprocess():
         stdout_thread = threading.Thread(target=read_stdout, daemon=True)
         stderr_thread.start()
         stdout_thread.start()
-        stderr_thread.join()
-        stdout_thread.join()
+
+        # Use proc.wait() as primary completion signal; pipe EOF can lag on Windows
+        try:
+            proc.wait(timeout=300)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=10)
+            raise RuntimeError("Contacts extract timed out after 300 seconds")
+
+        # Drain pipes (threads get EOF once process has exited)
+        stderr_thread.join(timeout=5)
+        stdout_thread.join(timeout=5)
         stdout = "".join(stdout_parts)
 
         if import_state.contacts_extract_cancelled.is_set():
-            proc.terminate()
-            proc.wait(timeout=10)
             import_state.update_contacts_extract_progress_state(
                 status="cancelled", status_line="Contacts extract cancelled."
             )
@@ -581,9 +659,9 @@ def _contacts_extract_background_subprocess():
                 "cancelled", import_state.get_contacts_extract_progress_state()
             )
         else:
-            proc.wait(timeout=300)
-            if proc.returncode != 0:
-                err_msg = (stdout or "").strip() or f"Process exited with code {proc.returncode}"
+            returncode = proc.returncode
+            if returncode is not None and returncode != 0:
+                err_msg = (stdout or "").strip() or f"Process exited with code {returncode}"
                 import_state.update_contacts_extract_progress_state(
                     status="error", error_message=err_msg, status_line=err_msg
                 )

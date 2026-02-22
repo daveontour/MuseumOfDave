@@ -845,9 +845,9 @@ func runContactsNormalise() {
 
 	ctx := context.Background()
 	if err := contactsimport.RunContactsNormalise(ctx, opts); err != nil {
-		log.Fatalf("Contacts normalise failed: %v", err)
+		log.Fatalf("Contacts import and normalisation failed: %v", err)
 	}
-	fmt.Fprintln(os.Stderr, "Contacts normalise completed successfully")
+	fmt.Fprintln(os.Stderr, "Contacts import and normalisation completed successfully")
 }
 
 type stringSlice []string

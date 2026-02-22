@@ -242,6 +242,29 @@ class SubjectConfigurationService:
         finally:
             session.close()
 
+    def update_psychological_profile_ai(self, psychological_profile_ai: Optional[str]) -> Optional[SubjectConfiguration]:
+        """Update the psychological_profile_ai field of the subject configuration.
+        
+        Args:
+            psychological_profile_ai: The AI-generated psychological profile (markdown), or None to clear
+            
+        Returns:
+            Updated SubjectConfiguration if one exists, None otherwise
+        """
+        session = self.db.get_session()
+        try:
+            configuration = session.query(SubjectConfiguration).first()
+            if not configuration:
+                return None
+            configuration.psychological_profile_ai = psychological_profile_ai.strip() if psychological_profile_ai and psychological_profile_ai.strip() else None
+            configuration.updated_at = datetime.now(timezone.utc)
+            session.commit()
+            session.refresh(configuration)
+            session.expunge(configuration)
+            return configuration
+        finally:
+            session.close()
+
     def get_subject_name(self) -> Optional[str]:
         """Get the current subject name.
         

@@ -1,7 +1,9 @@
 """Admin, system, and utility routes."""
 from datetime import datetime
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 from ...database.models import ImportControlLastRun, IMessage, MessageAttachment, MediaMetadata, MediaBlob, Attachment, AlbumMedia, FacebookAlbum
@@ -24,8 +26,16 @@ class MessageResponse(BaseModel):
 # Routes
 # ---------------------------------------------------------------------------
 
-@router.get("/")
-async def root():
+@router.get("/", response_class=HTMLResponse)
+async def root(request: Request):
+    """Serve the new page."""
+    return templates.TemplateResponse(
+        "museum_of_dave.html",
+        {"request": request}
+    )
+
+@router.get("/health")
+async def health_check():
     """Root endpoint - returns a welcome message."""
     return {
         "message": "Welcome to the Museum of Dave API",
@@ -92,32 +102,16 @@ async def root():
     }
 
 
-@router.get("/new-page", response_class=HTMLResponse)
-async def new_page(request: Request):
-    """Serve the new page."""
-    return templates.TemplateResponse(
-        "new_page.html",
-        {"request": request}
+
+
+@router.get("/api/suggestions")
+async def get_suggestions():
+    path = Path(__file__).parent.parent / "static" / "data" / "Suggestions.json"
+    return FileResponse(
+        path,
+        media_type="application/json",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
     )
-
-
-@router.get("/rel", response_class=HTMLResponse)
-async def rel_page(request: Request):
-    """Serve the new page."""
-    return templates.TemplateResponse(
-        "rel.html",
-        {"request": request}
-    )
-
-
-@router.get("/health")
-async def health_check():
-    """Health check endpoint - returns server status."""
-    return MessageResponse(
-        message="Server is running",
-        timestamp=datetime.now()
-    )
-
 
 @router.get("/api/import-control-last-run")
 async def get_import_control_last_run():

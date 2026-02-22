@@ -21,12 +21,13 @@ const AppActions = {
     //         UI.hideLoadingIndicator();
     //     }
     // },
-    // [CONSTANTS.FUNCTION_NAMES.ThirdFunction]: () => Modals.FBAlbums.open(),    // showFBAlbumsOptions
-    // [CONSTANTS.FUNCTION_NAMES.FourthFunction]: () => Modals.Locations.open(), // showGeoMetadataOptions
-    // [CONSTANTS.FUNCTION_NAMES.FifthFunction]: () => SSE.browserFunctions.showLocationInfo(), // showTileAlbumOptions
-    // [CONSTANTS.FUNCTION_NAMES.SixthFunction]: () => Modals.ImageGallery.open(),
-    // [CONSTANTS.FUNCTION_NAMES.SeventhFunction]: () => SSE.browserFunctions.testEmail(), // showImageGalleryOptions
-    // [CONSTANTS.FUNCTION_NAMES.EighthFunction]: () => Modals.EmailGallery.open() // showEmailGalleryOptions
+    ["showFBAlbumsOptions"]: () => Modals.FBAlbums.open(),    // showFBAlbumsOptions
+    ["openGeoModal"]: () => Modals.Locations.open(), // showGeoMetadataOptions
+    ["showEmailGallery"]: () => Modals.EmailGallery.open(), // showEmailGalleryOptions
+    //[CONSTANTS.FUNCTION_NAMES.FifthFunction]: () => SSE.browserFunctions.showLocationInfo(), // showTileAlbumOptions
+    ["showImageGallery"]: () => Modals.ImageGallery.open(),
+    //[CONSTANTS.FUNCTION_NAMES.SeventhFunction]: () => SSE.browserFunctions.testEmail(), // showImageGalleryOptions
+ // showEmailGalleryOptions
 
 };
 window.customObject = AppActions; // Expose for Suggestions.json if it relies on global `customObject`
@@ -1242,12 +1243,6 @@ const App = (() => {
         if (DOM.emailGallerySidebarBtn) {
             DOM.emailGallerySidebarBtn.addEventListener('click', () => {
                 Modals.EmailGallery.open();
-            });
-        }
-
-        if (DOM.emailEditorSidebarBtn) {
-            DOM.emailEditorSidebarBtn.addEventListener('click', () => {
-                Modals.EmailEditor.open();
             });
         }
 

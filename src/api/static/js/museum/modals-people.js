@@ -20,31 +20,137 @@ Modals.AddInterviewee = (() => {
 
 
 Modals.Contacts = (() => {
-        async function loadContacts() {
+        const DEFAULT_PAGE_SIZE = 25;
+        const MIN_PAGE_SIZE = 5;
+        const MAX_PAGE_SIZE = 500;
+        let pageSize = DEFAULT_PAGE_SIZE;
+        let currentPage = 0;
+        let totalContacts = 0;
+        const selectedIds = new Set();
+        let sortColumn = 'name';
+        let sortOrder = 'asc';
+
+        function getPageSizeFromInputs() {
+            const topVal = DOM.contactsPageSize ? parseInt(DOM.contactsPageSize.value, 10) : NaN;
+            const bottomVal = DOM.contactsPageSizeBottom ? parseInt(DOM.contactsPageSizeBottom.value, 10) : NaN;
+            const val = !isNaN(topVal) ? topVal : (!isNaN(bottomVal) ? bottomVal : DEFAULT_PAGE_SIZE);
+            return Math.min(MAX_PAGE_SIZE, Math.max(MIN_PAGE_SIZE, val));
+        }
+
+        function syncPageSizeInputs() {
+            if (DOM.contactsPageSize) DOM.contactsPageSize.value = pageSize;
+            if (DOM.contactsPageSizeBottom) DOM.contactsPageSizeBottom.value = pageSize;
+        }
+
+        function updatePaginationUI(offset, totalPages) {
+            const start = totalContacts === 0 ? 0 : offset + 1;
+            const end = Math.min(offset + pageSize, totalContacts);
+            const info = `Showing ${start}-${end} of ${totalContacts}`;
+            if (DOM.contactsPaginationInfoTop) DOM.contactsPaginationInfoTop.textContent = info;
+            if (DOM.contactsPaginationInfoBottom) DOM.contactsPaginationInfoBottom.textContent = info;
+            const prevBtns = [DOM.contactsPrevBtn, DOM.contactsPrevBtnTop];
+            const nextBtns = [DOM.contactsNextBtn, DOM.contactsNextBtnTop];
+            prevBtns.forEach(b => { if (b) b.disabled = currentPage <= 0; });
+            nextBtns.forEach(b => { if (b) b.disabled = currentPage >= totalPages - 1; });
+        }
+
+        function updateDeleteSelectedUI() {
+            const count = selectedIds.size;
+            if (DOM.contactsDeleteSelectedBtn) {
+                DOM.contactsDeleteSelectedBtn.style.display = count > 0 ? '' : 'none';
+            }
+            if (DOM.contactsSelectedCount) {
+                DOM.contactsSelectedCount.textContent = count;
+            }
+        }
+
+        function updateSortIndicators() {
+            document.querySelectorAll('.contacts-sortable-header').forEach(th => {
+                const col = th.dataset.sort;
+                th.classList.remove('contacts-sort-asc', 'contacts-sort-desc');
+                if (col === sortColumn) {
+                    th.classList.add(sortOrder === 'asc' ? 'contacts-sort-asc' : 'contacts-sort-desc');
+                }
+            });
+        }
+
+        function onSortHeaderClick(e) {
+            const th = e.target.closest('.contacts-sortable-header');
+            if (!th) return;
+            const col = th.dataset.sort;
+            if (!col) return;
+            if (sortColumn === col) {
+                sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = col;
+                sortOrder = 'desc';
+            }
+            loadContacts(0);
+        }
+
+        async function loadContacts(page = 0) {
             if (!DOM.contactsLoading || !DOM.contactsTableContainer || !DOM.contactsTableBody) return;
+            pageSize = getPageSizeFromInputs();
+            syncPageSizeInputs();
             DOM.contactsLoading.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading contacts...';
             DOM.contactsLoading.style.display = 'block';
             DOM.contactsTableContainer.style.display = 'none';
             try {
-                const response = await fetch('/contacts?limit=500');
+                const offset = page * pageSize;
+                const response = await fetch(`/contacts?limit=${pageSize}&offset=${offset}&order_by=${encodeURIComponent(sortColumn)}&order=${encodeURIComponent(sortOrder)}`);
                 if (!response.ok) throw new Error('Failed to load contacts');
                 const data = await response.json();
                 const contacts = data.contacts || [];
+                totalContacts = data.total || 0;
+                currentPage = page;
+
                 DOM.contactsTableBody.innerHTML = '';
                 contacts.forEach(c => {
+
                     const row = document.createElement('tr');
                     row.style.borderBottom = '1px solid #eee';
+                    row.dataset.contactId = c.id;
+                    const canSelect = c.id !== 0;
+                    const cb = canSelect ? `<input type="checkbox" class="contacts-row-cb" data-contact-id="${c.id}">` : '';
+                    const deleteBtn = canSelect ? `<button type="button" class="contacts-delete-btn modal-btn modal-btn-secondary" data-contact-id="${c.id}" title="Delete contact" style="padding: 4px 8px; font-size: 0.85em;"><i class="fas fa-trash-alt"></i></button>` : '';
                     row.innerHTML = `
-                        <td style="padding: 8px;">${escapeHtml(c.name || '')}</td>
+                        <td style="padding: 8px; text-align: center;">${cb}</td>
+                        <td style="padding: 8px;width: 300px;">${escapeHtml(c.name || '')}</td>
                         <td style="padding: 8px;">${escapeHtml(c.email || '-')}</td>
-                        <td style="padding: 8px;">${escapeHtml(c.smsid || '-')}</td>
-                        <td style="padding: 8px;">${escapeHtml(c.whatsappid || '-')}</td>
-                        <td style="padding: 8px;">${escapeHtml(c.imessageid || '-')}</td>
-                        <td style="padding: 8px;">${escapeHtml(c.instagramid || '-')}</td>
-                        <td style="padding: 8px;">${escapeHtml(c.facebookid || '-')}</td>
+                        <td style="padding: 8px; text-align: center;width: 100px;">${escapeHtml(c.numsms || '-')}</td>
+                        <td style="padding: 8px; text-align: center;width: 100px;">${escapeHtml(c.numwhatsapp || '-')}</td>
+                        <td style="padding: 8px; text-align: center;width: 100px;">${escapeHtml(c.numimessages  || '-')}</td>
+                        <td style="padding: 8px; text-align: center;width: 100px;">${escapeHtml(c.numinstagram || '-')}</td>
+                        <td style="padding: 8px; text-align: center;width: 100px;">${escapeHtml(c.numfacebook || '-')}</td>
+                        <td style="padding: 8px; text-align: center;width: 80px;">${deleteBtn}</td>
                     `;
                     DOM.contactsTableBody.appendChild(row);
                 });
+
+                DOM.contactsTableBody.querySelectorAll('.contacts-row-cb').forEach(el => {
+                    el.addEventListener('change', (e) => {
+                        const id = parseInt(e.target.dataset.contactId, 10);
+                        if (e.target.checked) selectedIds.add(id);
+                        else selectedIds.delete(id);
+                        updateDeleteSelectedUI();
+                    });
+                    if (selectedIds.has(parseInt(el.dataset.contactId, 10))) el.checked = true;
+                });
+
+                DOM.contactsTableBody.querySelectorAll('.contacts-delete-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => handleDeleteSingle(e));
+                });
+
+                if (DOM.contactsSelectAll) {
+                    DOM.contactsSelectAll.checked = false;
+                    DOM.contactsSelectAll.indeterminate = false;
+                }
+
+                const totalPages = Math.ceil(totalContacts / pageSize) || 1;
+                updatePaginationUI(offset, totalPages);
+                updateDeleteSelectedUI();
+                updateSortIndicators();
+
                 DOM.contactsLoading.style.display = 'none';
                 DOM.contactsTableContainer.style.display = 'block';
             } catch (err) {
@@ -54,14 +160,60 @@ Modals.Contacts = (() => {
                 DOM.contactsTableContainer.style.display = 'none';
             }
         }
+
+        async function handleDeleteSingle(e) {
+            const btn = e.target.closest('.contacts-delete-btn');
+            if (!btn) return;
+            const id = parseInt(btn.dataset.contactId, 10);
+            if (isNaN(id) || id === 0) return;
+            try {
+                const response = await fetch(`/contacts/${id}`, { method: 'DELETE' });
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.detail || `HTTP ${response.status}`);
+                }
+                selectedIds.delete(id);
+                const totalPages = Math.ceil((totalContacts - 1) / pageSize) || 1;
+                const pageToLoad = currentPage >= totalPages && currentPage > 0 ? currentPage - 1 : currentPage;
+                await loadContacts(pageToLoad);
+            } catch (err) {
+                console.error('Error deleting contact:', err);
+                alert(`Error: ${err.message}`);
+            }
+        }
+
+        async function handleDeleteSelected() {
+            const ids = Array.from(selectedIds);
+            if (ids.length === 0) return;
+            if (ids.length > 1 && !confirm(`Delete ${ids.length} contacts? This cannot be undone.`)) return;
+            try {
+                const response = await fetch('/contacts/bulk-delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids })
+                });
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.detail || `HTTP ${response.status}`);
+                }
+                ids.forEach(id => selectedIds.delete(id));
+                const totalPages = Math.ceil((totalContacts - ids.length) / pageSize) || 1;
+                const pageToLoad = currentPage >= totalPages && currentPage > 0 ? currentPage - 1 : currentPage;
+                await loadContacts(pageToLoad);
+            } catch (err) {
+                console.error('Error deleting contacts:', err);
+                alert(`Error: ${err.message}`);
+            }
+        }
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
         function open() {
+            selectedIds.clear();
             Modals._openModal(DOM.contactsModal);
-            loadContacts();
+            loadContacts(0);
         }
         function close() {
             Modals._closeModal(DOM.contactsModal);
@@ -90,10 +242,41 @@ Modals.Contacts = (() => {
                 btn.innerHTML = origHtml;
             }
         }
+        function onPageSizeChange() {
+            pageSize = getPageSizeFromInputs();
+            syncPageSizeInputs();
+            loadContacts(0);
+        }
+
+        function onSelectAllClick(e) {
+            const checked = e.target.checked;
+            if (!DOM.contactsTableBody) return;
+            DOM.contactsTableBody.querySelectorAll('.contacts-row-cb').forEach(el => {
+                el.checked = checked;
+                const id = parseInt(el.dataset.contactId, 10);
+                if (checked) selectedIds.add(id);
+                else selectedIds.delete(id);
+            });
+            updateDeleteSelectedUI();
+        }
+
         function init() {
             if (DOM.closeContactsModalBtn) DOM.closeContactsModalBtn.addEventListener('click', close);
             if (DOM.contactsModal) DOM.contactsModal.addEventListener('click', (e) => { if (e.target === DOM.contactsModal) close(); });
             if (DOM.extractContactsBtn) DOM.extractContactsBtn.addEventListener('click', extractContacts);
+            if (DOM.contactsDeleteSelectedBtn) DOM.contactsDeleteSelectedBtn.addEventListener('click', handleDeleteSelected);
+            if (DOM.contactsSelectAll) DOM.contactsSelectAll.addEventListener('click', onSelectAllClick);
+            document.querySelectorAll('.contacts-sortable-header').forEach(th => {
+                th.addEventListener('click', onSortHeaderClick);
+            });
+            [DOM.contactsPrevBtn, DOM.contactsPrevBtnTop].forEach(b => {
+                if (b) b.addEventListener('click', () => loadContacts(Math.max(0, currentPage - 1)));
+            });
+            [DOM.contactsNextBtn, DOM.contactsNextBtnTop].forEach(b => {
+                if (b) b.addEventListener('click', () => loadContacts(currentPage + 1));
+            });
+            if (DOM.contactsPageSize) DOM.contactsPageSize.addEventListener('change', onPageSizeChange);
+            if (DOM.contactsPageSizeBottom) DOM.contactsPageSizeBottom.addEventListener('change', onPageSizeChange);
         }
         return { init, open, close };
 })();

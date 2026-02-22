@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Let's Talk About Dave</title>
-    <link rel="stylesheet" href="/static/css/new_page.css">
+    <link rel="stylesheet" href="/static/css/museum_of_dave.css">
     <link rel="stylesheet" href="/static/css/leaflet.css">
     <link rel="stylesheet" href="/static/css/images_grid.css">
     <!-- Include marked.js -->
@@ -25,7 +25,7 @@
             <div class="header-container">
                 <h2>Let's Talk About Dave</h2>
                 <button id="hamburger-menu" class="hamburger-btn">
-                    <i class="fas fa-bars"></i>
+                    <i class="fas fa-cog"></i>
                 </button>
             </div>
 
@@ -109,9 +109,6 @@
                     <button type="button" class="more-options-btn" id="email-gallery-sidebar-btn">
                         <i class="fas fa-envelope"></i> Email Gallery
                     </button>
-                    <button type="button" class="more-options-btn" id="email-editor-sidebar-btn">
-                        <i class="fas fa-edit"></i> Email Editor
-                    </button>
                     <button type="button" class="more-options-btn" id="new-image-gallery-sidebar-btn">
                         <i class="fas fa-images"></i>Image Gallery
                     </button>
@@ -131,9 +128,6 @@
                     <!-- <button type="button" class="more-options-btn" id="have-your-say-sidebar-btn">
                         <i class="fas fa-microphone"></i> Have Your Say
                     </button> -->
-                    <button type="button" class="more-options-btn" id="reference-documents-sidebar-btn">
-                        <i class="fas fa-folder-open"></i> Reference Documents
-                    </button>
                     <button type="button" class="more-options-btn" id="contacts-sidebar-btn">
                         <i class="fas fa-address-book"></i> Contacts
                     </button>
@@ -459,15 +453,20 @@
                 <button class="config-tab-button active" data-tab="settings">
                     <i class="fas fa-cog"></i> Settings
                 </button>
-                <button class="config-tab-button" data-tab="api-docs">
-                    <i class="fas fa-book"></i> API Docs
+                <button class="config-tab-button" data-tab="import-controls">
+                    <i class="fas fa-download"></i> Import Controls
                 </button>
                 <button class="config-tab-button" data-tab="images-grid">
                     <i class="fas fa-images"></i> Email Attachments
                 </button>
-                <button class="config-tab-button" data-tab="import-controls">
-                    <i class="fas fa-download"></i> Import Controls
+                <button class="config-tab-button" data-tab="email-editor">
+                    <i class="fas fa-edit"></i> Email Editor
                 </button>
+                <button class="config-tab-button" data-tab="api-docs">
+                    <i class="fas fa-book"></i> API Docs
+                </button>
+
+
             </div>
             <div class="config-content" style="height:calc(100vh - 170px)">
                 <div class="config-tab-content active" id="settings-tab">
@@ -479,6 +478,17 @@
                             </p>
                             <button type="button" id="edit-subject-config-btn" class="modal-btn modal-btn-primary">
                                 <i class="fas fa-edit"></i> Edit Subject Configuration
+                            </button>
+                        </div>
+                    </section>
+                    <section class="config-section">
+                        <h3>Reference Documents</h3>
+                        <div class="setting-group">
+                            <p style="color: #666; margin-bottom: 10px;">
+                                Upload and manage reference documents used by the chat system.
+                            </p>
+                            <button type="button" id="reference-documents-sidebar-btn" class="modal-btn modal-btn-primary">
+                                <i class="fas fa-folder-open"></i> Open Reference Documents
                             </button>
                         </div>
                     </section>
@@ -517,7 +527,7 @@
                             </label>
                         </div>
                     </section>
-                    <section class="config-section">
+                    <!-- <section class="config-section">
                         <h3>Database Maintenance</h3>
                         <div class="setting-group">
                             <p style="color: #dc3545; margin-bottom: 10px;">
@@ -535,7 +545,7 @@
                             </button>
                             <div id="empty-tables-status" style="margin-top: 10px; padding: 10px; border-radius: 4px; display: none;"></div>
                         </div>
-                    </section>
+                    </section> -->
                 </div>
                 <div class="config-tab-content" id="api-docs-tab">
                     <iframe id="api-docs-iframe" src="/docs"></iframe>
@@ -628,6 +638,78 @@
                         </div>
                     </div>
                 </div>
+                <div class="config-tab-content" id="email-editor-tab">
+                    <div class="email-editor-viewer">
+                        <div class="container">
+                            <div class="header">
+                                <h1>Email Editor</h1>
+                                <p>Search and edit email metadata (50 per page)</p>
+                            </div>
+                            <div class="content">
+                                <div class="controls">
+                                    <div class="email-editor-search-pane">
+                                        <div class="email-metadata-filters">
+                                            <div class="email-gallery-search-row">
+                                                <input type="text" id="email-editor-search" placeholder="Search emails..." class="email-gallery-input">
+                                            </div>
+                                            <div class="email-gallery-filter-row">
+                                                <input type="text" id="email-editor-sender" placeholder="From..." class="email-gallery-input">
+                                                <input type="text" id="email-editor-recipient" placeholder="To..." class="email-gallery-input">
+                                            </div>
+                                            <div class="email-gallery-filter-row-full">
+                                                <input type="text" id="email-editor-to-from" placeholder="To or From..." class="email-gallery-input">
+                                            </div>
+                                            <div class="email-gallery-filter-row">
+                                                <select id="email-editor-year-filter" class="email-gallery-select"></select>
+                                                <select id="email-editor-month-filter" class="email-gallery-select"></select>
+                                                <label class="email-gallery-checkbox-label">
+                                                    <input type="checkbox" id="email-editor-attachments-filter">
+                                                    Attachments
+                                                </label>
+                                            </div>
+                                            <div class="email-gallery-button-row">
+                                                <button id="email-editor-search-btn" class="modal-btn modal-btn-primary">
+                                                    <i class="fas fa-search"></i> Search
+                                                </button>
+                                                <button id="email-editor-clear-btn" class="modal-btn modal-btn-secondary">
+                                                    <i class="fas fa-times"></i> Clear
+                                                </button>
+                                                <button id="email-editor-bulk-delete-btn" class="modal-btn modal-btn-danger" style="display: none; margin-left: auto;">
+                                                    <i class="fas fa-trash"></i> Delete Selected
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="email-editor-table-pane">
+                                    <div class="email-editor-table-container">
+                                        <table class="email-editor-table">
+                                            <thead>
+                                                <tr>
+                                                    <th class="email-editor-col-subject">Subject</th>
+                                                    <th class="email-editor-col-from">From</th>
+                                                    <th class="email-editor-col-to">To</th>
+                                                    <th class="email-editor-col-date">Date</th>
+                                                    <th class="email-editor-col-personal">Personal</th>
+                                                    <th class="email-editor-col-business">Business</th>
+                                                    <th class="email-editor-col-important">Important</th>
+                                                    <th class="email-editor-col-use-by-ai">Use by AI</th>
+                                                    <th class="email-editor-col-delete">Delete</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="email-editor-table-body">
+                                                <!-- Email rows will be inserted here -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="email-editor-pagination" id="email-editor-pagination">
+                                        <!-- Pagination controls will be inserted here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div class="config-tab-content" id="import-controls-tab">
                     <section class="config-section" style="display: flex; flex-direction: column; height: 100%;">
                         <div style="flex: 1; overflow: auto;">
@@ -640,16 +722,16 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr data-import="email_processing"><td style="padding: 10px; border-bottom: 1px solid #eee;">Email Processing</td><td id="import-last-run-email_processing" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" data-import="email_processing"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="whatsapp"><td style="padding: 10px; border-bottom: 1px solid #eee;">WhatsApp Import</td><td id="import-last-run-whatsapp" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" data-import="whatsapp"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="facebook"><td style="padding: 10px; border-bottom: 1px solid #eee;">Facebook Messenger Import</td><td id="import-last-run-facebook" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" data-import="facebook"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="instagram"><td style="padding: 10px; border-bottom: 1px solid #eee;">Instagram Import</td><td id="import-last-run-instagram" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" data-import="instagram"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="imessage"><td style="padding: 10px; border-bottom: 1px solid #eee;">iMessage Import</td><td id="import-last-run-imessage" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" data-import="imessage"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="facebook_albums"><td style="padding: 10px; border-bottom: 1px solid #eee;">Facebook Albums Import</td><td id="import-last-run-facebook_albums" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" data-import="facebook_albums"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="facebook_places"><td style="padding: 10px; border-bottom: 1px solid #eee;">Facebook Places Import</td><td id="import-last-run-facebook_places" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" data-import="facebook_places"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="filesystem"><td style="padding: 10px; border-bottom: 1px solid #eee;">Filesystem Image Import</td><td id="import-last-run-filesystem" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" data-import="filesystem"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="thumbnails"><td style="padding: 10px; border-bottom: 1px solid #eee;">Image Processing (Thumbnails)</td><td id="import-last-run-thumbnails" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" data-import="thumbnails"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="contacts"><td style="padding: 10px; border-bottom: 1px solid #eee;">Contacts Merge</td><td id="import-last-run-contacts" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" data-import="contacts"><i class="fas fa-play"></i> Execute</button></td></tr>
+                                    <tr data-import="email_processing"><td style="padding: 10px; border-bottom: 1px solid #eee;">Email Processing</td><td id="import-last-run-email_processing" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="email_processing"><i class="fas fa-play"></i> Execute</button></td></tr>
+                                    <tr data-import="whatsapp"><td style="padding: 10px; border-bottom: 1px solid #eee;">WhatsApp Import</td><td id="import-last-run-whatsapp" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="whatsapp"><i class="fas fa-play"></i> Execute</button></td></tr>
+                                    <tr data-import="facebook"><td style="padding: 10px; border-bottom: 1px solid #eee;">Facebook Messenger Import</td><td id="import-last-run-facebook" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="facebook"><i class="fas fa-play"></i> Execute</button></td></tr>
+                                    <tr data-import="instagram"><td style="padding: 10px; border-bottom: 1px solid #eee;">Instagram Import</td><td id="import-last-run-instagram" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="instagram"><i class="fas fa-play"></i> Execute</button></td></tr>
+                                    <tr data-import="imessage"><td style="padding: 10px; border-bottom: 1px solid #eee;">iMessage Import</td><td id="import-last-run-imessage" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="imessage"><i class="fas fa-play"></i> Execute</button></td></tr>
+                                    <tr data-import="facebook_albums"><td style="padding: 10px; border-bottom: 1px solid #eee;">Facebook Albums Import</td><td id="import-last-run-facebook_albums" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="facebook_albums"><i class="fas fa-play"></i> Execute</button></td></tr>
+                                    <tr data-import="facebook_places"><td style="padding: 10px; border-bottom: 1px solid #eee;">Facebook Places Import</td><td id="import-last-run-facebook_places" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="facebook_places"><i class="fas fa-play"></i> Execute</button></td></tr>
+                                    <tr data-import="filesystem"><td style="padding: 10px; border-bottom: 1px solid #eee;">Filesystem Image Import</td><td id="import-last-run-filesystem" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="filesystem"><i class="fas fa-play"></i> Execute</button></td></tr>
+                                    <tr data-import="thumbnails"><td style="padding: 10px; border-bottom: 1px solid #eee;">Image Processing (Thumbnails and Location Extraction)</td><td id="import-last-run-thumbnails" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="thumbnails"><i class="fas fa-play"></i> Execute</button></td></tr>
+                                    <tr data-import="contacts"><td style="padding: 10px; border-bottom: 1px solid #eee;">Contacts Import</td><td id="import-last-run-contacts" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="contacts"><i class="fas fa-play"></i> Execute</button></td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -715,11 +797,15 @@
         <div id="tile-suggestions-modal" class="modal">
             <div class="modal-content tile-suggestions-modal-content">
                 <div class="modal-suggestions-header">
-                    <h2 id="tile-suggestions-modal-title" style="color: #fff;">Suggestions</h2>
-                    <button class="modal-suggestions-close-btn" id="modal-suggestions-close-btn" style="font-size: 1.5rem;">&times;</button>
+                    <h2 id="tile-suggestions-modal-title">Suggestions</h2>
+                    <button class="modal-suggestions-close-btn" id="modal-suggestions-close-btn">&times;</button>
                 </div>
-                <p id="tile-suggestions-modal-description" style="color: #fff;">Choose a suggestion from one of the categories below</p>
-                <div id="tile-suggestions-container" class="tile-suggestions-grid"></div>
+                <p id="tile-suggestions-modal-description">Choose a suggestion from one of the categories below</p>
+                <div class="suggestions-table-wrapper">
+                    <table class="suggestions-table">
+                        <tbody id="tile-suggestions-container"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -1072,78 +1158,6 @@
                     </div>
                 </div>
            </div>
-        </div>
-        
-        <!-- Email Editor Modal -->
-        <div id="email-editor-modal" class="modal">
-            <div class="modal-content email-editor-modal-content">
-                <button id="close-email-editor-modal" class="modal-close-btn">&times;</button>
-                <div class="email-editor-modal-body">
-                    <!-- Upper Pane: Search Criteria -->
-                    <div class="email-editor-search-pane">
-                        <div class="email-metadata-filters">
-                            <div class="email-gallery-title">
-                                <h2>Email Editor</h2> 
-                            </div>
-                            <div class="email-gallery-search-row">
-                                <input type="text" id="email-editor-search" placeholder="Search emails..." class="email-gallery-input">
-                            </div>
-                            <div class="email-gallery-filter-row">
-                                <input type="text" id="email-editor-sender" placeholder="From..." class="email-gallery-input">
-                                <input type="text" id="email-editor-recipient" placeholder="To..." class="email-gallery-input">
-                            </div>
-                            <div class="email-gallery-filter-row-full">
-                                <input type="text" id="email-editor-to-from" placeholder="To or From..." class="email-gallery-input">
-                            </div> 
-                            <div class="email-gallery-filter-row">
-                                <select id="email-editor-year-filter" class="email-gallery-select"></select>                                         
-                                <select id="email-editor-month-filter" class="email-gallery-select"></select>
-                                <label class="email-gallery-checkbox-label">
-                                    <input type="checkbox" id="email-editor-attachments-filter">
-                                    Attachments
-                                </label>
-                            </div>
-                            <div class="email-gallery-button-row">
-                                <button id="email-editor-search-btn" class="modal-btn modal-btn-primary">
-                                    <i class="fas fa-search"></i>Search
-                                </button>
-                                <button id="email-editor-clear-btn" class="modal-btn modal-btn-secondary">
-                                    <i class="fas fa-times"></i>Clear
-                                </button>
-                                <button id="email-editor-bulk-delete-btn" class="modal-btn modal-btn-danger" style="display: none; margin-left: auto;">
-                                    <i class="fas fa-trash"></i> Delete Selected
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- Lower Pane: Email Table -->
-                    <div class="email-editor-table-pane">
-                        <div class="email-editor-table-container">
-                            <table class="email-editor-table">
-                                <thead>
-                                    <tr>
-                                        <th class="email-editor-col-subject">Subject</th>
-                                        <th class="email-editor-col-from">From</th>
-                                        <th class="email-editor-col-to">To</th>
-                                        <th class="email-editor-col-date">Date</th>
-                                        <th class="email-editor-col-personal">Personal</th>
-                                        <th class="email-editor-col-business">Business</th>
-                                        <th class="email-editor-col-important">Important</th>
-                                        <th class="email-editor-col-use-by-ai">Use by AI</th>
-                                        <th class="email-editor-col-delete">Delete</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="email-editor-table-body">
-                                    <!-- Email rows will be inserted here -->
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="email-editor-pagination" id="email-editor-pagination">
-                            <!-- Pagination controls will be inserted here -->
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
         
         <!-- Attachment Image Modal -->
@@ -1561,35 +1575,62 @@
 
         <!-- Contacts Modal -->
         <div id="contacts-modal" class="modal">
-            <div class="modal-content contacts-modal-content" style="max-width: 900px;">
+            <div class="modal-content contacts-modal-content" style="max-width: 90vw;">
 
                 <button id="close-contacts-modal" class="modal-close-btn">&times;</button>
                 <h2 style="margin-top: 0; color: #233366;">Contacts</h2>
-                <div style="margin-bottom: 1em;">
+                <!-- <div style="margin-bottom: 1em;">
                     <button type="button" id="extract-contacts-btn" class="modal-btn modal-btn-primary">
                         <i class="fas fa-sync-alt"></i> Extract Contacts
                     </button>
-                </div>
-                <div class="contacts-modal-body" style="max-height: 70vh; overflow-y: auto;">
+                </div> -->
+                <div class="contacts-modal-body">
                     <div id="contacts-loading" style="padding: 2em; text-align: center; color: #666;">
                         <i class="fas fa-spinner fa-spin"></i> Loading contacts...
                     </div>
                     <div id="contacts-table-container" style="display: none;">
+                        <div id="contacts-pagination-top" class="contacts-pagination-row" style="margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.9em; color: #666;">
+                                    Page size: <input type="number" id="contacts-page-size" min="5" max="500" value="16" style="width: 60px; padding: 4px 8px;">
+                                </label>
+                                <span id="contacts-pagination-info-top" style="color: #666; font-size: 0.9em;"></span>
+                                <button type="button" id="contacts-delete-selected-btn" class="modal-btn modal-btn-secondary" style="display: none;"><i class="fas fa-trash-alt"></i> Delete <span id="contacts-selected-count">0</span> selected</button>
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <button type="button" id="contacts-prev-btn-top" class="modal-btn modal-btn-secondary" disabled><i class="fas fa-chevron-left"></i> Prev</button>
+                                <button type="button" id="contacts-next-btn-top" class="modal-btn modal-btn-secondary" disabled><i class="fas fa-chevron-right"></i> Next</button>
+                            </div>
+                        </div>
                         <table class="contacts-table" style="width: 100%; border-collapse: collapse;">
                             <thead>
                                 <tr style="background: #f0f4f8; border-bottom: 2px solid #bfc9da;">
-                                    <th style="padding: 10px; text-align: left;">Name</th>
-                                    <th style="padding: 10px; text-align: left;">Email</th>
-                                    <th style="padding: 10px; text-align: left;">Phone/SMS</th>
-                                    <th style="padding: 10px; text-align: left;">WhatsApp</th>
-                                    <th style="padding: 10px; text-align: left;">iMessage</th>
-                                    <th style="padding: 10px; text-align: left;">Instagram</th>
-                                    <th style="padding: 10px; text-align: left;">Facebook</th>
+                                    <th style="padding: 10px; text-align: center; width: 40px;"><input type="checkbox" id="contacts-select-all" title="Select all on page"></th>
+                                    <th class="contacts-sortable-header" data-sort="name" style="padding: 10px; text-align: left;width: 300px; cursor: pointer;">Name</th>
+                                    <th class="contacts-sortable-header" data-sort="email" style="padding: 10px; text-align: left; cursor: pointer;">Email</th>
+                                    <th class="contacts-sortable-header" data-sort="numsms" style="padding: 10px; text-align: center;width: 100px; cursor: pointer;">SMS</th>
+                                    <th class="contacts-sortable-header" data-sort="numwhatsapp" style="padding: 10px; text-align: center; width: 100px; cursor: pointer;">WhatsApp</th>
+                                    <th class="contacts-sortable-header" data-sort="numimessages" style="padding: 10px; text-align: center;width: 100px; cursor: pointer;">iMessage</th>
+                                    <th class="contacts-sortable-header" data-sort="numinstagram" style="padding: 10px; text-align: center;width: 100px; cursor: pointer;">Instagram</th>
+                                    <th class="contacts-sortable-header" data-sort="numfacebook" style="padding: 10px; text-align: center;width: 100px; cursor: pointer;">Facebook</th>
+                                    <th style="padding: 10px; text-align: center; width: 80px;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="contacts-table-body">
                             </tbody>
                         </table>
+                        <div id="contacts-pagination-bottom" class="contacts-pagination-row" style="margin-top: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.9em; color: #666;">
+                                    Page size: <input type="number" id="contacts-page-size-bottom" min="5" max="500" value="25" style="width: 60px; padding: 4px 8px;">
+                                </label>
+                                <span id="contacts-pagination-info-bottom" style="color: #666; font-size: 0.9em;"></span>
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <button type="button" id="contacts-prev-btn" class="modal-btn modal-btn-secondary" disabled><i class="fas fa-chevron-left"></i> Prev</button>
+                                <button type="button" id="contacts-next-btn" class="modal-btn modal-btn-secondary" disabled><i class="fas fa-chevron-right"></i> Next</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1888,6 +1929,17 @@
                 <div id="writing-style-display" class="writing-style-markdown" style="max-height: 300px; overflow-y: auto; padding: 0.7em; border-radius: 6px; border: 1px solid #bfc9da; background-color: #f9f9f9; font-size: 0.95em;"></div>
             </div>
             <div style="margin-bottom: 1.5em;">
+                <label style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Psychological Profile (AI-generated):</label>
+                <p style="color: #666; font-size: 0.9em; margin-bottom: 0.5em;">Analyzes a random sample of 5000 messages from Dave Burton to generate a psychological profile.</p>
+                <button type="button" id="request-psychological-profile-btn" class="modal-btn modal-btn-primary" style="margin-bottom: 0.7em;">
+                    <i class="fas fa-brain"></i> Generate Psychological Profile
+                </button>
+                <div id="psychological-profile-loading" style="display: none; color: #666; margin-bottom: 0.5em;">
+                    <i class="fas fa-spinner fa-spin"></i> Analyzing messages...
+                </div>
+                <div id="psychological-profile-display" class="writing-style-markdown" style="max-height: 300px; overflow-y: auto; padding: 0.7em; border-radius: 6px; border: 1px solid #bfc9da; background-color: #f9f9f9; font-size: 0.95em;"></div>
+            </div>
+            <div style="margin-bottom: 1.5em;">
                 <label style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">System Instructions:</label>
                 
                 <!-- Tab buttons -->
@@ -1915,16 +1967,17 @@
         </div>
     </div>
 
-    <script src="/static/js/new_page/foundation.js" defer></script>
-    <script src="/static/js/new_page/chat.js" defer></script>
-    <script src="/static/js/new_page/modals-core.js" defer></script>
-    <script src="/static/js/new_page/modals-media.js" defer></script>
-    <script src="/static/js/new_page/modals-email.js" defer></script>
-    <script src="/static/js/new_page/modals-comms.js" defer></script>
-    <script src="/static/js/new_page/modals-people.js" defer></script>
-    <script src="/static/js/new_page/modals-settings.js" defer></script>
-    <script src="/static/js/new_page/interviewer.js" defer></script>
-    <script src="/static/js/new_page/app.js" defer></script>
+    <script src="/static/js/museum/foundation.js" defer></script>
+    <script src="/static/js/museum/chat.js" defer></script>
+    <script src="/static/js/museum/modals-core.js" defer></script>
+    <script src="/static/js/museum/modals-media.js" defer></script>
+    <script src="/static/js/museum/modals-suggestions.js" defer></script>
+    <script src="/static/js/museum/modals-email.js" defer></script>
+    <script src="/static/js/museum/modals-comms.js" defer></script>
+    <script src="/static/js/museum/modals-people.js" defer></script>
+    <script src="/static/js/museum/modals-settings.js" defer></script>
+    <script src="/static/js/museum/interviewer.js" defer></script>
+    <script src="/static/js/museum/app.js" defer></script>
     <script src="/static/js/leaflet.js"></script>
     <script src="/static/js/images_grid.js"></script>
     <script>

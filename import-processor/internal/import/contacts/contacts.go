@@ -35,20 +35,24 @@ func RunContactsNormalise(ctx context.Context, opts RunOptions) error {
 		if opts.ContactsDB == nil {
 			return fmt.Errorf("database required for CONTACTS_QUERY mode")
 		}
+		fmt.Fprintf(os.Stderr, "Reading contacts from database\n")
 		records, err = ReadFromDatabase(ctx, opts.ContactsDB, opts.ContactsQuery)
 		if err != nil {
 			return fmt.Errorf("read from database: %w", err)
 		}
+		fmt.Fprintf(os.Stderr, "Read %d contacts from database\n", len(records))
 	} else {
 		return fmt.Errorf("database required for CONTACTS_QUERY mode")
 	}
 
+	fmt.Fprintf(os.Stderr, "Merging contacts\n")
 	groups := runMerge(records, emailMatchMap, emailPrimaryNameMap, opts.Workers)
 	fmt.Fprintf(os.Stderr, "Found %d groups\n", len(groups))
 	formattedOutput := formatOutput(groups)
 
 	//var socialMediaRecords []SocialMediaRecord
 	if opts.ContactsDB != nil {
+		fmt.Fprintf(os.Stderr, "Running social media query\n")
 		smRecords, err := runSocialMediaQuery(ctx, opts.ContactsDB)
 		if err != nil {
 			return fmt.Errorf("social media query: %w", err)
@@ -112,6 +116,7 @@ func RunContactsNormalise(ctx context.Context, opts RunOptions) error {
 	}
 
 	//If write-db is true trancate cascade the contacts table
+	fmt.Fprintf(os.Stderr, "Truncating contacts table\n")
 	if err := TruncateContactsTable(ctx, opts.ContactsDB); err != nil {
 		return fmt.Errorf("truncate contacts table: %w", err)
 	}
@@ -119,11 +124,14 @@ func RunContactsNormalise(ctx context.Context, opts RunOptions) error {
 		return fmt.Errorf("database required for write")
 	}
 	// Must write contacts first so relationships can reference them
+	fmt.Fprintf(os.Stderr, "Writing contacts and classifications to database\n")
 	if err := writeContactsAndClassifications(ctx, opts.ContactsDB, opts.ClassificationsFile, formattedOutput); err != nil {
 		return err
 	}
 	if opts.RelationshipQuery != "" {
+		fmt.Fprintf(os.Stderr, "Finding relationships\n")
 		emailMap := CreateEmailMap(formattedOutput)
+		fmt.Fprintf(os.Stderr, "Created email map\n")
 		findRelationships(ctx, emailMap, opts.RelationshipQuery, true, opts.ContactsDB)
 	}
 
@@ -541,27 +549,8 @@ func findRelationships(ctx context.Context, emailMap map[string]int, query strin
 		ToID     int
 		Count    int
 	}
-	// var fromToListList []fromToList
-
-	// for combo, count := range uniqueCombinations {
-	// 	fromToListList = append(fromToListList, fromToList{
-	// 		FromName: combo.FromName,
-	// 		FromID:   combo.FromID,
-	// 		ToName:   combo.ToName,
-	// 		ToID:     combo.ToID,
-	// 		Count:    count,
-	// 	})
-	// }
 
 	ContactTotalMap := make(map[int]int)
-	// for _, item := range fromToListList {
-	// 	if item.FromID != 0 {
-	// 		ContactTotalMap[item.FromID] += item.Count
-	// 	}
-	// 	if item.ToID != 0 {
-	// 		ContactTotalMap[item.ToID] += item.Count
-	// 	}
-	// }
 
 	for combo, count := range uniqueCombinations {
 		if combo.FromID != 0 {

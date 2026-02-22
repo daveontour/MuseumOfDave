@@ -1292,3 +1292,69 @@ async def summarize_writing_style_endpoint():
         "message_count": sample_size,
         "total_available": total_available
     }
+
+
+# ---------------------------------------------------------------------------
+# Psychological profile route
+# ---------------------------------------------------------------------------
+
+@router.post("/psychological-profile/summarize")
+async def summarize_psychological_profile_endpoint():
+    """Generate a psychological profile of Dave Burton using a random sample of 5000 messages."""
+    session = db.get_session()
+    try:
+        total_available = session.query(IMessage).filter(IMessage.sender_name == "Dave Burton").count()
+
+        if total_available == 0:
+            raise HTTPException(status_code=404, detail="No messages found for sender 'Dave Burton'")
+
+        selected_messages = session.query(IMessage).options(
+            joinedload(IMessage.media_attachments)
+        ).filter(
+            IMessage.sender_name == "Dave Burton"
+        ).order_by(func.random()).limit(5000).all()
+
+        sample_size = len(selected_messages)
+
+        messages_data_list = []
+        for msg in selected_messages:
+            has_attachment = bool(msg.media_attachments)
+            messages_data_list.append({
+                "message_date": msg.message_date.isoformat() if msg.message_date else None,
+                "sender_name": msg.sender_name or "Unknown",
+                "type": msg.type or "",
+                "text": msg.text or "",
+                "has_attachment": has_attachment
+            })
+
+        messages_data = {
+            "chat_session": "Dave Burton (psychological profile sample)",
+            "message_count": len(messages_data_list),
+            "messages": messages_data_list
+        }
+    finally:
+        session.close()
+
+    try:
+        gemini_service = GeminiService()
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    try:
+        profile = gemini_service.summarize_psychological_profile(messages_data)
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error generating psychological profile: {str(e)}")
+
+    config_service = SubjectConfigurationService(db=db)
+    config_service.update_psychological_profile_ai(profile)
+
+    return {
+        "status": "completed",
+        "profile": profile,
+        "message_count": sample_size,
+        "total_available": total_available
+    }

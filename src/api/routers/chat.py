@@ -103,6 +103,11 @@ async def generate_chat_response(request: ChatRequest):
                 try:
                     print(f"[generate_chat_response] Setting mood to '{request.mood}'")
                     chat_service.set_mood(request.mood)
+                    config_service = SubjectConfigurationService(db=db)
+                    configuration = config_service.get_configuration()
+                    if configuration:
+                        chat_service.set_psychological_profile(configuration.psychological_profile_ai)
+                        chat_service.set_writing_style(configuration.writing_style_ai)
                 except Exception as e:
                     print(f"[generate_chat_response] Warning: Could not set voice 'secret_admirer': {str(e)}")
 
@@ -444,6 +449,7 @@ async def get_subject_configuration():
             "whatsapp_handle": configuration.whatsapp_handle,
             "instagram_handle": configuration.instagram_handle,
             "writing_style_ai": configuration.writing_style_ai,
+            "psychological_profile_ai": configuration.psychological_profile_ai,
             "system_instructions": configuration.system_instructions,
             "core_system_instructions": configuration.core_system_instructions,
             "created_at": configuration.created_at.isoformat() if configuration.created_at else None,

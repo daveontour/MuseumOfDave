@@ -1,84 +1,114 @@
 'use strict';
 
-Modals.Suggestions = (() => {
-        function open() {
-            Modals._openModal(DOM.suggestionsModal);
-            DOM.suggestionsListContainer.innerHTML = '<div>Loading...</div>';
-            ApiService.fetchSuggestionsConfig()
-                .then(data => {
-                    DOM.suggestionsListContainer.innerHTML = '';
-                    if (data.categories && Array.isArray(data.categories)) {
-                        data.categories.forEach(cat => {
-                            if (Array.isArray(cat.suggestions)) {
-                                cat.suggestions.forEach(sugg => {
-                                    const suggTile = document.createElement('div');
-                                    suggTile.style.backgroundColor = '#ffffff';
-                                    suggTile.style.display = 'flex';
-                                    suggTile.style.flexDirection = 'column';
-                                    suggTile.style.height = '120px';
-                                    suggTile.style.gap = '0';
+// Modals.Suggestions = (() => {
+//         function executeSuggestion(sugg, cat) {
+//             Modals._closeModal(DOM.suggestionsModal);
+//             if (sugg.function && AppActions[sugg.function]) {
+//                 AppActions[sugg.function]();
+//             } else {
+//                 App.processFormSubmit(sugg.prompt, cat.category, sugg.title);
+//             }
+//         }
 
+//         function toggleCategory(headerRow) {
+//             const category = headerRow.dataset.category;
+//             const expanded = headerRow.dataset.expanded !== 'false';
+//             const icon = headerRow.querySelector('.suggestions-category-toggle');
+//             const rows = DOM.suggestionsListContainer.querySelectorAll(`tr.suggestions-table-row[data-category="${CSS.escape(category)}"]`);
 
-                                    const catTitle = document.createElement('p');
-                                    catTitle.innerText = cat.category;
-                                    catTitle.style.fontFamily = 'Arial, sans-serif';
-                                    catTitle.style.fontWeight = 'bold';
-                                    catTitle.style.margin = '0';
-                                    catTitle.style.flex = '1 1 0%';
-                                    catTitle.style.display = 'flex';
-                                    catTitle.style.alignItems = 'center';
-                                    catTitle.style.justifyContent = 'center';
+//             if (expanded) {
+//                 rows.forEach(r => { r.classList.add('suggestions-row-collapsed'); });
+//                 headerRow.dataset.expanded = 'false';
+//                 if (icon) {
+//                     icon.classList.remove('fa-chevron-down');
+//                     icon.classList.add('fa-chevron-right');
+//                 }
+//             } else {
+//                 rows.forEach(r => { r.classList.remove('suggestions-row-collapsed'); });
+//                 headerRow.dataset.expanded = 'true';
+//                 if (icon) {
+//                     icon.classList.remove('fa-chevron-right');
+//                     icon.classList.add('fa-chevron-down');
+//                 }
+//             }
+//         }
 
+//         function open() {
+//             Modals._openModal(DOM.suggestionsModal);
+//             DOM.suggestionsListContainer.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 2em; color: #666;">Loading...</td></tr>';
+//             ApiService.fetchSuggestionsConfig()
+//                 .then(data => {
+//                     DOM.suggestionsListContainer.innerHTML = '';
+//                     if (data.categories && Array.isArray(data.categories)) {
+//                         data.categories.forEach(cat => {
+//                             if (Array.isArray(cat.suggestions)) {
+//                                 const categoryHeader = document.createElement('tr');
+//                                 categoryHeader.className = 'suggestions-category-header';
+//                                 categoryHeader.dataset.category = cat.category;
+//                                 categoryHeader.dataset.expanded = 'false';
+//                                 categoryHeader.innerHTML = `
+//                                     <td colspan="3" class="suggestions-category-header-cell">
+//                                         <i class="fas fa-chevron-right suggestions-category-toggle"></i>
+//                                         <span class="suggestions-category-name">${cat.category}</span>
+//                                         <span class="suggestions-category-count">(${cat.suggestions.length})</span>
+//                                     </td>
+//                                 `;
+//                                 categoryHeader.addEventListener('click', () => toggleCategory(categoryHeader));
+//                                 DOM.suggestionsListContainer.appendChild(categoryHeader);
 
-                                    const suggestionTitle = document.createElement('p');
-                                    suggestionTitle.innerText = sugg.title;
-                                    suggestionTitle.style.margin = '0';
-                                    suggestionTitle.style.flex = '2 1 0%';
-                                    suggestionTitle.style.display = 'flex';
-                                    suggestionTitle.style.alignItems = 'center';
-                                    suggestionTitle.style.justifyContent = 'center';
+//                                 cat.suggestions.forEach(sugg => {
+//                                     const tr = document.createElement('tr');
+//                                     tr.className = 'suggestions-table-row suggestions-row-collapsed';
+//                                     tr.dataset.category = cat.category;
 
+//                                     const titleCell = document.createElement('td');
+//                                     titleCell.className = 'suggestions-col-title';
+//                                     titleCell.colSpan = 2;
+//                                     titleCell.textContent = sugg.title;
 
-                                    suggTile.appendChild(catTitle);
-                                    suggTile.appendChild(suggestionTitle);
-                                    suggTile.classList.add('tile-suggestions');
-                                    suggTile.addEventListener('click', () => {
-                                        Modals._closeModal(DOM.suggestionsModal);
-                                        if (sugg.function && AppActions[sugg.function]) {
-                                            AppActions[sugg.function]();
-                                        } else {
-                                            App.processFormSubmit(sugg.prompt, cat.category, sugg.title);
-                                        }
-                                    });
-                                    DOM.suggestionsListContainer.appendChild(suggTile);
-                                });
-                            }
-                        });
-                    } else {
-                        DOM.suggestionsListContainer.innerHTML = '<div>No suggestions found.</div>';
-                    }
-                })
-                .catch(err => {
-                    console.error("Failed to load suggestions:", err);
-                    DOM.suggestionsListContainer.innerHTML = '<div>Failed to load suggestions.</div>';
-                    UI.displayError("Could not load suggestions: " + err.message);
-                });
-        }
-        function close() { Modals._closeModal(DOM.suggestionsModal); }
-        function init() {
-       //     DOM.suggestionsBtn.addEventListener('click', open);
-            DOM.closeSuggestionsModalBtn.addEventListener('click', close);
-            DOM.suggestionsModal.addEventListener('click', (e) => { if (e.target === DOM.suggestionsModal) close(); });
-        }
-        function close() {
-            const modal = document.getElementById('sms-messages-modal');
-            if (modal) {
-                modal.style.display = 'none';
-            }
-        }
+//                                     const actionCell = document.createElement('td');
+//                                     actionCell.className = 'suggestions-col-action';
+//                                     const btn = document.createElement('button');
+//                                     btn.type = 'button';
+//                                     btn.className = 'modal-btn modal-btn-primary suggestions-execute-btn';
+//                                     btn.textContent = 'Execute';
+//                                     btn.addEventListener('click', (e) => {
+//                                         e.stopPropagation();
+//                                         executeSuggestion(sugg, cat);
+//                                     });
 
-        return { init, open, close };
-})();
+//                                     actionCell.appendChild(btn);
+//                                     tr.appendChild(titleCell);
+//                                     tr.appendChild(actionCell);
+//                                     DOM.suggestionsListContainer.appendChild(tr);
+//                                 });
+//                             }
+//                         });
+//                         if (DOM.suggestionsListContainer.children.length === 0) {
+//                             DOM.suggestionsListContainer.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 2em; color: #666;">No suggestions found.</td></tr>';
+//                         }
+//                     } else {
+//                         DOM.suggestionsListContainer.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 2em; color: #666;">No suggestions found.</td></tr>';
+//                     }
+//                 })
+//                 .catch(err => {
+//                     console.error("Failed to load suggestions:", err);
+//                     DOM.suggestionsListContainer.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 2em; color: #c00;">Failed to load suggestions.</td></tr>';
+//                     UI.displayError("Could not load suggestions: " + err.message);
+//                 });
+//         }
+
+//         function close() {
+//             Modals._closeModal(DOM.suggestionsModal);
+//         }
+
+//         function init() {
+//             DOM.closeSuggestionsModalBtn.addEventListener('click', close);
+//             DOM.suggestionsModal.addEventListener('click', (e) => { if (e.target === DOM.suggestionsModal) close(); });
+//         }
+
+//         return { init, open, close };
+// })();
 
 
 Modals.EmailGallery = (() => {
@@ -1436,9 +1466,12 @@ Modals.EmailEditor = (() => {
         }
 
         function init() {
-            DOM.closeEmailEditorModalBtn.addEventListener('click', close);
-            DOM.emailEditorSearchBtn.addEventListener('click', _handleSearch);
-            DOM.emailEditorClearBtn.addEventListener('click', _handleClear);
+            if (DOM.emailEditorSearchBtn) {
+                DOM.emailEditorSearchBtn.addEventListener('click', _handleSearch);
+            }
+            if (DOM.emailEditorClearBtn) {
+                DOM.emailEditorClearBtn.addEventListener('click', _handleClear);
+            }
             if (DOM.emailEditorBulkDeleteBtn) {
                 DOM.emailEditorBulkDeleteBtn.addEventListener('click', _handleBulkDelete);
             }
@@ -1532,7 +1565,7 @@ Modals.EmailEditor = (() => {
             if (emailsToShow.length === 0) {
                 const row = document.createElement('tr');
                 const cell = document.createElement('td');
-                cell.colSpan = 4;
+                cell.colSpan = 9;
                 cell.textContent = 'No emails found';
                 cell.style.textAlign = 'center';
                 cell.style.padding = '2em';
@@ -1911,20 +1944,26 @@ Modals.EmailEditor = (() => {
         }
 
         function open() {
-            DOM.emailEditorModal.style.display = 'flex';
+            // Show config page and switch to email editor tab
+            if (DOM.configPage) {
+                DOM.configPage.style.display = 'block';
+                if (DOM.chatMain) DOM.chatMain.style.display = 'none';
+            }
+            const tabBtn = document.querySelector('.config-tab-button[data-tab="email-editor"]');
+            const tabContent = document.getElementById('email-editor-tab');
+            if (tabBtn && tabContent) {
+                document.querySelectorAll('.config-tab-button').forEach(btn => btn.classList.remove('active'));
+                document.querySelectorAll('.config-tab-content').forEach(c => c.classList.remove('active'));
+                tabBtn.classList.add('active');
+                tabContent.classList.add('active');
+            }
             currentPage = 1;
             selectedRowIndex = -1;
             selectedEmailIds.clear();
             _updateBulkDeleteButton();
-            //_loadEmails();
         }
 
-        function close() {
-            DOM.emailEditorModal.style.display = 'none';
-            selectedRowIndex = -1;
-        }
-
-        return { init, open, close };
+        return { init, open };
 })();
 
 

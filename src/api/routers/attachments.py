@@ -116,7 +116,7 @@ async def get_attachment_by_id_order(offset: int = Query(0, ge=0, description="O
 
 @router.get("/attachments/by-size", response_model=Optional[AttachmentInfoResponse])
 async def get_attachment_by_size_order(
-    order: str = Query("asc", regex="^(asc|desc)$", description="Order: 'asc' for smallest to biggest, 'desc' for biggest to smallest"),
+    order: str = Query("asc", pattern="^(asc|desc)$", description="Order: 'asc' for smallest to biggest, 'desc' for biggest to smallest"),
     offset: int = Query(0, ge=0, description="Offset for pagination")
 ):
     """Get attachment by size order with offset."""
@@ -179,8 +179,8 @@ async def get_attachment_count():
 async def get_images_grid(
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(50, ge=1, le=100, description="Number of images per page"),
-    order: str = Query("id", regex="^(id|size|date)$", description="Sort order: 'id', 'size', or 'date'"),
-    direction: str = Query("asc", regex="^(asc|desc)$", description="Sort direction: 'asc' or 'desc'"),
+    order: str = Query("id", pattern="^(id|size|date)$", description="Sort order: 'id', 'size', or 'date'"),
+    direction: str = Query("asc", pattern="^(asc|desc)$", description="Sort direction: 'asc' or 'desc'"),
     all_types: bool = Query(False, description="If True, show all file types, not just images")
 ):
     """Get images for grid display with pagination and sorting."""

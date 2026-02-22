@@ -231,7 +231,7 @@ class MediaMetadata(Base):
     message_attachments = relationship("MessageAttachment", foreign_keys="MessageAttachment.media_item_id", back_populates="media_item")
 
     # Relationship to albums via AlbumMedia junction table
-    album_media = relationship("AlbumMedia", foreign_keys="AlbumMedia.media_item_id")
+    album_media = relationship("AlbumMedia", foreign_keys="AlbumMedia.media_item_id", overlaps="media_item")
 
     __table_args__ = (
         Index('idx_media_items_processed', 'processed'),
