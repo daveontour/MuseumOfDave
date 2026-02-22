@@ -5177,6 +5177,22 @@ body {
     font-size: 0.7em;
     opacity: 0.8;
 }
+.contacts-count-link {
+    cursor: pointer;
+    color: #0d6efd;
+    text-decoration: none;
+}
+.contacts-count-link:hover {
+    text-decoration: underline;
+}
+.contacts-email-count-link {
+    cursor: pointer;
+    color: #0d6efd;
+    text-decoration: none;
+}
+.contacts-email-count-link:hover {
+    text-decoration: underline;
+}
 
 /* Reference Documents Modal Styles */
 .reference-documents-modal-content {

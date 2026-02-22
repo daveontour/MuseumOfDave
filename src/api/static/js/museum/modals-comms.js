@@ -1578,6 +1578,20 @@ Modals.SMSMessages = (() => {
             }
         }
 
+        async function openWithFilter(contactName) {
+            await open();
+            const searchInput = document.getElementById('sms-chat-search');
+            if (searchInput && contactName) {
+                searchInput.value = contactName;
+                searchChatSessions(contactName);
+                if (filteredSessions.length > 0) {
+                    const exactMatch = filteredSessions.find(s => s.chat_session === contactName);
+                    const toSelect = exactMatch || filteredSessions[0];
+                    await selectChatSession(toSelect.chat_session);
+                }
+            }
+        }
+
         async function open() {
             const modal = document.getElementById('sms-messages-modal');
             if (modal) {
@@ -1711,7 +1725,7 @@ Modals.SMSMessages = (() => {
             }
         }
 
-        return { init, open, close,openAndSelectConversation };
+        return { init, open, close, openAndSelectConversation, openWithFilter };
 })();
 
 

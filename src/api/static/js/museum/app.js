@@ -28,6 +28,7 @@ const AppActions = {
     ["showImageGallery"]: () => Modals.ImageGallery.open(),
     //[CONSTANTS.FUNCTION_NAMES.SeventhFunction]: () => SSE.browserFunctions.testEmail(), // showImageGalleryOptions
  // showEmailGalleryOptions
+    ["listContacts"]: () => Modals.Contacts.open(),
 
 };
 window.customObject = AppActions; // Expose for Suggestions.json if it relies on global `customObject`
@@ -1204,6 +1205,26 @@ const App = (() => {
                     await fetch(endpoint, { method: 'POST' });
                 } catch (e) { console.warn('Cancel error:', e); }
             });
+        }
+
+        function resetImportControls() {
+            closeCurrentEventSource();
+            importInProgress = false;
+            currentImportType = null;
+            setImportStatus('Idle');
+            if (importCancelBtn) importCancelBtn.style.display = 'none';
+            document.querySelectorAll('.import-execute-btn').forEach(btn => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-play"></i> Execute';
+                btn.style.backgroundColor = '';
+                btn.classList.remove('import-executing');
+            });
+            if (typeof loadImportControlLastRun === 'function') loadImportControlLastRun();
+        }
+
+        const importResetBtn = document.getElementById('import-controls-reset-btn');
+        if (importResetBtn) {
+            importResetBtn.addEventListener('click', () => resetImportControls());
         }
 
         async function checkInitialImportStatus() {

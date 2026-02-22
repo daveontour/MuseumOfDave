@@ -1242,9 +1242,11 @@ ${textContent}
         }
 
         function openContact(contactName) {
-            DOM.emailGalleryToFrom.value = contactName;
+            _setupFilters();
+            DOM.emailGalleryToFrom.value = contactName || '';
+            DOM.emailGalleryYearFilter.value = '0';
+            DOM.emailGalleryMonthFilter.value = '0';
             DOM.emailGalleryModal.style.display = 'flex';
-            //_loadEmailData();
             _handleSearch();
         }
 

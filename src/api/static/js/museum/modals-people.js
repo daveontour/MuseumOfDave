@@ -97,7 +97,20 @@ Modals.Contacts = (() => {
             DOM.contactsTableContainer.style.display = 'none';
             try {
                 const offset = page * pageSize;
-                const response = await fetch(`/contacts?limit=${pageSize}&offset=${offset}&order_by=${encodeURIComponent(sortColumn)}&order=${encodeURIComponent(sortOrder)}`);
+                const hasMessagesOnly = DOM.contactsHasMessagesOnly && DOM.contactsHasMessagesOnly.checked;
+                const emailContainsAt = DOM.contactsEmailContainsAt && DOM.contactsEmailContainsAt.checked;
+                const excludePhoneNumbers = DOM.contactsExcludePhoneNumbers && DOM.contactsExcludePhoneNumbers.checked;
+                const searchTerm = DOM.contactsSearch ? DOM.contactsSearch.value.trim() : '';
+                const url = new URL('/contacts', window.location.origin);
+                url.searchParams.set('limit', String(pageSize));
+                url.searchParams.set('offset', String(offset));
+                url.searchParams.set('order_by', sortColumn);
+                url.searchParams.set('order', sortOrder);
+                if (hasMessagesOnly) url.searchParams.set('has_messages', 'true');
+                if (emailContainsAt) url.searchParams.set('email_contains_at', 'true');
+                if (excludePhoneNumbers) url.searchParams.set('exclude_phone_numbers', 'true');
+                if (searchTerm) url.searchParams.set('search', searchTerm);
+                const response = await fetch(url.toString());
                 if (!response.ok) throw new Error('Failed to load contacts');
                 const data = await response.json();
                 const contacts = data.contacts || [];
@@ -113,15 +126,17 @@ Modals.Contacts = (() => {
                     const canSelect = c.id !== 0;
                     const cb = canSelect ? `<input type="checkbox" class="contacts-row-cb" data-contact-id="${c.id}">` : '';
                     const deleteBtn = canSelect ? `<button type="button" class="contacts-delete-btn modal-btn modal-btn-secondary" data-contact-id="${c.id}" title="Delete contact" style="padding: 4px 8px; font-size: 0.85em;"><i class="fas fa-trash-alt"></i></button>` : '';
+                    const contactName = c.name || '';
                     row.innerHTML = `
                         <td style="padding: 8px; text-align: center;">${cb}</td>
-                        <td style="padding: 8px;width: 300px;">${escapeHtml(c.name || '')}</td>
+                        <td style="padding: 8px;width: 300px;">${escapeHtml(contactName)}</td>
                         <td style="padding: 8px;">${escapeHtml(c.email || '-')}</td>
-                        <td style="padding: 8px; text-align: center;width: 100px;">${escapeHtml(c.numsms || '-')}</td>
-                        <td style="padding: 8px; text-align: center;width: 100px;">${escapeHtml(c.numwhatsapp || '-')}</td>
-                        <td style="padding: 8px; text-align: center;width: 100px;">${escapeHtml(c.numimessages  || '-')}</td>
-                        <td style="padding: 8px; text-align: center;width: 100px;">${escapeHtml(c.numinstagram || '-')}</td>
-                        <td style="padding: 8px; text-align: center;width: 100px;">${escapeHtml(c.numfacebook || '-')}</td>
+                        <td style="padding: 8px; text-align: center;width: 100px;">${renderEmailCountCell(c.numemail, contactName)}</td>
+                        <td style="padding: 8px; text-align: center;width: 100px;">${renderCountCell(c.numsms, contactName)}</td>
+                        <td style="padding: 8px; text-align: center;width: 100px;">${renderCountCell(c.numwhatsapp, contactName)}</td>
+                        <td style="padding: 8px; text-align: center;width: 100px;">${renderCountCell(c.numimessages, contactName)}</td>
+                        <td style="padding: 8px; text-align: center;width: 100px;">${renderCountCell(c.numinstagram, contactName)}</td>
+                        <td style="padding: 8px; text-align: center;width: 100px;">${renderCountCell(c.numfacebook, contactName)}</td>
                         <td style="padding: 8px; text-align: center;width: 80px;">${deleteBtn}</td>
                     `;
                     DOM.contactsTableBody.appendChild(row);
@@ -210,6 +225,44 @@ Modals.Contacts = (() => {
             div.textContent = text;
             return div.innerHTML;
         }
+
+        function renderCountCell(value, contactName) {
+            const isClickable = typeof value === 'number' && value > 0;
+            const display = (typeof value === 'number' && value > 0) ? String(value) : '';
+            if (isClickable) {
+                return `<span class="contacts-count-link" data-contact-name="${escapeHtml(contactName || '')}" title="View messages">${display}</span>`;
+            }
+            return escapeHtml(display);
+        }
+
+        function renderEmailCountCell(value, contactName) {
+            const isClickable = typeof value === 'number' && value > 0;
+            const display = (typeof value === 'number' && value > 0) ? String(value) : '';
+            if (isClickable) {
+                return `<span class="contacts-email-count-link" data-contact-name="${escapeHtml(contactName || '')}" title="View emails">${display}</span>`;
+            }
+            return escapeHtml(display);
+        }
+
+        function onCountCellClick(e) {
+            const link = e.target.closest('.contacts-count-link');
+            if (link) {
+                const contactName = link.dataset.contactName;
+                if (contactName && Modals.SMSMessages && Modals.SMSMessages.openWithFilter) {
+                    Modals.Contacts.close();
+                    Modals.SMSMessages.openWithFilter(contactName);
+                }
+                return;
+            }
+            const emailLink = e.target.closest('.contacts-email-count-link');
+            if (emailLink) {
+                const contactName = emailLink.dataset.contactName;
+                if (contactName && Modals.EmailGallery && Modals.EmailGallery.openContact) {
+                    Modals.Contacts.close();
+                    Modals.EmailGallery.openContact(contactName);
+                }
+            }
+        }
         function open() {
             selectedIds.clear();
             Modals._openModal(DOM.contactsModal);
@@ -277,6 +330,15 @@ Modals.Contacts = (() => {
             });
             if (DOM.contactsPageSize) DOM.contactsPageSize.addEventListener('change', onPageSizeChange);
             if (DOM.contactsPageSizeBottom) DOM.contactsPageSizeBottom.addEventListener('change', onPageSizeChange);
+            if (DOM.contactsHasMessagesOnly) DOM.contactsHasMessagesOnly.addEventListener('change', () => loadContacts(0));
+            if (DOM.contactsEmailContainsAt) DOM.contactsEmailContainsAt.addEventListener('change', () => loadContacts(0));
+            if (DOM.contactsExcludePhoneNumbers) DOM.contactsExcludePhoneNumbers.addEventListener('change', () => loadContacts(0));
+            if (DOM.contactsTableBody) DOM.contactsTableBody.addEventListener('click', onCountCellClick);
+            if (DOM.contactsSearch) {
+                const runSearch = () => loadContacts(0);
+                DOM.contactsSearch.addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
+                DOM.contactsSearch.addEventListener('blur', runSearch);
+            }
         }
         return { init, open, close };
 })();

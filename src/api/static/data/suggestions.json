@@ -117,6 +117,20 @@
             "function": "showImageGallery"          
         }
     ]
+},{
+    "category":"People",
+    "suggestions": [
+        {
+            "title": "List all contacts",
+            "prompt": "List all contacts",
+            "function": "listContacts"
+        },
+        {
+            "title": "List all contacts with a short description of each",
+            "prompt": "List all contacts with a short description of each. Refer to his bio and any emails or chats",
+            "function": "listContacts"
+        }
+    ]
 }
 ]
 }

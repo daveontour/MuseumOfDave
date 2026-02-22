@@ -739,6 +739,7 @@
                             <div id="import-controls-status-box" style="flex: 1; padding: 12px 15px; background-color: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6; font-size: 0.95em; line-height: 1.5; height: 4.5em; overflow-y: auto;">
                                 <span id="import-controls-status-text" style="color: #666;">Idle</span>
                             </div>
+                            <button type="button" id="import-controls-reset-btn" class="modal-btn modal-btn-secondary" style="flex-shrink: 0;" title="Reset Import Controls to initial state"><i class="fas fa-undo"></i> Reset</button>
                             <button type="button" id="import-controls-cancel-btn" class="modal-btn modal-btn-secondary" style="display: none; flex-shrink: 0;"><i class="fas fa-stop"></i> Cancel</button>
                         </div>
                     </section>
@@ -1592,6 +1593,21 @@
                         <div id="contacts-pagination-top" class="contacts-pagination-row" style="margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
                             <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                                 <label style="display: flex; align-items: center; gap: 6px; font-size: 0.9em; color: #666;">
+                                    Search: <input type="text" id="contacts-search" placeholder="Name or email (Enter to search)" style="width: 200px; padding: 4px 8px;">
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.9em; color: #666; cursor: pointer;">
+                                    <input type="checkbox" id="contacts-has-messages-only" title="Show only contacts with at least 1 message">
+                                    At Least 1 Message Only
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.9em; color: #666; cursor: pointer;">
+                                    <input type="checkbox" id="contacts-email-contains-at" title="Show only contacts with at least 1 '@' in the email field">
+                                    Valid Email Adrresses Only
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.9em; color: #666; cursor: pointer;">
+                                    <input type="checkbox" checked id="contacts-exclude-phone-numbers" title="Exclude contacts whose name contains only digits, whitespace and '+'">
+                                    Exclude Phone Numbers
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.9em; color: #666;">
                                     Page size: <input type="number" id="contacts-page-size" min="5" max="500" value="16" style="width: 60px; padding: 4px 8px;">
                                 </label>
                                 <span id="contacts-pagination-info-top" style="color: #666; font-size: 0.9em;"></span>
@@ -1608,6 +1624,7 @@
                                     <th style="padding: 10px; text-align: center; width: 40px;"><input type="checkbox" id="contacts-select-all" title="Select all on page"></th>
                                     <th class="contacts-sortable-header" data-sort="name" style="padding: 10px; text-align: left;width: 300px; cursor: pointer;">Name</th>
                                     <th class="contacts-sortable-header" data-sort="email" style="padding: 10px; text-align: left; cursor: pointer;">Email</th>
+                                    <th class="contacts-sortable-header" data-sort="numemails" style="padding: 10px; text-align: center; width: 100px; cursor: pointer;">Emails</th>
                                     <th class="contacts-sortable-header" data-sort="numsms" style="padding: 10px; text-align: center;width: 100px; cursor: pointer;">SMS</th>
                                     <th class="contacts-sortable-header" data-sort="numwhatsapp" style="padding: 10px; text-align: center; width: 100px; cursor: pointer;">WhatsApp</th>
                                     <th class="contacts-sortable-header" data-sort="numimessages" style="padding: 10px; text-align: center;width: 100px; cursor: pointer;">iMessage</th>

@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List
-from sqlalchemy import text
+from sqlalchemy import text, func, or_
 
 from ...database.models import Contacts, IMessage
 from ..deps import db
@@ -326,7 +326,7 @@ async def get_relationship_strength(
 
 
 ALLOWED_CONTACT_ORDER_COLUMNS = frozenset(
-    {"id", "name", "email", "numsms", "numwhatsapp", "numimessages", "numinstagram", "numfacebook"}
+    {"id", "name", "email", "numemails", "numsms", "numwhatsapp", "numimessages", "numinstagram", "numfacebook"}
 )
 
 
@@ -343,6 +343,10 @@ async def get_contacts(
     is_government: Optional[bool] = Query(None, description="Filter by is_government flag"),
     is_non_profit: Optional[bool] = Query(None, description="Filter by is_non_profit flag"),
     is_educational: Optional[bool] = Query(None, description="Filter by is_educational flag"),
+    has_messages: Optional[bool] = Query(None, description="Filter to contacts with at least 1 message"),
+    email_contains_at: Optional[bool] = Query(None, description="Filter to contacts with at least 1 '@' in the email field"),
+    exclude_phone_numbers: Optional[bool] = Query(None, description="Exclude contacts whose name contains only digits, whitespace and '+'"),
+    search: Optional[str] = Query(None, description="Partial case-insensitive match on name or email"),
     limit: Optional[int] = Query(0, description="Maximum number of contacts to return (0 for all)", ge=0, le=1000),
     offset: Optional[int] = Query(0, description="Number of contacts to skip", ge=0),
     order_by: Optional[str] = Query("name", description="Column to sort by"),
@@ -382,6 +386,16 @@ async def get_contacts(
         if email:
             query = query.filter(Contacts.email.ilike(f'%{email}%'))
 
+        if search and search.strip():
+            term = search.strip()
+            pattern = f'%{term}%'
+            query = query.filter(
+                or_(
+                    Contacts.name.ilike(pattern),
+                    Contacts.email.ilike(pattern),
+                )
+            )
+
         if is_subject is not None:
             query = query.filter(Contacts.is_subject == is_subject)
 
@@ -409,6 +423,29 @@ async def get_contacts(
         if is_educational is not None:
             query = query.filter(Contacts.is_educational == is_educational)
 
+        if has_messages is True:
+            msg_sum = (
+                func.coalesce(Contacts.numemails, 0)
+                + func.coalesce(Contacts.numfacebook, 0)
+                + func.coalesce(Contacts.numwhatsapp, 0)
+                + func.coalesce(Contacts.numsms, 0)
+                + func.coalesce(Contacts.numimessages, 0)
+                + func.coalesce(Contacts.numinstagram, 0)
+            )
+            query = query.filter(msg_sum > 0)
+
+        if email_contains_at is True:
+            query = query.filter(Contacts.email.ilike('%@%'))
+
+        if exclude_phone_numbers is True:
+            query = query.filter(
+                or_(
+                    Contacts.name.is_(None),
+                    (Contacts.name == ''),
+                    Contacts.name.op('!~')('^[0-9\\s+]+$'),
+                )
+            )
+
         # Get total count before pagination
         total = query.count()
 
@@ -421,7 +458,7 @@ async def get_contacts(
             order_dir = "asc"
         order_attr = getattr(Contacts, order_col)
         if order_dir == "desc":
-            order_attr = order_attr.desc()
+            order_attr = order_attr.desc().nulls_last()
 
         # Apply pagination
         if limit > 0:
