@@ -13,6 +13,12 @@ from ..database import Database
 from ..database.models import ReferenceDocument, IMessage, Email, GeminiFile, ChatConversation, ChatTurn
 from sqlalchemy import or_
 
+try:
+    from tavily import TavilyClient
+except ImportError:
+    print("[GeminiService] Warning: tavily-python not installed. Tavily search will be disabled.")
+    TavilyClient = None
+
 
 class GeminiService:
     """Service for interacting with Google Gemini LLM API."""
@@ -32,101 +38,58 @@ class GeminiService:
         
         self.client = genai.Client(api_key=api_key)
         self.model_name = model_name
+
+        # Initialize Tavily client
+        tavily_api_key = os.getenv("TAVILY_API_KEY")
+        self.tavily_client = None
+        if TavilyClient and tavily_api_key:
+            try:
+                self.tavily_client = TavilyClient(api_key=tavily_api_key)
+                print("[GeminiService.__init__] Tavily client initialized")
+            except Exception as e:
+                print(f"[GeminiService.__init__] Warning: Could not initialize Tavily client: {str(e)}")
+        else:
+            if not TavilyClient:
+                print("[GeminiService.__init__] Warning: Tavily library not available")
+            elif not tavily_api_key:
+                print("[GeminiService.__init__] Warning: TAVILY_API_KEY not set. Tavily search disabled.")
+
         print("[GeminiService.__init__] Initialization complete")
 
-    def summarize_conversation(self, messages_data: Dict[str, Any]) -> str:
-        """Summarize a conversation using Gemini LLM.
-        
+    def oneshot_llm_request(self, messages_data: Dict[str, Any], input_prompt: str) -> str:
+        """Make a one-shot LLM request.
         Args:
-            messages_data: Dictionary containing conversation data with structure:
-                {
-                    "chat_session": str,
-                    "message_count": int,
-                    "messages": [
-                        {
-                            "message_date": str,
-                            "sender_name": str,
-                            "type": str,
-                            "text": str,
-                            "has_attachment": bool
-                        }
-                    ]
-                }
-        
+            messages_data: Dictionary containing conversation data
+            input_prompt: Prompt to use for the summary
         Returns:
-            Summary text string
-        
+            Response text string
         Raises:
             ValueError: If API key is missing or messages_data is invalid
             Exception: If API call fails
         """
-
-        prompt = """Please provide a concise summary of the following conversation. 
-Focus on the main topics discussed, key decisions made, and important information shared. Include a characterisation of the participants relationships and dynamics.""" 
-        try:
-            return self.summarize_conversation_general(messages_data, prompt)
-        except Exception as e:
-            print(f"[GeminiService.summarize_conversation] Error: {str(e)}")
-            raise ValueError(f"Error summarizing conversation: {str(e)}")
-    
-    def summarize_conversation_general(self, messages_data: Dict[str, Any], input_prompt: str) -> str:
-        """Summarize a conversation using Gemini LLM.
-        
-        Args:
-            messages_data: Dictionary containing conversation data with structure:
-                {
-                    "chat_session": str,
-                    "message_count": int,
-                    "messages": [
-                        {
-                            "message_date": str,
-                            "sender_name": str,
-                            "type": str,
-                            "text": str,
-                            "has_attachment": bool
-                        }
-                    ]
-                }
-        
-        Returns:
-            Summary text string
-        
-        Raises:
-            ValueError: If API key is missing or messages_data is invalid
-            Exception: If API call fails
-        """
-        print("[GeminiService.summarize_conversation] Starting conversation summarization...")
+        print("[GeminiService.oneshot_llm_request] Starting one-shot LLM request...")
         
         if not messages_data or "messages" not in messages_data:
-            print("[GeminiService.summarize_conversation] ERROR: Invalid messages_data - missing 'messages' key")
+            print("[GeminiService.oneshot_llm_request] ERROR: Invalid messages_data - missing 'messages' key")
             raise ValueError("Invalid messages_data: missing 'messages' key")
         
         messages = messages_data.get("messages", [])
-        message_count = messages_data.get("message_count", len(messages))
-        chat_session = messages_data.get("chat_session", "Unknown")
-        
-        print(f"[GeminiService.summarize_conversation] Chat session: {chat_session}")
-        print(f"[GeminiService.summarize_conversation] Message count: {message_count}")
-        
+               
         if not messages:
-            print("[GeminiService.summarize_conversation] WARNING: No messages found in conversation")
+            print("[GeminiService.oneshot_llm_request] WARNING: No messages found in conversation")
             return "No messages found in this conversation."
         
         # Format conversation for prompt
-        print("[GeminiService.summarize_conversation] Formatting conversation for prompt...")
         conversation_text = self._format_conversation_for_prompt(messages_data)
-        print(f"[GeminiService.summarize_conversation] Formatted conversation length: {len(conversation_text)} characters")
+        print(f"[GeminiService.oneshot_llm_request] Formatted conversation length: {len(conversation_text)} characters")
         
         # Create prompt
         prompt = f"""{input_prompt}
 
-Conversation:
-{conversation_text}
-
-Summary:"""
+                 Data to be processed:
+                     {conversation_text}"""
         
-        print(f"[GeminiService.summarize_conversation] Prompt length: {len(prompt)} characters")
-        print("[GeminiService.summarize_conversation] Calling Gemini API...")
+        print(f"[GeminiService.oneshot_llm_request] Calling Gemini API with prompt length: {len(prompt)} characters")
         
         try:
             # Call Gemini API
@@ -134,41 +97,41 @@ Summary:"""
                 model=self.model_name,
                 contents=prompt
             )
-            print("[GeminiService.summarize_conversation] Received response from Gemini API")
+            print("[GeminiService.oneshot_llm_request] Received response from Gemini API")
             
             if response and response.text:
                 summary = response.text.strip()
-                print(f"[GeminiService.summarize_conversation] Summary length: {len(summary)} characters")
-                print(f"[GeminiService.summarize_conversation] Summary preview: {summary[:100]}...")
+                print(f"[GeminiService.oneshot_llm_request] Summary length: {len(summary)} characters")
+                print(f"[GeminiService.oneshot_llm_request] Summary preview: {summary[:100]}...")
                 return summary
             else:
-                print("[GeminiService.summarize_conversation] ERROR: Empty response from Gemini API")
+                print("[GeminiService.oneshot_llm_request] ERROR: Empty response from Gemini API")
                 raise Exception("Empty response from Gemini API")
         
         except ValueError as e:
             # Re-raise ValueError (e.g., missing API key) as-is
-            print(f"[GeminiService.summarize_conversation] ValueError raised: {str(e)}")
+            print(f"[GeminiService.oneshot_llm_request] ValueError raised: {str(e)}")
             raise
         except Exception as e:
             error_msg = str(e)
-            print(f"[GeminiService.summarize_conversation] Exception caught: {error_msg}")
+            print(f"[GeminiService.oneshot_llm_request] Exception caught: {error_msg}")
             
             # Provide more user-friendly error messages
             if "API key" in error_msg.lower() or "authentication" in error_msg.lower():
-                print("[GeminiService.summarize_conversation] Error type: Authentication/API key issue")
+                print("[GeminiService.oneshot_llm_request] Error type: Authentication/API key issue")
                 raise ValueError("Invalid or missing Gemini API key. Please check your GEMINI_API_KEY environment variable.")
             elif "404" in error_msg.lower() or "not found" in error_msg.lower() or "not supported" in error_msg.lower():
                 model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
-                print(f"[GeminiService.summarize_conversation] Error type: Model not found - {model_name}")
+                print(f"[GeminiService.oneshot_llm_request] Error type: Model not found - {model_name}")
                 raise ValueError(f"Model '{model_name}' is not available. Please check your GEMINI_MODEL_NAME environment variable. Common models: gemini-1.5-flash, gemini-1.5-pro, gemini-pro")
             elif "quota" in error_msg.lower() or "rate limit" in error_msg.lower():
-                print("[GeminiService.summarize_conversation] Error type: Quota/Rate limit exceeded")
+                print("[GeminiService.oneshot_llm_request] Error type: Quota/Rate limit exceeded")
                 raise Exception("API quota exceeded. Please try again later.")
             elif "timeout" in error_msg.lower():
-                print("[GeminiService.summarize_conversation] Error type: Timeout")
+                print("[GeminiService.oneshot_llm_request] Error type: Timeout")
                 raise Exception("Request timed out. Please try again.")
             else:
-                print(f"[GeminiService.summarize_conversation] Error type: Unknown - {error_msg}")
+                print(f"[GeminiService.oneshot_llm_request] Error type: Unknown - {error_msg}")
                 # Make error message more user-friendly
                 if "Error calling Gemini API:" in error_msg:
                     # Already formatted, use as-is
@@ -176,19 +139,41 @@ Summary:"""
                 else:
                     raise Exception(f"Error calling Gemini API: {error_msg}")
 
+    def summarize_conversation(self, messages_data: Dict[str, Any]) -> str:
+        """Summarize a conversation using Gemini LLM.
+        Args:
+            messages_data: Dictionary containing conversation data
+        Returns:
+            Summary text string
+        Raises:
+            ValueError: If API key is missing or messages_data is invalid
+            Exception: If API call fails
+        """
+
+        input_prompt = """
+                     Please provide a concise summary of the following conversation. 
+                     Focus on the main topics discussed, key decisions made,
+                     and important information shared. Include a characterisation
+                     of the participants relationships and dynamics.
+                     Write in clear, structured markdown""" 
+        try:
+            return self.oneshot_llm_request(messages_data, input_prompt)
+        except Exception as e:
+            print(f"[GeminiService.summarize_conversation] Error: {str(e)}")
+            raise ValueError(f"Error summarizing conversation: {str(e)}")
+
     def summarize_writing_style(self, messages_data: Dict[str, Any]) -> str:
         """Summarize a user's writing style using Gemini LLM.
 
         Reads an optional 'input_prompt' key from messages_data to override the
         default writing-style prompt, then delegates to summarize_conversation_general.
         """
-        input_prompt = (messages_data or {}).get(
-            "input_prompt",
-            "Please provide a detailed analysis of the writing style of the following text. "
-            "The purpose of the analysis is to provide it to an LLM to produce text in the same style",
-        )
+        input_prompt = """
+            Please provide a detailed analysis of the writing style of the following text.
+            Write in clear, structured markdown suitable for use by an LLM to understand the writing style."""
+        
         try:
-            return self.summarize_conversation_general(messages_data, input_prompt)
+            return self.oneshot_llm_request(messages_data, input_prompt)
         except Exception as e:
             print(f"[GeminiService.summarize_writing_style] Error: {str(e)}")
             raise
@@ -199,19 +184,17 @@ Summary:"""
         Reads an optional 'input_prompt' key from messages_data to override the
         default psychological-profile prompt, then delegates to summarize_conversation_general.
         """
-        input_prompt = (messages_data or {}).get(
-            "input_prompt",
-            "Based on the following messages, provide a psychological profile of the person. "
-            "Consider personality traits, communication patterns, values, interests, emotional tendencies, "
-            "and any other psychological dimensions evident from the text. "
-            "Write in clear, structured markdown suitable for use by an LLM to understand the person's psychology.",
-        )
+        input_prompt = """
+            Based on the following messages, provide a psychological profile of the person. 
+            Consider personality traits, communication patterns, values, interests, emotional tendencies, 
+            and any other psychological dimensions evident from the text. 
+            Write in clear, structured markdown suitable for use by an LLM to understand the person's psychology.
+        """
         try:
-            return self.summarize_conversation_general(messages_data, input_prompt)
+            return self.oneshot_llm_request(messages_data, input_prompt)
         except Exception as e:
             print(f"[GeminiService.summarize_psychological_profile] Error: {str(e)}")
             raise
-
     
     def _format_conversation_for_prompt(self, messages_data: Dict[str, Any]) -> str:
         """Format conversation data into a readable text format for the prompt.
@@ -286,6 +269,21 @@ class ChatService:
         self.client = genai.Client(api_key=api_key)
         self.model_name = model_name
 
+        # Initialize Tavily client
+        tavily_api_key = os.getenv("TAVILY_API_KEY")
+        self.tavily_client = None
+        if TavilyClient and tavily_api_key:
+            try:
+                self.tavily_client = TavilyClient(api_key=tavily_api_key)
+                print("[GeminiChatService.__init__] Tavily client initialized")
+            except Exception as e:
+                print(f"[GeminiChatService.__init__] Warning: Could not initialize Tavily client: {str(e)}")
+        else:
+            if not TavilyClient:
+                print("[GeminiChatService.__init__] Warning: Tavily library not available")
+            elif not tavily_api_key:
+                print("[GeminiChatService.__init__] Warning: TAVILY_API_KEY not set. Tavily search disabled.")
+
         self.voice_instructions_list = None  # Will be loaded when database is set
         self.voice = "expert"
 
@@ -309,6 +307,13 @@ class ChatService:
             print(f"[GeminiChatService.__init__] Error loading voice instructions: {e}")
 
         print("[GeminiChatService.__init__] Initialization complete")
+
+    def set_database(self, db: Database):
+        """Set the database instance for retrieving reference documents."""
+        self.db = db
+        # Load system prompt and subject name when database is set
+        self.reload_system_prompt(db=db)
+
 
     def set_voice(self, voice: str):
         """Sets the voice for the session."""
@@ -334,14 +339,6 @@ class ChatService:
     def set_writing_style(self, writing_style: str):
         """Sets the writing style for the session."""
         self.writing_style = writing_style
-
-    def set_database(self, db: Database):
-        """Set the database instance for retrieving reference documents."""
-        self.db = db
-        # Load system prompt and subject name when database is set
-        self.reload_system_prompt(db=db)
-        # Load system prompt and subject name when database is set
-        self.reload_system_prompt(db=db)
 
     def clear_session(self):
         """Clears the session turns list and conversation context."""
@@ -567,7 +564,6 @@ class ChatService:
             traceback.print_exc()
             return None
         
-
     def _load_voice_instructions(self):
         """Loads voice instructions from the JSON file and replaces placeholders."""
         try:
@@ -665,82 +661,131 @@ class ChatService:
                 return instructions
         except FileNotFoundError:
             print("[ChatService._load_system_prompt] system_instructions_chat.txt not found. Using default instructions.")
-            return """You are an expert on life in general
-                Always answer confidently, don't be afraid to say you don't know and that you might have to do deeper research. 
-                If not much information is available, prompt the user to ask for more information. 
+            return """
+                You are an expert on {SUBJECT_NAME}'s life.
+                Do not mention referring to {SUBJECT_NAME}'s bio in your response, treat the bio as your own information.
 
-                Do not refer to yourself as a large language model.
-                Do not be overtly positive, express sympathy and empathy when appropriate but also remain realistic.
-                When responding, do not mention the source of the data.
-                
-                Always include a json structure at the end of your response. 
-                In the json structure, include the name of the person you are responding as.
-                In the json structure, include the the full pathname or URI of any attachments of any images in the attachments of any email or data file that you use in your response.
-                
-                For testing purposes, if the prompt includes "test cse" then send a browser_action with the function name showContactEmailGallery and the args 'Anne Leitch'
+                If asked about a person, check for sources of chats, emails, and notes. 
 
-                For testing purposes, if the prompt includes "test file upload" then call the get_fionna_sms() tool to get Fionna's SMS messages from Dave. Make the call even if the file has already been uploaded. I need to be able to test my code.
+                When asked about a person, use the get_all_messages_by_contac tool to get the conversation between {SUBJECT_NAME} and the person.
 
-                If asked about locations where Dave has been, include the browser_action to show the location info modal.
-                For example:
-                "browser_action": {
-                "text_response": "Let me show you",
-                "browser_action": {
-                    "functionName": "showLocationInfo",
-                    "args": []
-                }
-                }
-
-                If asked about Facebook Albums, include the browser_action to show the Facebook Albums modal.
-                For example:
-                "browser_action": {
-                "text_response": "Let me show you",
-                "browser_action": {
-                    "functionName": "showFacebookAlbums",
-                    "args": []
-                }
-                }
-
-                To display the Image Gallery to browse all of Dave's images, include the browser_action to show the Image Gallery modal.
-                For example:
-                "browser_action": {
-                "text_response": "Let me show you",
-                "browser_action": {
-                    "functionName": "showImageGallery",
-                    "args": []
-                }
-                }
-
-                To display a specific Facebook Album, include the browser_action to show the Facebook Album modal.
-                For example:
-                "browser_action": {
-                "text_response": "Let me show you",
-                "browser_action": {
-                    "functionName": "showFacebookAlbum",
-                    "args": ["title of the album"]
-                    }
-                }
-
-                To display emails with a particular contact, include the browser_action to show the Email Gallery modal.
-                For example:
-                "browser_action": {
-                "text_response": "Let me show you",
-                "browser_action": {
-                    "functionName": "showContactEmailGallery",
-                    "args": ["contact name"]
-                    }
-                }
+                IMPORTANT: Always include a json structure at the end of your response. 
+                IMPORTANT: In the json structure, include the name of the person you are responding as.
+                IMPORTANT: In the json structure, include the the full pathname or URI of any attachments of any images in the attachments of any email or data file that you use in your response.
+                IMPORTANT: In the json structure, always include a "browser_action" element even if it is null
+                IMPORTANT: Always enclose the embedded json in ```json(<embedded json>)```
 
                 IMPORTANT GUIDELINES:
-                - Always consider the user's profile when responding
+                - Always answer confidently, don't be afraid to say you don't know and that you might have to do deeper research. 
+                - If not much information is available, prompt the user to ask for more information. 
+                - Always consider the user's profile when responding and try to match their tone.
                 - Adapt your communication style to match the user's preferences
                 - Use appropriate technical depth based on the user's expertise level
                 - Reference relevant previous conversations when helpful
                 - Be concise, friendly, and never surly
                 - Use available tools when needed to provide better assistance
+                --Do not refer to yourself as a large language model.
+                - Do not be overtly positive, express sympathy and empathy when appropriate but also remain realistic.
+                - When responding, do not mention the source of the data.
+
+                If you need the browser to perform an action, populate the 'browser_action' object in your JSON response.
+                The 'browser_action' object should have:
+                - 'functionName': A string, one of ['showAlert', 'changeBackgroundColor','showImageGallery','showFacebookAlbum','showContactEmailGallery'].
+                - 'args': An array of arguments for that function.
+
+                For testing purposes, if the prompt includes "test cse" then send a browser_action with the function name showTaggedImages and the args 'Kerri' in the embedded json
+
+                If asked about locations where Dave has been, include the browser_action to show the location info modal.
+                For example:
+
+                "browser_action": {
+                    "functionName": "showLocationInfo",
+                    "args": []
+                }
 
 
+                If asked about Facebook Albums, include the browser_action to show the Facebook Albums modal.
+                For example:
+
+                "browser_action": {
+                    "functionName": "showFacebookAlbums",
+                    "args": []
+                }
+
+                To show images of a person, include the following as part of the embedded json 
+                "browser_action": {
+                    "functionName": "showTaggedImages",
+                    "args": ["person's name"]
+                }
+
+                To display the Image Gallery with  images that meet a certain criteria.
+                For example:
+
+                "browser_action": {
+                    "functionName": "showTaggedImages",
+                    "args": ["comma separated list of tags"]
+                }
+
+                To display the Image Gallery with  images from a particular month.
+                For example:
+
+                "browser_action": {
+                    "functionName": "showImagesFromDate",
+                    "args": ["year integer", "month integer"]
+                }
+
+                To display the Image Gallery to browse all of {SUBJECT_NAME}'s images, include the browser_action to show the Image Gallery modal.
+                For example:
+
+                "browser_action": {
+                    "functionName": "showImageGallery",
+                    "args": []
+                }
+
+
+                To display a specific Facebook Album, include the browser_action to show the Facebook Album modal.
+                For example:
+
+                "browser_action": {
+                    "functionName": "showFacebookAlbum",
+                    "args": ["title of the album"]
+                    }
+
+
+                To display emails with a particular contact, include the browser_action to show the Email Gallery modal.
+                For example:
+
+                "browser_action": {
+                    "functionName": "showContactEmailGallery",
+                    "args": ["contact name"]
+                    }
                 """
+
+    def _search_tavily(self, query: str) -> Dict[str, Any]:
+        """Perform a web search using Tavily.
+
+        Args:
+            query: The search query
+
+        Returns:
+            Dictionary with search results
+        """
+        if not self.tavily_client:
+            return {
+                "error": "Tavily search is not configured (TAVILY_API_KEY missing or client initialization failed)"
+            }
+
+        print(f"[GeminiService._search_tavily] Searching for: {query}")
+        try:
+            # Use advanced search depth for better context
+            response = self.tavily_client.search(query, search_depth="advanced", max_results=5)
+            return response
+        except Exception as e:
+            print(f"[GeminiService._search_tavily] Error searching: {str(e)}")
+            return {
+                "error": str(e),
+                "query": query
+            }
 
     def _get_current_time(self) -> Dict[str, Any]:
         """Get the current date and time.
@@ -902,6 +947,7 @@ class ChatService:
             "subject_writing_examples": messages_list
 
         }
+
     def _get_tools_config(self) -> List[Any]:
         """Get the tools configuration for Gemini function calling.
         
@@ -957,8 +1003,32 @@ class ChatService:
                 "required": []
             }
         )
+
+        search_tavily_declaration = types.FunctionDeclaration(
+            name="search_tavily",
+            description="Perform a web search for real-time information and current events using Tavily. Use this when the user asks about current events, news, or information not available in the internal database.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query"
+                    }
+                },
+                "required": ["query"]
+            }
+        )
         
-        return [types.Tool(function_declarations=[get_current_time_declaration, get_imessages_declaration, get_emails_declaration, get_subject_writing_examples_declaration])]
+        return [types.Tool(
+            function_declarations=[
+                get_current_time_declaration, 
+                get_imessages_declaration, 
+                get_emails_declaration, 
+                get_subject_writing_examples_declaration,
+                search_tavily_declaration
+            ],
+            google_search=types.GoogleSearch()
+        )]
 
     def _execute_function_call(self, function_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a function call by routing to the appropriate handler method.
@@ -978,6 +1048,8 @@ class ChatService:
             "get_current_time": self._get_current_time,
             "get_imessages_by_chat_session": self._get_imessages_by_chat_session,
             "get_emails_by_contact": self._get_emails_by_contact,
+            "get_subject_writing_examples": self._get_subject_writing_examples,
+            "search_tavily": self._search_tavily,
         }
         
         if function_name not in function_handlers:
@@ -1090,9 +1162,10 @@ class ChatService:
         prompt_parts.append(self.voice_instructions["instructions"])
 
         if self.voice == "dave":
+            prompt_parts.append(f"IMPORTANT:Respond in the first person voice")
             prompt_parts.append(f"IMPORTANT:Your current mood is {self.mood}")
-            prompt_parts.append(f"IMPORTANT:Your current psychological profile is {self.psychological_profile}")
-            prompt_parts.append(f"IMPORTANT:Your current writing style is {self.writing_style}")
+            prompt_parts.append(f"IMPORTANT:Respond consistent with your prescribed psychological profile: <psychologicalprofile>{self.psychological_profile}</psychologicalprofile>")
+            prompt_parts.append(f"IMPORTANT:Respond consistent with your prescribed writing style: <writingstyle>{self.writing_style}</writingstyle>")
         
         if companionMode:
                 prompt_parts.append(f"""IMPORTANT:You are in companion mode. You are talking to a user who is your friend and companion. 

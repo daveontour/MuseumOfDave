@@ -90,12 +90,15 @@ async def generate_chat_response(request: ChatRequest):
     Raises:
         HTTPException: 500 on error
     """
+
+    print(f"[generate_chat_response] Request: {request}")
     try:
         # Use global ChatService instance (maintains conversation history across requests)
         # Set voice if provided
         if request.voice:
             try:
                 chat_service.set_voice(request.voice)
+                print(f"[generate_chat_response] Voice set to: {request.voice}")
             except Exception as e:
                 print(f"[generate_chat_response] Warning: Could not set voice '{request.voice}': {str(e)}")
 
@@ -110,8 +113,16 @@ async def generate_chat_response(request: ChatRequest):
                         chat_service.set_writing_style(configuration.writing_style_ai)
                 except Exception as e:
                     print(f"[generate_chat_response] Warning: Could not set voice 'secret_admirer': {str(e)}")
+            else:
+                print(f"[generate_chat_response]  Setting mood to 'neutral'")
+                chat_service.set_mood("neutral")
+                print(f"[generate_chat_response]Setting Psychological profile and writing style to None")
+                chat_service.set_psychological_profile(None)
+                chat_service.set_writing_style(None)
+
 
         # Generate response using global chat_service instance
+        #(Reference documents are uploaded to Gemini in the chat service )
         temperature = request.temperature if request.temperature is not None else 0.0
         response_text, metadata_json_str = chat_service.generate_response(
             request.prompt,
