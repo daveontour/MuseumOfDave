@@ -22,6 +22,7 @@ from ...services import ImageService
 from ...services.exceptions import ServiceException, ValidationError, NotFoundError
 from ...services.dto import ImageSearchFilters, MediaMetadataUpdate
 from ...config import get_config
+from ...utils.docker_utils import translate_path_to_container
 from ..deps import db
 from ..state import (
     facebook_albums_import_lock,
@@ -370,7 +371,7 @@ def import_facebook_albums_background_subprocess(directory_path: str):
     try:
         binary = _get_import_processor_path()
         cwd = binary.parent
-        path_str = str(Path(directory_path).resolve())
+        path_str = str(Path(translate_path_to_container(directory_path)).resolve())
         proc = subprocess.Popen(
             [str(binary), "facebook-albums", "--path", path_str],
             cwd=str(cwd),
@@ -454,7 +455,7 @@ def import_filesystem_background_subprocess(
         cwd = binary.parent
         args = [str(binary), "filesystem"]
         for p in directory_paths:
-            args.extend(["--path", str(Path(p).resolve())])
+            args.extend(["--path", str(Path(translate_path_to_container(p)).resolve())])
         for pat in exclude_patterns:
             args.extend(["--exclude", pat])
         if max_images and max_images > 0:
@@ -662,7 +663,7 @@ def import_facebook_places_background_subprocess(file_path: str):
     try:
         binary = _get_import_processor_path()
         cwd = binary.parent
-        path_str = str(Path(file_path).resolve())
+        path_str = str(Path(translate_path_to_container(file_path)).resolve())
         proc = subprocess.Popen(
             [str(binary), "facebook-places", "--path", path_str],
             cwd=str(cwd),
@@ -741,7 +742,8 @@ async def import_facebook_albums(
                 detail="Facebook Albums import is already in progress",
             )
 
-    directory_path = Path(request.directory_path)
+    directory_path = Path(translate_path_to_container(request.directory_path)).resolve()
+    print(f"Facebook Albums Import directory_path: {directory_path} (Dockerized: {directory_path.exists()})")
     if not directory_path.exists() or not directory_path.is_dir():
         raise HTTPException(
             status_code=400,
@@ -898,7 +900,8 @@ async def import_filesystem_images(
     invalid_paths = []
     validated_paths = []
     for path_str in directory_paths:
-        directory_path = Path(path_str)
+        directory_path = Path(translate_path_to_container(path_str))
+        print(f"Filesystem Image Import directory_path: {directory_path} (Dockerized: {directory_path.exists()})")
         if not directory_path.exists() or not directory_path.is_dir():
             invalid_paths.append(path_str)
         else:
@@ -1937,7 +1940,8 @@ async def import_facebook_places(
                 detail="Facebook Places import is already in progress",
             )
 
-    file_path = Path(request.file_path)
+    file_path = Path(translate_path_to_container(request.file_path))
+    print(f"Facebook Places Import directory_path: {file_path} (Dockerized: {file_path.exists()})")
     if not file_path.exists():
         raise HTTPException(
             status_code=404,

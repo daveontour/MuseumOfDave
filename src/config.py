@@ -43,15 +43,15 @@ try:
     
     # Load the .env file if found
     if env_path and Path(env_path).exists():
-        load_dotenv(dotenv_path=env_path, override=True)
+        load_dotenv(dotenv_path=env_path, override=False)
     else:
         # Final fallback: try default behavior (searches from current directory)
-        result = load_dotenv(override=True)
+        result = load_dotenv(override=False)
         # If still not found, try one more time with explicit path from cwd
         if not result:
             cwd_env = Path.cwd() / ".env"
             if cwd_env.exists():
-                load_dotenv(dotenv_path=str(cwd_env), override=True)
+                load_dotenv(dotenv_path=str(cwd_env), override=False)
 except ImportError:
     pass
 

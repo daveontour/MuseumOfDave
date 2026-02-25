@@ -1254,13 +1254,18 @@ Modals.SubjectConfiguration = (() => {
         function updatePageReferences(subjectName, newGender) {
             if (!subjectName) return;
 
+            console.log("Updating page references for subject:", subjectName);
+        
+            //Retrieve the page title from the environment variable
+            const pageTitle = process.env.PAGE_TITLE;
+            console.log("Page title:", pageTitle);
             // Update page title
-            document.title = `Let's Talk About ${subjectName}`;
+            document.title = `${pageTitle}`;
 
             // Update header
             const header = document.querySelector('.header-container h2');
             if (header) {
-                header.textContent = `Let's Talk About ${subjectName}`;
+                header.textContent = `${pageTitle}`;
             }
 
             if (CONSTANTS.VOICE_DESCRIPTIONS["dave"]) {

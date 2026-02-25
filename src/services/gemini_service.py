@@ -2,6 +2,7 @@
 
 import os
 import json
+import random
 import re
 import time
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from google.genai import types
 from ..database import Database
 from ..database.models import ReferenceDocument, IMessage, Email, GeminiFile, ChatConversation, ChatTurn
 from sqlalchemy import or_
+from pympler import asizeof
 
 try:
     from tavily import TavilyClient
@@ -195,7 +197,82 @@ class GeminiService:
         except Exception as e:
             print(f"[GeminiService.summarize_psychological_profile] Error: {str(e)}")
             raise
-    
+
+    def summarize_relationships(self, messages_data: Dict[str, Any], contact_name: str) -> str:
+        """Generate a psychological profile from message content using Gemini LLM.
+
+        Reads an optional 'input_prompt' key from messages_data to override the
+        default psychological-profile prompt, then delegates to summarize_conversation_general.
+        """
+        input_prompt = """
+            Based on the following messages, provide a detailedsummary of the relationships between {contact_name} and other contacts.
+            Include the nature of the relationship.
+            Include the names of the contacts involved in the relationships.
+            Include the dates of the relationships.
+            Include the types of relationships.
+            Include the descriptions of the relationships.
+            Include the strengths of the relationships.
+            Include the frequencies of communication.
+            Include the dates of the relationships.
+            Include the types of relationships.
+            Include significant events or milestones in the relationships.
+            Include any interesting anecdotes or stories about the relationships.
+            Include any information on the person's personality and psychology.
+            Include any information on the person's values and interests.
+            Include any information on sexual activities and preferences and any romantic intent between the contacts.
+            Include any other relevant information.
+            Write in clear, structured markdown suitable for use by an LLM to understand the relationships.
+        """
+        try:
+            return self.oneshot_llm_request(messages_data, input_prompt)
+        except Exception as e:
+            print(f"[GeminiService.summarize_psychological_profile] Error: {str(e)}")
+            raise
+
+    def summarize_relationships_multistep(self, messages_data: Dict[str, Any], interimSummary: str, idx: int, total: int) -> str:
+        """Summarize relationships in multiple steps using Gemini LLM.
+        Args:
+            messages_data: Dictionary containing conversation data
+            interimSummary: Interim summary of the relationships
+            idx: Index of the current chunk
+            total: Total number of chunks
+        Returns:
+            Summary text string
+        """
+        print (f"Summarizing relationships in multiple steps... {idx}/{total}")
+
+        #create a dictionary with the messages data
+        temp = {"messages": messages_data}
+
+        prompt = f"""
+            You are a helpful assistant that summarizes communication patterns, relationships and psychological profiles in multiple steps.
+            You will be given a list of messages and an interim summary that has been generated so far.
+            You will need to summarize communication patterns, relationships and psychological profiles on the messages based on the interim summary.
+            You will need to return the next interim summary which will be used as context for the next chunk of messages.
+
+            The goal is to build on the interim summary not to just replace it with the summary of the current chunk of messages.
+            The interim summaries should be a cumulative summary of all the messages processed so far.
+
+            There will be a total of {total} chunks of messages to process.
+            This is the {idx} chunk of messages to process.
+
+
+            The interim summary is: 
+            {interimSummary}
+
+
+            """
+        try:
+            return self.oneshot_llm_request(temp, prompt)
+        except Exception as e:
+            print(f"[GeminiService.summarize_relationships_multistep] Error: {str(e)}")
+            raise
+        return f"Error summarizing relationships in multiple steps: {str(e)} {idx}/{total}"
+
+
+
+
+
     def _format_conversation_for_prompt(self, messages_data: Dict[str, Any]) -> str:
         """Format conversation data into a readable text format for the prompt.
         
@@ -948,6 +1025,168 @@ class ChatService:
 
         }
 
+
+
+    def _get_all_messages_by_contact(self, name: str) -> Dict[str, Any]:
+        """Get all messages for a specific contact.
+        
+        Args:
+            name: The name or email address to search for in sender or receiver fields
+            
+        Returns:
+            Dictionary with contact_name, message_count, and messages list
+        """
+        #Combine the results from get_imessages_by_chat_session and get_emails_by_contact
+        imessages = self._get_imessages_by_chat_session(name)
+        emails = self._get_emails_by_contact(name)
+
+       # only pick out the plain_text and subject and from_address and to_addresses and date and id
+        slimedEmails= [email for email in emails["emails"] if email["plain_text"] and email["subject"] and email["from_address"] and email["to_addresses"] and email["date"] and email["id"]] # Returns the full cumulative size in bytes
+
+        #randomly reduct the size of emails["emails"] by 10% until the soze of imessages["messages"] + emails["emails"] is less than 600kB
+        while asizeof.asizeof(imessages["messages"] + slimedEmails) > 800000:
+            #create a loop that loops through from 1 to 10% the size of emails["emails"] and pop the random email from emails["emails"]
+            for i in range(1, int(len(emails["emails"]) * 0.1)):
+                slimedEmails.pop(random.randint(0, len(slimedEmails) - 1))
+
+
+        print(f"Number of slimedEmails: {len(slimedEmails)}")
+        print(f"Size of slimedEmails: {asizeof.asizeof(slimedEmails)}") # Returns the full cumulative size in bytes
+        print(f"number of imessages messages: {len(imessages["messages"])}")
+        print(f"Size of imessages messages: {asizeof.asizeof(imessages["messages"])}") # Returns the full cumulative size in bytes
+ # Returns the full cumulative size in bytes
+        for email in slimedEmails:
+            imessages["messages"].append({
+                "id": email["id"],
+                "message_date": email["date"],
+                "sender_name": email["from_address"],
+                "sender_id": email["from_address"],
+                "type": "email",
+                "text": email["plain_text"],
+                "service": "email"
+            })
+
+        print(f"Number of imessages messages after merge: {len(imessages["messages"])}")
+        print(f"Size of imessages messages after merge: {asizeof.asizeof(imessages["messages"])}") # Returns the full cumulative size in bytes
+
+        geminiService = GeminiService()
+        summary = geminiService.summarize_relationships(imessages, name)
+        print(f"[ChatService._get_all_messages_by_contact] Summary: {summary}")
+        return {
+            "contact_name": name,
+            # "message_count": imessages["message_count"] + emails["email_count"],
+            # "messages": imessages["messages"] + emails["emails"],
+            "relationshipSummary": summary
+        }
+        
+    def get_complete_profile_by_name(self, name: str) -> Dict[str, Any]:
+        """Get all messages for a specific contact.
+        
+        Args:
+            name: The name or email address to search for in sender or receiver fields
+            
+        Returns:
+            Dictionary with contact_name, message_count, and messages list
+        """
+        #Combine the results from get_imessages_by_chat_session and get_emails_by_contact
+        imessages = self._get_imessages_by_chat_session(name)
+        messages = imessages["messages"]
+
+        emails = self._get_emails_by_contact(name)
+        slimedEmails= [email for email in emails["emails"] if email["plain_text"] and email["subject"] and email["from_address"] and email["to_addresses"] and email["date"] and email["id"]] # Returns the full cumulative size in bytes
+
+        print(f"Number of messages: {len(messages)}")
+        print(f"Size of messages: {asizeof.asizeof(messages)}") # Returns the full cumulative size in bytes
+        print(f"Number of slimedEmails: {len(slimedEmails)}")
+        print(f"Size of slimedEmails: {asizeof.asizeof(slimedEmails)}") # Returns the full cumulative size in bytes
+        #send as many messages as possible to the Gemini API to get the complete profile and send the previous summary as context until all messages have been processsed
+
+        for email in slimedEmails:
+            messages.append({
+                "id": email["id"],
+                "message_date": email["date"],
+                "sender_name": email["from_address"],
+                "sender_id": email["from_address"],
+                "type": "email",
+                "text": email["plain_text"],
+                "service": "email"
+            })
+
+        print(f"Number of mergedMessages: {len(messages)}")
+        print(f"Size of mergedMessages: {asizeof.asizeof(messages)}")
+        
+        messageChunks = []
+         # Returns the full cumulative size in bytes
+        currentChunk = []
+        for message in messages:
+            #while the size of the currentChunk is less than 800kB, add the message to the currentChunk
+            if asizeof.asizeof(currentChunk) + asizeof.asizeof(message) < 800000:
+                currentChunk.append(message)
+            else:
+                messageChunks.append(currentChunk)
+                currentChunk = []
+                currentChunk.append(message)
+        if currentChunk:
+            messageChunks.append(currentChunk)
+        
+        print(f"Number of messageChunks: {len(messageChunks)}")
+        print(f"Size of messageChunks: {asizeof.asizeof(messageChunks)}") # Returns the full cumulative size in bytes
+        
+        
+        interimSummary = ""
+        geminiService = GeminiService()
+        for idx, chunk in enumerate(messageChunks):
+            print(f"Chunk {idx}: {len(chunk)} messages")
+            print(f"Size of chunk {idx}: {asizeof.asizeof(chunk)}") # Returns the full cumulative size in bytes
+            #on the last chunk, print a message to the user that the chunk is the last chunk and the complete profile is being generated
+            if idx == len(messageChunks) - 1:
+                print(f"Chunk {idx} is the last chunk and the complete profile is being generated")
+            #send the chunk to the Gemini API to get the complete profile
+            interimSummary = geminiService.summarize_relationships_multistep(chunk, interimSummary, idx+1 ,len(messageChunks))
+            print(f"Interim summary: {interimSummary}")
+
+        print(f"Final interim summary: {interimSummary}")
+           
+
+
+
+
+        #randomly reduct the size of emails["emails"] by 10% until the soze of imessages["messages"] + emails["emails"] is less than 600kB
+#         while asizeof.asizeof(imessages["messages"] + slimedEmails) > 800000:
+#             #create a loop that loops through from 1 to 10% the size of emails["emails"] and pop the random email from emails["emails"]
+#             for i in range(1, int(len(emails["emails"]) * 0.1)):
+#                 slimedEmails.pop(random.randint(0, len(slimedEmails) - 1))
+
+
+#         print(f"Number of slimedEmails: {len(slimedEmails)}")
+#         print(f"Size of slimedEmails: {asizeof.asizeof(slimedEmails)}") # Returns the full cumulative size in bytes
+#         print(f"number of imessages messages: {len(imessages["messages"])}")
+#         print(f"Size of imessages messages: {asizeof.asizeof(imessages["messages"])}") # Returns the full cumulative size in bytes
+#  # Returns the full cumulative size in bytes
+#         for email in slimedEmails:
+#             imessages["messages"].append({
+#                 "id": email["id"],
+#                 "message_date": email["date"],
+#                 "sender_name": email["from_address"],
+#                 "sender_id": email["from_address"],
+#                 "type": "email",
+#                 "text": email["plain_text"],
+#                 "service": "email"
+#             })
+
+#         print(f"Number of imessages messages after merge: {len(imessages["messages"])}")
+#         print(f"Size of imessages messages after merge: {asizeof.asizeof(imessages["messages"])}") # Returns the full cumulative size in bytes
+
+#         geminiService = GeminiService()
+#         summary = geminiService.summarize_relationships(imessages, name)
+#         print(f"[ChatService._get_all_messages_by_contact] Summary: {summary}")
+#         return {
+#             "contact_name": name,
+#             # "message_count": imessages["message_count"] + emails["email_count"],
+#             # "messages": imessages["messages"] + emails["emails"],
+#             "relationshipSummary": summary
+#         }
+
     def _get_tools_config(self) -> List[Any]:
         """Get the tools configuration for Gemini function calling.
         
@@ -994,6 +1233,21 @@ class ChatService:
             }
         )
 
+        get_all_messages_by_contact_declaration = types.FunctionDeclaration(
+            name="get_all_messages_by_contact",
+            description="Get all messages for a specific contact. Use this when the user asks about messages with a specific person or contact or when background information is needed on that person for a discussion.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "The name or email address to search"
+                    }
+                },
+                "required": ["name"]
+            }
+        )
+
         get_subject_writing_examples_declaration = types.FunctionDeclaration(
             name="get_subject_writing_examples",
             description="Get the subject writing examples. Use this when the user asks about subject writing examples.",
@@ -1025,7 +1279,8 @@ class ChatService:
                 get_imessages_declaration, 
                 get_emails_declaration, 
                 get_subject_writing_examples_declaration,
-                search_tavily_declaration
+                search_tavily_declaration,
+                get_all_messages_by_contact_declaration
             ],
             google_search=types.GoogleSearch()
         )]
@@ -1050,6 +1305,7 @@ class ChatService:
             "get_emails_by_contact": self._get_emails_by_contact,
             "get_subject_writing_examples": self._get_subject_writing_examples,
             "search_tavily": self._search_tavily,
+            "get_all_messages_by_contact": self._get_all_messages_by_contact,
         }
         
         if function_name not in function_handlers:
@@ -1426,3 +1682,6 @@ class ChatService:
                 import traceback
                 traceback.print_exc()
                 raise ValueError(f"Error generating response: {error_msg}")
+
+
+                # INSERT_YOUR_CODE

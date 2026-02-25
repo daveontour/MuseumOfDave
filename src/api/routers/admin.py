@@ -1,4 +1,6 @@
 """Admin, system, and utility routes."""
+import os
+import platform
 from datetime import datetime
 from pathlib import Path
 
@@ -29,9 +31,19 @@ class MessageResponse(BaseModel):
 @router.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """Serve the new page."""
+
+    platform_name = platform.system()
+    if platform_name == "Windows":
+        print("Windows platform detected")
+    else:
+        print("Linux platform detected")
+
+    page_title = os.getenv("PAGE_TITLE", "Fallback Page Title - Let's Talk About Dave")
+    
+    print(f"Page title: {page_title}")
     return templates.TemplateResponse(
         "museum_of_dave.html",
-        {"request": request}
+        {"request": request, "page_title": page_title}
     )
 
 @router.get("/health")

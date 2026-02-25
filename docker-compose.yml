@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8081:8000"
+    depends_on:
+      - db
+    env_file:
+      - .env.docker
+    environment:
+      - DB_HOST=db  # Override localhost to point to the db container
+      # Update import paths to map to container paths (see volumes below)
+      - DEFAULT_FILESYSTEM_IMPORT_DIRECTORY=/data/images
+    volumes:
+      # Persist dynamic config files if the app edits them
+      - ./src/api/static/data:/app/src/api/static/data
+      - ./import-processor/email_matches.json:/app/import-processor/email_matches.json
+      # Mount drives for automatic path translation
+      - C:/:/mnt/c
+      - G:/:/mnt/g
+
+  db:
+    image: postgres:17-alpine
+    volumes:
+      - "C:/NonOneDrive/DockerPostgresData:/var/lib/postgresql/data"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=admin
+      - POSTGRES_DB=emaildb
+    ports:
+      - "5433:5432"

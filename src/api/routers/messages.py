@@ -22,6 +22,7 @@ from ...services.gemini_service import GeminiService
 from ...services.message_service import ChatSessionInfo
 from ...services.exceptions import ServiceException, NotFoundError
 from ...services.subject_configuration_service import SubjectConfigurationService
+from ...utils.docker_utils import translate_path_to_container
 from ..deps import db
 from ..state import (
     # iMessage
@@ -386,7 +387,7 @@ def import_imessage_background_subprocess(directory_path: str):
         )
 
     _run_subprocess_with_sse(
-        args=["imessage", "--path", str(Path(directory_path).resolve())],
+        args=["imessage", "--path", str(Path(translate_path_to_container(directory_path)).resolve())],
         cancelled_event=imessage_import_cancelled,
         update_fn=update_imessage_progress_state,
         get_state_fn=get_imessage_progress_state,
@@ -445,7 +446,7 @@ def import_whatsapp_background_subprocess(directory_path: str):
         )
 
     _run_subprocess_with_sse(
-        args=["whatsapp", "--path", str(Path(directory_path).resolve())],
+        args=["whatsapp", "--path", str(Path(translate_path_to_container(directory_path)).resolve())],
         cancelled_event=whatsapp_import_cancelled,
         update_fn=update_whatsapp_progress_state,
         get_state_fn=get_whatsapp_progress_state,
@@ -487,10 +488,14 @@ def import_facebook_background_subprocess(directory_path: str, user_name: Option
     )
     broadcast_facebook_progress_event_sync("status", {"status_line": "Starting import-processor..."})
 
-    path_str = str(Path(directory_path).resolve())
-    args = ["facebook", "--path", path_str]
+    # path_str = str(Path(translate_path_to_container(directory_path)).resolve())
+    # print(f"[import_facebook_background_subprocess] path_str: {path_str}")
+    # print(f"[import_facebook_background_subprocess] export_root: {export_root}")
+    # print(f"[import_facebook_background_subprocess] translate_path_to_container(export_root): {translate_path_to_container(export_root)}")
+    # print(f"[import_facebook_background_subprocess] str(Path(translate_path_to_container(export_root)).resolve()): {str(Path(translate_path_to_container(export_root)).resolve())}")
+    args = ["facebook", "--path", directory_path]
     if export_root:
-        args.extend(["--export-root", str(Path(export_root).resolve())])
+        args.extend(["--export-root", str(Path(translate_path_to_container(export_root)).resolve())])
 
     def update_completed(parsed):
         conv, msg_imp, msg_cre, msg_upd, att_found, att_miss, errs, missing_filenames, status_message = parsed
@@ -551,10 +556,10 @@ def import_instagram_background_subprocess(directory_path: str, user_name: Optio
     )
     broadcast_instagram_progress_event_sync("status", {"status_line": "Starting import-processor..."})
 
-    path_str = str(Path(directory_path).resolve())
+    path_str = str(Path(translate_path_to_container(directory_path)).resolve())
     args = ["instagram", "--path", path_str]
     if export_root:
-        args.extend(["--export-root", str(Path(export_root).resolve())])
+        args.extend(["--export-root", str(Path(translate_path_to_container(export_root)).resolve())])
 
     def update_completed(parsed):
         conv, msg_imp, msg_cre, msg_upd, att_found, att_miss, errs, missing_filenames, status_message = parsed
@@ -663,14 +668,15 @@ async def import_imessages(
                 detail="iMessage import is already in progress. Please cancel it first or wait for it to complete."
             )
 
-    directory = Path(request.directory_path)
-    if not directory.exists() or not directory.is_dir():
+    directory_path = Path(translate_path_to_container(request.directory_path)).resolve()
+    print(f"Facebook Messenger Import directory_path: {directory_path} (Dockerized: {directory_path.exists()})")
+    if not directory_path.exists() or not directory_path.is_dir():
         raise HTTPException(
             status_code=400,
             detail=f"Directory does not exist or is not a directory: {request.directory_path}"
         )
 
-    background_tasks.add_task(import_imessage_background_subprocess, request.directory_path)
+    background_tasks.add_task(import_imessage_background_subprocess, directory_path)
 
     return ImportIMessagesResponse(
         message="iMessage import started",
@@ -1019,14 +1025,16 @@ async def import_whatsapp(request: ImportWhatsAppRequest, background_tasks: Back
                 detail="WhatsApp import is already in progress. Please cancel it first or wait for it to complete."
             )
 
-    directory = Path(request.directory_path)
-    if not directory.exists() or not directory.is_dir():
+    #directory = Path(request.directory_path)
+    directory_path = Path(translate_path_to_container(request.directory_path))
+    print(f"WhatsApp Import directory_path: {directory_path} (Dockerized: {directory_path.exists()})")
+    if not directory_path.exists() or not directory_path.is_dir():
         raise HTTPException(
             status_code=400,
-            detail=f"Directory does not exist or is not a directory: {request.directory_path}"
+            detail=f"Directory does not exist or is not a directory: {directory_path}"
         )
 
-    background_tasks.add_task(import_whatsapp_background_subprocess, request.directory_path)
+    background_tasks.add_task(import_whatsapp_background_subprocess, directory_path)
 
     return ImportWhatsAppResponse(
         message="WhatsApp import started",
@@ -1095,14 +1103,15 @@ async def import_facebook(request: ImportFacebookRequest, background_tasks: Back
                 detail="Facebook Messenger import is already in progress. Please cancel it first or wait for it to complete."
             )
 
-    directory = Path(request.directory_path)
-    if not directory.exists() or not directory.is_dir():
+    directory_path = Path(translate_path_to_container(request.directory_path)).resolve()
+    print(f"Facebook Messenger Import directory_path: {directory_path} (Dockerized: {directory_path.exists()})")
+    if not directory_path.exists() or not directory_path.is_dir():
         raise HTTPException(
             status_code=400,
             detail=f"Directory does not exist or is not a directory: {request.directory_path}"
         )
 
-    background_tasks.add_task(import_facebook_background_subprocess, request.directory_path, request.user_name, request.export_root)
+    background_tasks.add_task(import_facebook_background_subprocess, directory_path, request.user_name, request.export_root)
 
     return ImportFacebookResponse(
         message="Facebook Messenger import started",
@@ -1171,14 +1180,16 @@ async def import_instagram(request: ImportInstagramRequest, background_tasks: Ba
                 detail="Instagram import is already in progress. Please cancel it first or wait for it to complete."
             )
 
-    directory = Path(request.directory_path)
+    # directory = Path(request.directory_path)
+    directory = Path(translate_path_to_container(request.directory_path))
+    print(f"Instagram Import directory_path: {directory} (Dockerized: {directory.exists()})")
     if not directory.exists() or not directory.is_dir():
         raise HTTPException(
             status_code=400,
             detail=f"Directory does not exist or is not a directory: {request.directory_path}"
         )
 
-    background_tasks.add_task(import_instagram_background_subprocess, request.directory_path, request.user_name, request.export_root)
+    background_tasks.add_task(import_instagram_background_subprocess, directory, request.user_name, request.export_root)
 
     return ImportInstagramResponse(
         message="Instagram import started",

@@ -13,3 +13,4 @@ pillow-heif>=0.13.0  # Optional: for HEIC/HEIF support
 jinja2>=3.1.0
 python-multipart>=0.0.0
 tavily-python>=0.3.0
+pympler>=0.10.0
