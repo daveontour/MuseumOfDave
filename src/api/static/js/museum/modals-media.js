@@ -342,6 +342,8 @@ Modals.NewImageGallery = (() => {
         let searchTimeout = null;
         let selectMode = false;
         let selectedImageIds = new Set(); // Track selected image IDs
+        let _isPickMode = false;
+        let _pickModeCallback = null;
 
         function formatDate(year, month) {
             if (!year && !month) return 'No Date';
@@ -528,7 +530,31 @@ Modals.NewImageGallery = (() => {
                 DOM.newImageGalleryBulkTags.value = '';
             }
             _updateSelectModeUI();
+            _updatePickModeBanner();
             _renderThumbnailGrid();
+        }
+
+        async function openPickMode(callback) {
+            _isPickMode = true;
+            _pickModeCallback = callback;
+            await open();
+        }
+
+        function _updatePickModeBanner() {
+            const modal = DOM.newImageGalleryModal;
+            if (!modal) return;
+            let banner = modal.querySelector('.pick-mode-banner');
+            if (_isPickMode) {
+                if (!banner) {
+                    banner = document.createElement('div');
+                    banner.className = 'pick-mode-banner';
+                    banner.textContent = '📌 Select an image to add it to the artefact';
+                    const content = modal.querySelector('.new-image-gallery-modal-body') || modal.querySelector('.modal-content');
+                    if (content) content.insertBefore(banner, content.firstChild);
+                }
+            } else {
+                if (banner) banner.remove();
+            }
         }
 
         async function openTaggedImages(tags) {
@@ -568,6 +594,8 @@ Modals.NewImageGallery = (() => {
         function close() {
             DOM.newImageGalleryModal.style.display = 'none';
             selectedImageIndex = -1;
+            _isPickMode = false;
+            _pickModeCallback = null;
         }
 
         async function _setupFilters() {
@@ -879,9 +907,17 @@ Modals.NewImageGallery = (() => {
 
         async function _selectImage(index) {
             if (index < 0 || index >= imageData.length) return;
-            
+
             const image = imageData[index];
-            
+
+            // Pick mode: fire callback and close
+            if (_isPickMode && _pickModeCallback) {
+                const cb = _pickModeCallback;
+                close();
+                cb(image.id);
+                return;
+            }
+
             if (selectMode) {
                 // Toggle selection in select mode
                 if (selectedImageIds.has(image.id)) {
@@ -1112,7 +1148,7 @@ Modals.NewImageGallery = (() => {
         }
 
 
-        return { init, open, close,openTaggedImages, openImagesFromDate };
+        return { init, open, close, openTaggedImages, openImagesFromDate, openPickMode };
 })();
 
 

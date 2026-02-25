@@ -1661,6 +1661,7 @@ Modals.initAll = () => {
         Modals.ReferenceDocumentsNotification.init();
         Modals.ConversationManager.init();
         Modals.SubjectConfiguration.init();
+        Modals.Artefacts.init();
 };
 
 Modals.closeAll = () => {

@@ -116,6 +116,47 @@ class AlbumMedia(Base):
     media_item = relationship("MediaMetadata", foreign_keys=[media_item_id])
 
 
+class Artefact(Base):
+    """An artefact – a physical or meaningful object from the subject's life."""
+
+    __tablename__ = "artefacts"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(1000), nullable=False)
+    description = Column(Text, nullable=True)
+    tags = Column(Text, nullable=True)  # comma-separated
+    story = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    media = relationship(
+        "ArtefactMedia",
+        back_populates="artefact",
+        cascade="all, delete-orphan",
+        order_by="ArtefactMedia.sort_order",
+    )
+
+
+class ArtefactMedia(Base):
+    """Junction table linking artefacts to media items."""
+
+    __tablename__ = "artefact_media"
+
+    id = Column(Integer, primary_key=True)
+    artefact_id = Column(Integer, ForeignKey("artefacts.id", ondelete="CASCADE"), nullable=False)
+    media_item_id = Column(Integer, ForeignKey("media_items.id", ondelete="RESTRICT"), nullable=False)
+    sort_order = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
+    artefact = relationship("Artefact", back_populates="media")
+    media_item = relationship("MediaMetadata", foreign_keys=[media_item_id])
+
+    __table_args__ = (
+        Index("idx_artefact_media_artefact_id", "artefact_id"),
+        Index("idx_artefact_media_media_item_id", "media_item_id"),
+    )
+
+
 class IMessage(Base):
     """Message model (supports iMessage, SMS, and WhatsApp)."""
 

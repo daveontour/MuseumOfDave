@@ -1312,6 +1312,12 @@ const App = (() => {
             });
         }
 
+        if (DOM.artefactsSidebarBtn) {
+            DOM.artefactsSidebarBtn.addEventListener('click', () => {
+                Modals.Artefacts.open();
+            });
+        }
+
         // Interviewee management event listeners
         if (DOM.intervieweeSelect) {
             DOM.intervieweeSelect.addEventListener('change', handleIntervieweeSelectChange);

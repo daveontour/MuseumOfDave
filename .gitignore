@@ -40,6 +40,9 @@ env/
 .env.*.local
 token.json
 credentials.json
+Dockerfile
+docker-compose.yml
+docker.env
 
 # Database
 *.db

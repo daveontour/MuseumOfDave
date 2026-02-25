@@ -1521,6 +1521,16 @@ body {
     z-index: 3000 !important;
 }
 
+/* Confirmation modal must always appear on top of all other modals */
+#confirmation-modal {
+    z-index: 3500 !important;
+}
+
+.confirmation-modal-content {
+    width: 400px !important;
+    max-width: 95vw;
+}
+
 /* Ask AI modal should appear above conversation modal */
 #sms-ask-ai-modal {
     z-index: 4000 !important;
@@ -5582,4 +5592,318 @@ body {
     pointer-events: none;
     z-index: 1000;
     font-size: 13px;
+}
+
+/* ========================================================================
+   ARTEFACTS GALLERY
+   ======================================================================== */
+
+.artefacts-modal-content {
+    max-width: 95vw;
+    width: 90%;
+    max-height: 85vh;
+    height: 85vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.artefacts-modal-header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e9ecef;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+}
+
+.artefacts-header-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.artefacts-header-search-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.artefacts-thumbnail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 2px;
+    align-content: start;
+}
+
+.artefact-card {
+    border: 1px solid #dde3ec;
+    border-radius: 10px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    background: #fff;
+}
+
+.artefact-card:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.13);
+}
+
+.artefact-card-thumb {
+    width: 100%;
+    height: 160px;
+    object-fit: cover;
+    display: block;
+    background: #f0f2f5;
+}
+
+.artefact-card-placeholder {
+    width: 100%;
+    height: 160px;
+    background: #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #adb5bd;
+    font-size: 2.8rem;
+}
+
+.artefact-card-body {
+    padding: 10px 12px 12px;
+}
+
+.artefact-card-name {
+    font-weight: 600;
+    font-size: 0.97rem;
+    margin-bottom: 4px;
+    color: #1a2340;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.artefact-card-desc {
+    font-size: 0.82rem;
+    color: #666;
+    margin-bottom: 7px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.artefact-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.artefact-tag-badge {
+    background: #e3f2fd;
+    color: #1565c0;
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.73rem;
+    font-weight: 500;
+}
+
+/* Detail modal */
+.artefact-detail-content {
+    max-width: 90vw;
+    width: 85%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+}
+
+.artefact-detail-title-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #19264d;
+    color: #fff;
+    padding: 12px 18px;
+    border-radius: 8px 8px 0 0;
+    flex-shrink: 0;
+}
+
+.artefact-detail-title-bar span {
+    font-size: 1.1rem;
+    font-weight: 600;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 12px;
+}
+
+.artefact-detail-close-btn {
+    color: rgba(255,255,255,0.8) !important;
+    float: none !important;
+    line-height: 1;
+    padding: 0;
+    margin: 0;
+    font-size: 24px !important;
+    flex-shrink: 0;
+}
+
+.artefact-detail-close-btn:hover {
+    color: #fff !important;
+}
+
+.artefact-detail-body {
+    padding: 16px 20px 20px;
+    overflow: hidden;
+    display: flex;
+    gap: 20px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.artefact-photos-panel {
+    width: 300px;
+    min-width: 240px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.artefact-photos-strip {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+}
+
+.artefact-photo-thumb-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.artefact-photo-thumb-wrap img {
+    width: 100%;
+    border-radius: 6px;
+    cursor: pointer;
+    display: block;
+}
+
+.artefact-photo-remove-btn {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: rgba(220, 53, 69, 0.88);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.artefact-photo-remove-btn:hover {
+    background: #dc3545;
+}
+
+.artefact-photo-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.artefact-detail-fields {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+    min-width: 0;
+}
+
+.artefact-field-label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #4a5568;
+    margin-bottom: 2px;
+}
+
+.artefact-detail-fields textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #cdd5e0;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.artefact-description-textarea {
+    min-height: 70px;
+}
+
+.artefact-story-textarea {
+    flex: 1;
+    min-height: 140px;
+    resize: vertical;
+}
+
+.artefact-detail-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 8px;
+    flex-shrink: 0;
+}
+
+/* Empty state */
+.artefacts-empty-state {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 60px 20px;
+    color: #888;
+}
+
+.artefacts-empty-state i {
+    font-size: 3rem;
+    display: block;
+    margin-bottom: 12px;
+    color: #ccc;
+}
+
+/* Pick-mode banner shown at top of image gallery */
+.pick-mode-banner {
+    background: #4a90e2;
+    color: #fff;
+    text-align: center;
+    padding: 10px 16px;
+    font-weight: 600;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+    .artefact-detail-body {
+        flex-direction: column;
+    }
+    .artefact-photos-panel {
+        width: 100%;
+    }
 }

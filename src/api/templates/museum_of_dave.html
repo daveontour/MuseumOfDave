@@ -134,6 +134,9 @@
                     <button type="button" class="more-options-btn" id="relationships-btn">
                         <i class="fas fa-project-diagram"></i> Relationships
                     </button>
+                    <button type="button" class="more-options-btn" id="artefacts-sidebar-btn">
+                        <i class="fas fa-box-open"></i> Artefacts
+                    </button>
 
                 </div>
             </div>
@@ -1992,6 +1995,7 @@
     <script src="/static/js/museum/modals-email.js" defer></script>
     <script src="/static/js/museum/modals-comms.js" defer></script>
     <script src="/static/js/museum/modals-people.js" defer></script>
+    <script src="/static/js/museum/modals-artefacts.js" defer></script>
     <script src="/static/js/museum/modals-settings.js" defer></script>
     <script src="/static/js/museum/interviewer.js" defer></script>
     <script src="/static/js/museum/app.js" defer></script>
@@ -2011,6 +2015,77 @@
 
         });
     </script>
+
+    <!-- ===== ARTEFACTS GALLERY MODAL ===== -->
+    <div id="artefacts-modal" class="modal">
+        <div class="modal-content artefacts-modal-content">
+            <button class="modal-close-btn" id="close-artefacts-modal">&times;</button>
+            <div class="artefacts-modal-header">
+                <div class="artefacts-header-title-row">
+                    <h2 style="margin:0;">Artefact Gallery</h2>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <button id="artefacts-export-btn" class="modal-btn modal-btn-secondary" title="Download all artefacts as JSON">
+                            <i class="fas fa-download"></i> Export
+                        </button>
+                        <button id="artefacts-import-btn" class="modal-btn modal-btn-secondary" title="Upload artefacts from JSON file">
+                            <i class="fas fa-upload"></i> Import
+                        </button>
+                        <input id="artefacts-import-file" type="file" accept=".json,application/json" style="display:none"/>
+                        <button id="artefacts-new-btn" class="modal-btn modal-btn-primary">+ New Artefact</button>
+                    </div>
+                </div>
+                <div class="artefacts-header-search-row">
+                    <input id="artefacts-search" class="new-image-gallery-input" placeholder="Search by name, description, tags or story..." style="flex:1; min-width:140px;"/>
+                    <button id="artefacts-search-btn" class="modal-btn modal-btn-primary">Search</button>
+                    <button id="artefacts-clear-btn" class="modal-btn modal-btn-secondary">Clear</button>
+                </div>
+            </div>
+            <div id="artefacts-thumbnail-grid" class="artefacts-thumbnail-grid"></div>
+        </div>
+    </div>
+
+    <!-- ===== ARTEFACT DETAIL / EDIT MODAL ===== -->
+    <div id="artefact-detail-modal" class="modal">
+        <div class="modal-content artefact-detail-content">
+            <div class="artefact-detail-title-bar">
+                <span id="artefact-detail-title-text">Artefact</span>
+                <button class="modal-close-btn artefact-detail-close-btn" id="close-artefact-detail">&times;</button>
+            </div>
+            <div class="artefact-detail-body">
+                <!-- LEFT: Photos panel -->
+                <div class="artefact-photos-panel">
+                    <h3 style="margin:0 0 8px 0; font-size:1rem;">Photos</h3>
+                    <div id="artefact-photos-strip" class="artefact-photos-strip"></div>
+                    <div class="artefact-photo-actions">
+                        <button id="artefact-add-photo-file-btn" class="modal-btn modal-btn-secondary" style="width:100%;">
+                            <i class="fas fa-upload"></i> Upload Photo
+                        </button>
+                        <input id="artefact-photo-file-input" type="file" accept="image/*" style="display:none"/>
+                        <button id="artefact-add-photo-gallery-btn" class="modal-btn modal-btn-secondary" style="width:100%;">
+                            <i class="fas fa-images"></i> Choose from Gallery
+                        </button>
+                    </div>
+                </div>
+                <!-- RIGHT: Details panel -->
+                <div class="artefact-detail-fields">
+                    <label class="artefact-field-label">Name</label>
+                    <input id="artefact-detail-name" class="new-image-gallery-input" placeholder="Artefact name"/>
+                    <label class="artefact-field-label">Description</label>
+                    <textarea id="artefact-detail-description" class="artefact-description-textarea" placeholder="Short description"></textarea>
+                    <label class="artefact-field-label">Tags <span style="font-weight:normal; color:#888;">(comma-separated)</span></label>
+                    <input id="artefact-detail-tags" class="new-image-gallery-input" placeholder="e.g. childhood, family, 1970s" list="artefact-tags-list"/>
+                    <datalist id="artefact-tags-list"></datalist>
+                    <label class="artefact-field-label">Story</label>
+                    <textarea id="artefact-detail-story" class="artefact-story-textarea" placeholder="Tell the story behind this artefact..."></textarea>
+                    <div class="artefact-detail-actions">
+                        <button id="artefact-save-btn" class="modal-btn modal-btn-primary">Save</button>
+                        <button id="artefact-delete-btn" class="modal-btn modal-btn-danger" style="display:none;">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </body>
 
 </html>
