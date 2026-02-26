@@ -496,7 +496,7 @@ const InterviewerMode = (() => {
         showInterviewerLoadingIndicator();
 
         const selectedVoice = VoiceSelector.getSelectedVoice();
-        const selectedMood = (selectedVoice === 'dave' && DOM.daveMood) ? DOM.daveMood.value : null;
+        const selectedMood = (selectedVoice === 'owner' && DOM.ownerMood) ? DOM.ownerMood.value : null;
         
         // Get selected interview purpose
         const selectedPurpose = DOM.interviewPurposeSelect ? DOM.interviewPurposeSelect.value : '';

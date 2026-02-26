@@ -46,7 +46,7 @@ const App = (() => {
             UI.showLoadingIndicator();
 
             const selectedVoice = VoiceSelector.getSelectedVoice();
-            const selectedMood = (selectedVoice === 'dave' && DOM.daveMood) ? DOM.daveMood.value : null;
+            const selectedMood = (selectedVoice === 'owner' && DOM.ownerMood) ? DOM.ownerMood.value : null;
             
             try {
                 const finalMessage = UI.getWorkModePrefix() + userPrompt;

@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title }}</title>
-    <link rel="stylesheet" href="/static/css/museum_of_dave.css">
+    <link rel="stylesheet" href="/static/css/museum_of.css">
     <link rel="stylesheet" href="/static/css/leaflet.css">
     <link rel="stylesheet" href="/static/css/images_grid.css">
     <!-- Include marked.js -->
@@ -40,26 +40,26 @@
                 <!-- Voice Dropdown Select -->
                 <div class="voice-dropdown-container">
                     <select id="voice-select" name="voice">
-                        <option value="dave">Dave's own voice</option>
+                        <option value="owner">{{ owners }} own voice</option>
                         <option value="expert" selected>A dispassionate expert</option>
-                        <option value="male_friend">Dave's best male friend</option>
-                        <option value="female_friend">Dave's best female friend</option>
+                        <option value="male_friend">{{ owners }} best male friend</option>
+                        <option value="female_friend">{{ owners }} best female friend</option>
                         <option value="psychologist">A psychologist</option>
-                        <option value="after_death">A friend speaking after Dave's death</option>
+                        <option value="after_death">A friend speaking after {{ owners }} death</option>
                         <option value="irish">A Irish limmerick poet</option>
-                        <option value="secret_admirer">A admirer who remained anonymous to Dave</option>
+                        <option value="secret_admirer">A admirer who remained anonymous to {{ owner }}</option>
                         <option value="haiku">A Japanese haiku master</option>
                         <option value="insult">An insult commedian</option>
                         <option value="earthchild">A hippy earthchild</option>
-                        <option value="bar_girl">A Thai bar girl that knows Dave's complete story</option>
-                        <option value="parents">Dave's mother and father</option>
-                        <option value="preacher">A fire and brimstone preacher who disapproves of all aspects of Dave's life</option>
+                        <option value="bar_girl">A Thai bar girl that knows {{ owners }} complete story</option>
+                        <option value="parents">{{owner}}'s mother and father</option>
+                        <option value="preacher">A fire and brimstone preacher who disapproves of all aspects of {{owner}}'s lif</option>
                     </select>
                 </div>
                 
-                <!-- Mood Selector (for Dave voice) -->
+                <!-- Mood Selector (for own voice) -->
                 <div id="mood-selector" style="display: none; margin-top: 10px;">
-                    <select id="dave-mood" name="dave-mood">
+                    <select id="owner-mood" name="owner-mood">
                         <option value="neutral">Neutral - Just Regular</option>
                         <option value="reflective">Reflective - Thoughtful and Contemplative</option>
                         <option value="excited">Excited - Enthusiastic and Energetic</option>
@@ -101,7 +101,7 @@
             
             <!-- More Options Section -->
             <div class="more-options-section">
-                <h3 id="explore-dave-world-heading">Explore Dave's World</h3>
+                <h3>Explore {{owner}}'s World</h3>
                 <div class="more-options-buttons">
                     <button type="button" class="more-options-btn" id="sms-messages-sidebar-btn">
                         <i class="fas fa-comment-dots"></i> Messages and Chats
@@ -225,11 +225,10 @@
                         <div class="info-content" style="width: 50%;">
                             <ul>
                                 <li>Select a voice from the sidebar to get responses from different perspectives</li>
-                                <li>If you choose "Dave's own voice", you can also select his current mood</li>
-                                <li>Type your questions about Dave in the chat box below</li>
+                                <li>If you choose "{{owner}}'s own voice", you can also select his current mood</li>
+                                <li>Type your questions about {{owner}} in the chat box below</li>
                                 <li>Click "Suggestions" for some useful, provocative or fun suggestions</li>
-                                <!-- <li>Click "Have Your Say" to enter your own perspective or story about Dave</li> -->
-                            </ul>
+                                </ul>
                         </div>
                         <div id="voice-preview" class="voice-preview" style="width: 50%;display: inline;">
                             <p style="font-weight: bold; color: #2c3e50; margin-bottom: 0.5rem; font-size: 1.1em;">Current Voice</p>
@@ -239,36 +238,36 @@
                     </div>
 
                     <div class="voice-flow-container" style="display: grid; grid-template-rows: repeat(2, 1fr); grid-template-columns: repeat(7, 1fr); gap: 15px;">
-                        <div class="voice-icon-wrapper" data-voice="dave" data-description="Dave's own voice">
-                            <img src="/static/images/dave_sm.png" alt="dave" class="voice-icon">
+                        <div class="voice-icon-wrapper" data-voice="owner" data-description="{{owner}}'s own voice">
+                            <img src="/static/images/{{owner_image_small}}" alt="owner" class="voice-icon">
                         </div>
 
-                        <div class="voice-icon-wrapper" data-voice="expert" data-description="Expert analysis of Dave's situation">
+                        <div class="voice-icon-wrapper" data-voice="expert" data-description="Expert analysis of {{owner}}'s situation">
                             <img src="/static/images/expert_sm.png" alt="expert" class="voice-icon">
                         </div>
 
-                        <div class="voice-icon-wrapper" data-voice="male_friend" data-description="A close male friend's view of Dave">
+                        <div class="voice-icon-wrapper" data-voice="male_friend" data-description="A close male friend's view of {{owner}}">
                             <img src="/static/images/male-friend_sm.png" alt="male-friend" class="voice-icon">
                         </div>
-                        <div class="voice-icon-wrapper" data-voice="female_friend" data-description="A female friend's perspective on Dave">
+                        <div class="voice-icon-wrapper" data-voice="female_friend" data-description="A female friend's perspective on {{owner}}">
                             <img src="/static/images/female-friend_sm.png" alt="female-friend" class="voice-icon">
                         </div>
                         <div class="voice-icon-wrapper" data-voice="psychologist" data-description="A professional psychological analysis">
                             <img src="/static/images/psychologist_sm.png" alt="psychologist" class="voice-icon">
                         </div>
-                        <div class="voice-icon-wrapper" data-voice="after_death" data-description="Dave's story from beyond">
+                        <div class="voice-icon-wrapper" data-voice="after_death" data-description="{{owner}}'s story from beyond">
                             <img src="/static/images/after-death_sm.png" alt="after-death" class="voice-icon">
                         </div>
-                         <div class="voice-icon-wrapper" data-voice="irish" data-description="An Irish perspective on Dave">
+                         <div class="voice-icon-wrapper" data-voice="irish" data-description="An Irish perspective on {{owner}}">
                             <img src="/static/images/irish_sm.png" alt="irish" class="voice-icon">
                         </div>
                         <div class="voice-icon-wrapper" data-voice="secret_admirer" data-description="A secret admirer's loving perspective">
-                            <img src="/static/images/secret-admirer_sm.png" alt="secret-admirer" class="voice-icon">
+                            <img src="/static/images/{{admirer_image_small}}" alt="secret-admirer" class="voice-icon">
                         </div>
-                        <div class="voice-icon-wrapper" data-voice="haiku" data-description="Dave's story in Haiku form">
+                        <div class="voice-icon-wrapper" data-voice="haiku" data-description="{{owner}}'s story in Haiku form">
                             <img src="/static/images/haiku_sm.png" alt="haiku" class="voice-icon">
                         </div>
-                        <div class="voice-icon-wrapper" data-voice="insult" data-description="A critical view of Dave">
+                        <div class="voice-icon-wrapper" data-voice="insult" data-description="A critical view of {{owner}}">
                             <img src="/static/images/insult_sm.png" alt="insult" class="voice-icon">
                         </div>
                         <div class="voice-icon-wrapper" data-voice="earthchild" data-description="A nature-connected perspective">
@@ -277,7 +276,7 @@
                         <div class="voice-icon-wrapper" data-voice="bar_girl" data-description="A bar girl's unique observations">
                             <img src="/static/images/bar-girl_sm.png" alt="bar-girl" class="voice-icon">
                         </div>
-                        <div class="voice-icon-wrapper" data-voice="parents" data-description="Dave's parents' perspective">
+                        <div class="voice-icon-wrapper" data-voice="parents" data-description="{{owner}}'s parents' perspective">
                             <img src="/static/images/parents_sm.png" alt="parents" class="voice-icon">
                         </div>
                         <div class="voice-icon-wrapper" data-voice="preacher" data-description="A spiritual interpretation">
@@ -1443,20 +1442,20 @@
                 <div style="margin-bottom: 1.5rem;">
                     <label for="new-conversation-voice-select" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Voice:</label>
                     <select id="new-conversation-voice-select" style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;">
-                        <option value="dave">Dave's own voice</option>
+                        <option value="owner">{{owner}}'s own voice</option>
                         <option value="expert" selected>A dispassionate expert</option>
-                        <option value="male_friend">Dave's best male friend</option>
-                        <option value="female_friend">Dave's best female friend</option>
+                        <option value="male_friend">{{owner}}'s best male friend</option>
+                        <option value="female_friend">{{owner}}'s best female friend</option>
                         <option value="psychologist">A psychologist</option>
-                        <option value="after_death">A friend speaking after Dave's death</option>
+                        <option value="after_death">A friend speaking after {{owner}}'s death</option>
                         <option value="irish">A Irish limmerick poet</option>
-                        <option value="secret_admirer">A admirer who remained anonymous to Dave</option>
+                        <option value="secret_admirer">A admirer who remained anonymous to {{owner}}</option>
                         <option value="haiku">A Japanese haiku master</option>
                         <option value="insult">An insult commedian</option>
                         <option value="earthchild">A hippy earthchild</option>
-                        <option value="bar_girl">A Thai bar girl that Dave told his story to</option>
+                        <option value="bar_girl">A Thai bar girl that {{owner}} told his story to</option>
                         <option value="parents">His mother and father</option>
-                        <option value="preacher">A fire and brimstone preacher who disapproves of all aspects of Dave's life</option>
+                        <option value="preacher">A fire and brimstone preacher who disapproves of all aspects of {{owner}}'s life</option>
                     </select>
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
@@ -1939,7 +1938,7 @@
             </div>
             <div style="margin-bottom: 1.5em;">
                 <label style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Writing Style (AI-generated):</label>
-                <p style="color: #666; font-size: 0.9em; margin-bottom: 0.5em;">Analyzes a random sample of 5000 messages from Dave Burton to summarize writing style.</p>
+                <p style="color: #666; font-size: 0.9em; margin-bottom: 0.5em;">Analyzes a random sample of 5000 messages from {{owner}} to summarize writing style.</p>
                 <button type="button" id="request-writing-style-btn" class="modal-btn modal-btn-primary" style="margin-bottom: 0.7em;">
                     <i class="fas fa-magic"></i> Generate Writing Style
                 </button>
@@ -1950,7 +1949,7 @@
             </div>
             <div style="margin-bottom: 1.5em;">
                 <label style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Psychological Profile (AI-generated):</label>
-                <p style="color: #666; font-size: 0.9em; margin-bottom: 0.5em;">Analyzes a random sample of 5000 messages from Dave Burton to generate a psychological profile.</p>
+                <p style="color: #666; font-size: 0.9em; margin-bottom: 0.5em;">Analyzes a random sample of 5000 messages from {{owner}} to generate a psychological profile.</p>
                 <button type="button" id="request-psychological-profile-btn" class="modal-btn modal-btn-primary" style="margin-bottom: 0.7em;">
                     <i class="fas fa-brain"></i> Generate Psychological Profile
                 </button>
@@ -2005,7 +2004,7 @@
         // Function to show confirmation modal
 
         document.addEventListener('DOMContentLoaded', function() {
-            var editBtn = document.getElementById('edit-davebio-btn');
+            var editBtn = document.getElementById('edit-ownerbio-btn');
             if (editBtn) {
                 editBtn.addEventListener('click', function() {
                     window.open('/davebio_editor', '_blank');

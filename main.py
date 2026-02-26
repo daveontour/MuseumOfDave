@@ -1,5 +1,5 @@
 """
-Main entry point for Museum of Dave application.
+Main entry point for Museum application.
 Creates database tables and starts the API server.
 """
 
@@ -20,7 +20,7 @@ from src.services.relationship_service import RelationshipService
 
 def main( test: bool = False):
     """Main function - initialize database and start API server."""
-    print("Initializing Museum of Dave application...")
+
     
     # Initialize database and create tables
     config = get_config()

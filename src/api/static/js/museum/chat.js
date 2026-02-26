@@ -23,6 +23,8 @@ const Chat = (() => {
             const voiceImageSmall = document.createElement('img');
             voiceImageSmall.className = 'message-voice-image';
 
+            debugger;
+
             let selector = selectedVoice + '_sm';
             let imgSrc = `/static/images/${CONSTANTS.VOICE_IMAGES[selector]}`;
             voiceImageSmall.src = imgSrc;
@@ -818,7 +820,7 @@ const VoiceSelector = (() => {
         Config.saveSettings(); // Save new creativity level
 
         if (DOM.moodSelector) {
-            DOM.moodSelector.style.display = newVoice === 'dave' ? 'block' : 'none';
+            DOM.moodSelector.style.display = newVoice === 'owner' ? 'block' : 'none';
         }
         
         // Chat.clearChat();

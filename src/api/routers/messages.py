@@ -1245,7 +1245,7 @@ async def get_instagram_import_status():
 
 @router.post("/writing-style/summarize")
 async def summarize_writing_style_endpoint():
-    """Summarize Dave Burton's writing style using a random sample of 5000 messages."""
+
     session = db.get_session()
     try:
         total_available = session.query(IMessage).filter(IMessage.sender_name == "Dave Burton").count()

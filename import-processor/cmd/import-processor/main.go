@@ -27,7 +27,7 @@ import (
 	"import-processor/internal/services"
 )
 
-const helpSummary = `import-processor - Museum of Dave import processor
+const helpSummary = `import-processor - Museum import processor
 
 Usage:
   import-processor <command> [options]

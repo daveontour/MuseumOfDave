@@ -1,11 +1,12 @@
 """Admin, system, and utility routes."""
+import json
 import os
 import platform
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from ...database.models import ImportControlLastRun, IMessage, MessageAttachment, MediaMetadata, MediaBlob, Attachment, AlbumMedia, FacebookAlbum
@@ -39,18 +40,74 @@ async def root(request: Request):
         print("Linux platform detected")
 
     page_title = os.getenv("PAGE_TITLE", "Fallback Page Title - Let's Talk About Dave")
+    page_title = page_title.replace("Dave", "Kerri")
     
     print(f"Page title: {page_title}")
     return templates.TemplateResponse(
         "museum_of_dave.html",
-        {"request": request, "page_title": page_title}
+        {"request": request, 
+        "page_title": page_title,
+        "owners": "Kerri's",
+        "owner": "Kerri",
+        "his": "her",
+        "he":"she",
+        "his":"her",
+        "him":"her",
+        "owner_image":"secret-admirer.png",
+        "owner_image_small":"secret-admirer_sm.png",
+        "admirer_image=":"dave.png",
+        "admirer_image_small":"dave_sm.png",
+        "himself":"herself",
+        }
     )
+
+@router.get("/api/suggestions")
+async def get_suggestions():
+    path = Path(__file__).parent.parent / "static" / "data" / "suggestions.json"
+    content = path.read_text(encoding="utf-8")
+    template = templates.env.from_string(content)
+    rendered = template.render(
+        owners="Kerri's",
+        owner="Kerri",
+        his="her",
+        he="she",
+        him="her",
+        himself="herself",
+    )
+    return JSONResponse(
+        content=json.loads(rendered),
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
+
+@router.get("/static/js/museum/foundation.js")
+async def get_foundation_js():
+    path = Path(__file__).parent.parent / "static" / "js" / "museum" / "foundation.js"
+    content = path.read_text(encoding="utf-8")
+    template = templates.env.from_string(content)
+    rendered = template.render(
+        owners="Kerri's",
+        owner="Kerri",
+        owner_image="secret-admirer.png",
+        owner_image_small="secret-admirer_sm.png",
+        admirer_image="dave.png",
+        admirer_image_small="dave_sm.png",
+        his="her",
+        he="she",
+        him="her",
+        himself="herself",
+    )
+    return HTMLResponse(
+        content=rendered,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
+
 
 @router.get("/health")
 async def health_check():
     """Root endpoint - returns a welcome message."""
     return {
-        "message": "Welcome to the Museum of Dave API",
+        "message": "Welcome to the Museum API",
         "endpoints": {
             "GET /": "This endpoint",
             "GET /health": "Health check endpoint",
@@ -66,7 +123,7 @@ async def health_check():
             "DELETE /imessages/conversation/{chat_session}": "Delete a conversation",
             "GET /imessages/{message_id}/attachment": "Get attachment content for a message",
             "POST /chat/generate": "Generate a chat response using ChatService with Gemini LLM",
-            "POST /writing-style/summarize": "Summarize Dave Burton's writing style from a random sample of 5000 messages",
+            "POST /writing-style/summarize": "Summarize the owner's writing style from a random sample of 5000 messages",
             "POST /whatsapp/import": "Import WhatsApp messages from a directory structure",
             "GET /whatsapp/import/stream": "Stream WhatsApp import progress via SSE",
             "POST /whatsapp/import/cancel": "Cancel WhatsApp import if in progress",
@@ -116,14 +173,14 @@ async def health_check():
 
 
 
-@router.get("/api/suggestions")
-async def get_suggestions():
-    path = Path(__file__).parent.parent / "static" / "data" / "Suggestions.json"
-    return FileResponse(
-        path,
-        media_type="application/json",
-        headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
-    )
+# @router.get("/api/suggestions")
+# async def get_suggestions():
+#     path = Path(__file__).parent.parent / "static" / "data" / "Suggestions.json"
+#     return FileResponse(
+#         path,
+#         media_type="application/json",
+#         headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+#     )
 
 @router.get("/api/import-control-last-run")
 async def get_import_control_last_run():

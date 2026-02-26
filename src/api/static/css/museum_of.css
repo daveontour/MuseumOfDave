@@ -986,7 +986,7 @@ body {
     font-size: 0.9em;
 }
 
-#dave-mood {
+#owner-mood {
     width: 100%;
     padding: 6px;
     border: 1px solid #ddd;
@@ -996,13 +996,13 @@ body {
     font-size: 0.9em;
     cursor: pointer;
 }
-#dave-mood:hover { border-color: #009688; }
-#dave-mood:focus {
+#owner-mood:hover { border-color: #009688; }
+#owner-mood:focus {
     outline: none;
     border-color: #009688;
     box-shadow: 0 0 0 2px rgba(0, 150, 136, 0.1);
 }
-#dave-mood option { padding: 4px; }
+#owner-mood option { padding: 4px; }
 
 /* Creativity Level Slider */
 .creativity-container {

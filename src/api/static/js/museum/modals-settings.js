@@ -1251,135 +1251,12 @@ Modals.SubjectConfiguration = (() => {
             return currentSubjectName;
         }
 
-        function updatePageReferences(subjectName, newGender) {
-            if (!subjectName) return;
-
-            console.log("Updating page references for subject:", subjectName);
-        
-            //Retrieve the page title from the environment variable
-            const pageTitle = process.env.PAGE_TITLE;
-            console.log("Page title:", pageTitle);
-            // Update page title
-            document.title = `${pageTitle}`;
-
-            // Update header
-            const header = document.querySelector('.header-container h2');
-            if (header) {
-                header.textContent = `${pageTitle}`;
-            }
-
-            if (CONSTANTS.VOICE_DESCRIPTIONS["dave"]) {
-                CONSTANTS.VOICE_DESCRIPTIONS["dave"] = CONSTANTS.VOICE_DESCRIPTIONS["dave"].replace('{SUBJECT_NAME}', subjectName);
-            }
-
-            const exploreDaveWorldHeading = document.getElementById('explore-dave-world-heading');
-            if (exploreDaveWorldHeading) {
-                exploreDaveWorldHeading.textContent = `Explore ${subjectName}'s World`;
-            }
-
-
-            const daveImage = document.querySelector('.voice-icon[alt="dave"]');
-            const admireImage = document.querySelector('.voice-icon[alt="secret-admirer"]');
- 
-            if (newGender === 'Female') {
-                // set the image source of the image with class voice-icon and  alt="dave" to /static/images/secret-admirer_sm.png
-
-                CONSTANTS.VOICE_IMAGES["dave"] = "secret-admirer.png";
-                CONSTANTS.VOICE_IMAGES["dave_sm"] = "secret-admirer_sm.png";
-                CONSTANTS.VOICE_IMAGES["secret_admirer"] = "dave.png";
-                CONSTANTS.VOICE_IMAGES["secret_admirer_sm"] = "dave_sm.png";
-
-
-
-                if (daveImage) {
-                    daveImage.src = '/static/images/secret-admirer_sm.png';
-                }
-                
-                if (admireImage) {
-                    admireImage.src = '/static/images/dave_sm.png';
-                }
-
-            } else {
-
-                
-                CONSTANTS.VOICE_IMAGES["dave"] = "dave.png";
-                CONSTANTS.VOICE_IMAGES["dave_sm"] = "dave_sm.png";
-                CONSTANTS.VOICE_IMAGES["secret_admirer"] = "secret-admirer.png";
-                CONSTANTS.VOICE_IMAGES["secret_admirer_sm"] = "secret-admirer_sm.png";
-
-                if (admireImage) {
-                    admireImage.src = '/static/images/secret-admirer_sm.png';
-                }
-                
-                if (daveImage) {
-                    daveImage.src = '/static/images/dave_sm.png';
-                }
-            }
-            console.log("Images Updated");
-
-            // Update info box references
-            const infoBox = document.getElementById('info-box');
-            if (infoBox) {
-                let text = infoBox.innerHTML;
-                // Replace common references
-                text = text
-                    .replace(/Dave/g, subjectName)
-                    .replace(/Dave's/g, `${subjectName}'s`)
-                    .replace(/David Burton/g, subjectName);
-                // Apply pronoun replacements if gender changed
-                //text = applyPronounReplacements(text);
-                infoBox.innerHTML = text;
-            }
-
-            // Update voice descriptions dynamically
-            const voiceIcons = document.querySelectorAll('.voice-icon-wrapper');
-            voiceIcons.forEach(icon => {
-                const description = icon.getAttribute('data-description');
-                if (description) {
-                    let updatedDescription = description;
-                    if (description.includes('Dave')) {
-                        updatedDescription = updatedDescription
-                            .replace(/Dave/g, subjectName)
-                            .replace(/Dave's/g, `${subjectName}'s`);
-                    }
-                    // Apply pronoun replacements if gender changed
-                    //updatedDescription = applyPronounReplacements(updatedDescription);
-                    icon.setAttribute('data-description', updatedDescription);
-                    const title = icon.querySelector('.voice-icon-title');
-                    if (title) {
-                        title.textContent = updatedDescription;
-                    }
-                }
-            });
-
-            // Update voice select dropdown options
-            const voiceSelect = DOM.voiceSelect || document.getElementById('voice-select');
-            if (voiceSelect) {
-                const options = voiceSelect.querySelectorAll('option');
-                options.forEach(option => {
-                    let text = option.textContent;
-                    if (text.includes('Dave')) {
-                        text = text
-                            .replace(/Dave/g, subjectName)
-                            .replace(/Dave's/g, `${subjectName}'s`);
-                    }
-                    // Apply pronoun replacements if gender changed
-                    //text = applyPronounReplacements(text);
-                    option.textContent = text;
-                });
-            }
-
-            // Update current gender state after processing
-            if (newGender) {
-                currentGender = newGender;
-            }
-        }
 
         async function checkAndShow() {
-            if (configurationLoaded && currentSubjectName) {
-                updatePageReferences(currentSubjectName, currentGender);
-                return;
-            }
+            // if (configurationLoaded && currentSubjectName) {
+            //     updatePageReferences(currentSubjectName, currentGender);
+            //     return;
+            // }
 
             const config = await loadConfiguration();
             if (!config) {
@@ -1387,7 +1264,7 @@ Modals.SubjectConfiguration = (() => {
                 showModal();
             } else {
                 // Configuration exists, update references
-                updatePageReferences(config.subject_name, config.gender || 'Male');
+                //updatePageReferences(config.subject_name, config.gender || 'Male');
             }
         }
 
@@ -1544,7 +1421,7 @@ Modals.SubjectConfiguration = (() => {
 
             try {
                 await saveConfiguration(subjectName, systemInstructions, gender, familyName, otherNames, emailAddresses, phoneNumbers, whatsappHandle, instagramHandle);
-                updatePageReferences(subjectName, gender);
+                //updatePageReferences(subjectName, gender);
                 closeModal();
                 
                 // Show success message
@@ -1632,7 +1509,7 @@ Modals.SubjectConfiguration = (() => {
             loadConfiguration,
             saveConfiguration,
             getSubjectName,
-            updatePageReferences,
+           // updatePageReferences,
             showModal,
             close: closeModal
         };

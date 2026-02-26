@@ -102,7 +102,7 @@ async def generate_chat_response(request: ChatRequest):
             except Exception as e:
                 print(f"[generate_chat_response] Warning: Could not set voice '{request.voice}': {str(e)}")
 
-            if request.voice == "dave":
+            if request.voice == "owner":
                 try:
                     print(f"[generate_chat_response] Setting mood to '{request.mood}'")
                     chat_service.set_mood(request.mood)
