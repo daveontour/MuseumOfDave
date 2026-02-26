@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from ...database.models import ImportControlLastRun, IMessage, MessageAttachment, MediaMetadata, MediaBlob, Attachment, AlbumMedia, FacebookAlbum
 from ...config import get_config
-from ..deps import db, templates
+from ..deps import db, templates, subject_config_service
 
 router = APIRouter()
 
@@ -23,6 +23,56 @@ class MessageResponse(BaseModel):
     """Generic message response."""
     message: str
     timestamp: datetime
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def get_subject_template_context():
+    """Build template context dict from subject configuration."""
+    subject_configuration = subject_config_service.get_configuration()
+    if subject_configuration:
+        subject_name = subject_configuration.subject_name
+        subject_gender = subject_configuration.gender
+        subject_family_name = subject_configuration.family_name
+        subject_other_names = subject_configuration.other_names
+        subject_email_addresses = subject_configuration.email_addresses
+        subject_phone_numbers = subject_configuration.phone_numbers
+        subject_whatsapp_handle = subject_configuration.whatsapp_handle
+        subject_instagram_handle = subject_configuration.instagram_handle
+    else:
+        subject_name = "<Error>"
+        subject_gender = "Male"
+        subject_family_name = None
+        subject_other_names = None
+        subject_email_addresses = None
+        subject_phone_numbers = None
+        subject_whatsapp_handle = None
+        subject_instagram_handle = None
+
+    subject_name_possessive = subject_name + "'s"
+    him = "him" if subject_gender == "Male" else "her"
+    his = "his" if subject_gender == "Male" else "her"
+    he = "he" if subject_gender == "Male" else "she"
+    himself = "himself" if subject_gender == "Male" else "herself"
+    owner_image = "male.png" if subject_gender == "Male" else "female.png"
+    owner_image_small = "male_sm.png" if subject_gender == "Male" else "female_sm.png"
+    admirer_image = "female.png" if subject_gender == "Male" else "male.png"
+    admirer_image_small = "female_sm.png" if subject_gender == "Male" else "male_sm.png"
+
+    return {
+        "owners": subject_name_possessive,
+        "owner": subject_name,
+        "his": his,
+        "he": he,
+        "him": him,
+        "himself": himself,
+        "owner_image": owner_image,
+        "owner_image_small": owner_image_small,
+        "admirer_image": admirer_image,
+        "admirer_image_small": admirer_image_small,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -39,26 +89,14 @@ async def root(request: Request):
     else:
         print("Linux platform detected")
 
-    page_title = os.getenv("PAGE_TITLE", "Fallback Page Title - Let's Talk About Dave")
-    page_title = page_title.replace("Dave", "Kerri")
-    
+    subject_context = get_subject_template_context()
+    page_title = os.getenv("PAGE_TITLE", "Digital Museum of SUBJECT_NAME")
+    page_title = page_title.replace("SUBJECT_NAME", subject_context["owner"])
+
     print(f"Page title: {page_title}")
     return templates.TemplateResponse(
         "museum_of_dave.html",
-        {"request": request, 
-        "page_title": page_title,
-        "owners": "Kerri's",
-        "owner": "Kerri",
-        "his": "her",
-        "he":"she",
-        "his":"her",
-        "him":"her",
-        "owner_image":"secret-admirer.png",
-        "owner_image_small":"secret-admirer_sm.png",
-        "admirer_image=":"dave.png",
-        "admirer_image_small":"dave_sm.png",
-        "himself":"herself",
-        }
+        {"request": request, "page_title": page_title, **subject_context}
     )
 
 @router.get("/api/suggestions")
@@ -66,13 +104,9 @@ async def get_suggestions():
     path = Path(__file__).parent.parent / "static" / "data" / "suggestions.json"
     content = path.read_text(encoding="utf-8")
     template = templates.env.from_string(content)
+    subject_context = get_subject_template_context()
     rendered = template.render(
-        owners="Kerri's",
-        owner="Kerri",
-        his="her",
-        he="she",
-        him="her",
-        himself="herself",
+        **subject_context
     )
     return JSONResponse(
         content=json.loads(rendered),
@@ -84,17 +118,9 @@ async def get_foundation_js():
     path = Path(__file__).parent.parent / "static" / "js" / "museum" / "foundation.js"
     content = path.read_text(encoding="utf-8")
     template = templates.env.from_string(content)
+    subject_context = get_subject_template_context()
     rendered = template.render(
-        owners="Kerri's",
-        owner="Kerri",
-        owner_image="secret-admirer.png",
-        owner_image_small="secret-admirer_sm.png",
-        admirer_image="dave.png",
-        admirer_image_small="dave_sm.png",
-        his="her",
-        he="she",
-        him="her",
-        himself="herself",
+        **subject_context
     )
     return HTMLResponse(
         content=rendered,

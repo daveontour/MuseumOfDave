@@ -183,7 +183,7 @@ body {
     font-family: 'Book Antiqua', serif;
 }
 
-.assistant-message.voice-dave {
+.assistant-message.voice-owner {
     background-color: #e0f2f1;
     border-left: 4px solid #009688;
     font-family: 'Calibri', sans-serif;
