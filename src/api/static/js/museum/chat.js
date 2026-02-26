@@ -769,14 +769,7 @@ const VoiceSelector = (() => {
             }
             
             // Replace subject name placeholders if subject name is available
-            if (Modals && Modals.SubjectConfiguration && Modals.SubjectConfiguration.getSubjectName) {
-                const subjectName = Modals.SubjectConfiguration.getSubjectName();
-                if (subjectName) {
-                    description = description.replace(/Dave/g, subjectName);
-                    description = description.replace(/Dave's/g, `${subjectName}'s`);
-                    description = description.replace(/{SUBJECT_NAME}/g, subjectName);
-                }
-            }
+
             
             voicePreviewDesc.textContent = description;
         } else {

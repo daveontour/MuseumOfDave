@@ -1011,13 +1011,13 @@ body {
     color: #000;
 }
 
-/* Mood Selector (for Dave voice) */
+/* Mood Selector (for owner voice) */
 #mood-selector {
     margin-top: 10px;
     padding: 8px;
     background-color: #f8f8f8;
     border-radius: 4px;
-    border-left: 3px solid #009688; /* Dave's color */
+    border-left: 3px solid #009688; /* owner's color */
 }
 
 #mood-selector label {

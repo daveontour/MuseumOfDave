@@ -1246,7 +1246,7 @@ async def get_instagram_import_status():
 @router.post("/writing-style/summarize")
 async def summarize_writing_style_endpoint():
 
-    subject_name = os.getenv("SUBJECT_NAME", "Dave Burton")
+    subject_name = subject_config_service.get_subject_name()
 
     session = db.get_session()
     try:

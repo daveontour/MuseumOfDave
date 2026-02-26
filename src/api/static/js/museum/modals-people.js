@@ -417,7 +417,7 @@ Modals.Relationships = (() => {
         function reLayout() {
             if (!cy) return;
             updateGraph();
-            const hub = cy.getElementById('Dave Burton');
+            const hub = cy.getElementById('{{full_name}}');
             hub.unlock();
             hub.position({ x: cy.width() / 2, y: cy.height() / 2 });
             hub.lock();

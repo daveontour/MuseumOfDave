@@ -64,6 +64,7 @@ def get_subject_template_context():
     return {
         "owners": subject_name_possessive,
         "owner": subject_name,
+        "full_name": subject_name + " " + subject_family_name,
         "his": his,
         "he": he,
         "him": him,
@@ -127,7 +128,20 @@ async def get_foundation_js():
         media_type="application/javascript",
         headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
     )
-
+@router.get("/static/js/museum/modals-people.js")
+async def get_foundation_js():
+    path = Path(__file__).parent.parent / "static" / "js" / "museum" / "modals-people.js"
+    content = path.read_text(encoding="utf-8")
+    template = templates.env.from_string(content)
+    subject_context = get_subject_template_context()
+    rendered = template.render(
+        **subject_context
+    )
+    return HTMLResponse(
+        content=rendered,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
 
 @router.get("/health")
 async def health_check():
