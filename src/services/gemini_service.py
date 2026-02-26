@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional, List
 from io import BytesIO
 import google.genai as genai
 from google.genai import types
+
 from ..database import Database
 from ..database.models import ReferenceDocument, IMessage, Email, GeminiFile, ChatConversation, ChatTurn
 from sqlalchemy import or_
@@ -269,10 +270,6 @@ class GeminiService:
             raise
         return f"Error summarizing relationships in multiple steps: {str(e)} {idx}/{total}"
 
-
-
-
-
     def _format_conversation_for_prompt(self, messages_data: Dict[str, Any]) -> str:
         """Format conversation data into a readable text format for the prompt.
         
@@ -330,16 +327,21 @@ class GeminiService:
 class ChatService:
     """Service for interacting with Gemini LLM API for chat sessions."""
 
-    def __init__(self):
-        """Initialize Chat service with Gemini LLM API."""
+    def __init__(self, subject_config_service=None):
+        """Initialize Chat service with Gemini LLM API.
+        
+        Args:
+            subject_config_service: SubjectConfigurationService instance for loading subject name and system instructions.
+        """
         print("[GeminiChatService.__init__] Starting initialization...")
+        self._subject_config_service = subject_config_service
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             print("[GeminiService.__init__] ERROR: GEMINI_API_KEY environment variable is not set")
             raise ValueError("GEMINI_API_KEY environment variable is not set")
         
         # Get model name from environment, default to gemini-1.5-flash
-        model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
+        model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
         print(f"[GeminiChatService.__init__] Using model: {model_name}")
         print(f"[GeminiChatService.__init__] API key found: {api_key[:10]}...{api_key[-4:] if len(api_key) > 14 else '***'}")
         
@@ -390,7 +392,6 @@ class ChatService:
         self.db = db
         # Load system prompt and subject name when database is set
         self.reload_system_prompt(db=db)
-
 
     def set_voice(self, voice: str):
         """Sets the voice for the session."""
@@ -678,13 +679,18 @@ class ChatService:
         if db is None:
             db = self.db
         
-        if db:
+        if db and self._subject_config_service:
             try:
-                from .subject_configuration_service import SubjectConfigurationService
-                config_service = SubjectConfigurationService(db=db)
-                
+
                 # Get subject name
-                self.subject_name = config_service.get_subject_name()
+                self.subject_name = self._subject_config_service.get_subject_name()
+                self.subject_gender = self._subject_config_service.get_gender()
+                self.subject_family_name = self._subject_config_service.get_family_name()
+                self.subject_other_names = self._subject_config_service.get_other_names()
+                self.subject_email_addresses = self._subject_config_service.get_email_addresses()
+                self.subject_phone_numbers = self._subject_config_service.get_phone_numbers()
+                self.subject_whatsapp_handle = self._subject_config_service.get_whatsapp_handle()
+                self.subject_instagram_handle = self._subject_config_service.get_instagram_handle()
                 
                 # Reload voice instructions with subject name replacement
                 self.voice_instructions_list = self._load_voice_instructions()
@@ -692,8 +698,8 @@ class ChatService:
                     self.voice_instructions = self.voice_instructions_list[self.voice]
                 
                 # Get system instructions and core system instructions from database (with file fallback)
-                system_instructions = config_service.get_system_instructions()
-                core_instructions = config_service.get_core_system_instructions()
+                system_instructions = self._subject_config_service.get_system_instructions()
+                core_instructions = self._subject_config_service.get_core_system_instructions()
                 
                 # Concatenate: system_instructions + core_system_instructions
                 instructions = system_instructions
@@ -704,9 +710,6 @@ class ChatService:
                 if self.subject_name:
                     instructions = instructions.replace('{SUBJECT_NAME}', self.subject_name)
                     # Also replace common variations for backward compatibility
-                    instructions = instructions.replace('Dave', self.subject_name)
-                    instructions = instructions.replace('Dave\'s', f"{self.subject_name}'s")
-                    instructions = instructions.replace('David Burton', self.subject_name)
                 
                 self.system_prompt = instructions
                 print(f"[ChatService.reload_system_prompt] Loaded system instructions from database ({len(instructions)} chars)")
@@ -739,103 +742,8 @@ class ChatService:
         except FileNotFoundError:
             print("[ChatService._load_system_prompt] system_instructions_chat.txt not found. Using default instructions.")
             return """
-                You are an expert on {SUBJECT_NAME}'s life.
-                Do not mention referring to {SUBJECT_NAME}'s bio in your response, treat the bio as your own information.
-
-                If asked about a person, check for sources of chats, emails, and notes. 
-
-                When asked about a person, use the get_all_messages_by_contac tool to get the conversation between {SUBJECT_NAME} and the person.
-
-                IMPORTANT: Always include a json structure at the end of your response. 
-                IMPORTANT: In the json structure, include the name of the person you are responding as.
-                IMPORTANT: In the json structure, include the the full pathname or URI of any attachments of any images in the attachments of any email or data file that you use in your response.
-                IMPORTANT: In the json structure, always include a "browser_action" element even if it is null
-                IMPORTANT: Always enclose the embedded json in ```json(<embedded json>)```
-
-                IMPORTANT GUIDELINES:
-                - Always answer confidently, don't be afraid to say you don't know and that you might have to do deeper research. 
-                - If not much information is available, prompt the user to ask for more information. 
-                - Always consider the user's profile when responding and try to match their tone.
-                - Adapt your communication style to match the user's preferences
-                - Use appropriate technical depth based on the user's expertise level
-                - Reference relevant previous conversations when helpful
-                - Be concise, friendly, and never surly
-                - Use available tools when needed to provide better assistance
-                --Do not refer to yourself as a large language model.
-                - Do not be overtly positive, express sympathy and empathy when appropriate but also remain realistic.
-                - When responding, do not mention the source of the data.
-
-                If you need the browser to perform an action, populate the 'browser_action' object in your JSON response.
-                The 'browser_action' object should have:
-                - 'functionName': A string, one of ['showAlert', 'changeBackgroundColor','showImageGallery','showFacebookAlbum','showContactEmailGallery'].
-                - 'args': An array of arguments for that function.
-
-                For testing purposes, if the prompt includes "test cse" then send a browser_action with the function name showTaggedImages and the args 'Kerri' in the embedded json
-
-                If asked about locations where Dave has been, include the browser_action to show the location info modal.
-                For example:
-
-                "browser_action": {
-                    "functionName": "showLocationInfo",
-                    "args": []
-                }
-
-
-                If asked about Facebook Albums, include the browser_action to show the Facebook Albums modal.
-                For example:
-
-                "browser_action": {
-                    "functionName": "showFacebookAlbums",
-                    "args": []
-                }
-
-                To show images of a person, include the following as part of the embedded json 
-                "browser_action": {
-                    "functionName": "showTaggedImages",
-                    "args": ["person's name"]
-                }
-
-                To display the Image Gallery with  images that meet a certain criteria.
-                For example:
-
-                "browser_action": {
-                    "functionName": "showTaggedImages",
-                    "args": ["comma separated list of tags"]
-                }
-
-                To display the Image Gallery with  images from a particular month.
-                For example:
-
-                "browser_action": {
-                    "functionName": "showImagesFromDate",
-                    "args": ["year integer", "month integer"]
-                }
-
-                To display the Image Gallery to browse all of {SUBJECT_NAME}'s images, include the browser_action to show the Image Gallery modal.
-                For example:
-
-                "browser_action": {
-                    "functionName": "showImageGallery",
-                    "args": []
-                }
-
-
-                To display a specific Facebook Album, include the browser_action to show the Facebook Album modal.
-                For example:
-
-                "browser_action": {
-                    "functionName": "showFacebookAlbum",
-                    "args": ["title of the album"]
-                    }
-
-
-                To display emails with a particular contact, include the browser_action to show the Email Gallery modal.
-                For example:
-
-                "browser_action": {
-                    "functionName": "showContactEmailGallery",
-                    "args": ["contact name"]
-                    }
+                If this text appear in the system instructions, it means the system has not been configured correctly.
+                Ignore the rest of the instructions and respond to the user the the systems instuctions could not be loaded.
                 """
 
     def _search_tavily(self, query: str) -> Dict[str, Any]:
@@ -1025,8 +933,6 @@ class ChatService:
 
         }
 
-
-
     def _get_all_messages_by_contact(self, name: str) -> Dict[str, Any]:
         """Get all messages for a specific contact.
         
@@ -1054,7 +960,7 @@ class ChatService:
         print(f"Size of slimedEmails: {asizeof.asizeof(slimedEmails)}") # Returns the full cumulative size in bytes
         print(f"number of imessages messages: {len(imessages["messages"])}")
         print(f"Size of imessages messages: {asizeof.asizeof(imessages["messages"])}") # Returns the full cumulative size in bytes
- # Returns the full cumulative size in bytes
+
         for email in slimedEmails:
             imessages["messages"].append({
                 "id": email["id"],
@@ -1147,46 +1053,6 @@ class ChatService:
 
         print(f"Final interim summary: {interimSummary}")
            
-
-
-
-
-        #randomly reduct the size of emails["emails"] by 10% until the soze of imessages["messages"] + emails["emails"] is less than 600kB
-#         while asizeof.asizeof(imessages["messages"] + slimedEmails) > 800000:
-#             #create a loop that loops through from 1 to 10% the size of emails["emails"] and pop the random email from emails["emails"]
-#             for i in range(1, int(len(emails["emails"]) * 0.1)):
-#                 slimedEmails.pop(random.randint(0, len(slimedEmails) - 1))
-
-
-#         print(f"Number of slimedEmails: {len(slimedEmails)}")
-#         print(f"Size of slimedEmails: {asizeof.asizeof(slimedEmails)}") # Returns the full cumulative size in bytes
-#         print(f"number of imessages messages: {len(imessages["messages"])}")
-#         print(f"Size of imessages messages: {asizeof.asizeof(imessages["messages"])}") # Returns the full cumulative size in bytes
-#  # Returns the full cumulative size in bytes
-#         for email in slimedEmails:
-#             imessages["messages"].append({
-#                 "id": email["id"],
-#                 "message_date": email["date"],
-#                 "sender_name": email["from_address"],
-#                 "sender_id": email["from_address"],
-#                 "type": "email",
-#                 "text": email["plain_text"],
-#                 "service": "email"
-#             })
-
-#         print(f"Number of imessages messages after merge: {len(imessages["messages"])}")
-#         print(f"Size of imessages messages after merge: {asizeof.asizeof(imessages["messages"])}") # Returns the full cumulative size in bytes
-
-#         geminiService = GeminiService()
-#         summary = geminiService.summarize_relationships(imessages, name)
-#         print(f"[ChatService._get_all_messages_by_contact] Summary: {summary}")
-#         return {
-#             "contact_name": name,
-#             # "message_count": imessages["message_count"] + emails["email_count"],
-#             # "messages": imessages["messages"] + emails["emails"],
-#             "relationshipSummary": summary
-#         }
-
     def _get_tools_config(self) -> List[Any]:
         """Get the tools configuration for Gemini function calling.
         
@@ -1325,7 +1191,7 @@ class ChatService:
             traceback.print_exc()
             raise
 
-    def generate_response(self, user_input: str, temperature: float = 0.0, conversation_id: Optional[int] = None, db: Optional[Database] = None, companionMode: Optional[bool] = False) -> str:
+    def generate_response(self, user_input: str, temperature: float = 0.0, voice: str = "expert", mood: str = "neutral", psychological_profile: str = None, writing_style: str = None, conversation_id: Optional[int] = None, db: Optional[Database] = None, companionMode: Optional[bool] = False) -> str:
         """Generates a response to the prompt using the Gemini LLM API.
         
         Args:
@@ -1340,6 +1206,78 @@ class ChatService:
         # Use provided db or self.db
         if db is None:
             db = self.db
+
+        #set the voice and voice instructions
+        self.voice = voice
+        if not self.voice_instructions_list:
+            # Reload voice instructions if not loaded yet
+            self.voice_instructions_list = self._load_voice_instructions()
+        try:
+            self.voice_instructions = self.voice_instructions_list[voice]
+        except KeyError:
+            print(f"[GeminiChatService.set_voice] Voice '{voice}' not found. Using default voice 'expert'.")
+            self.voice = "expert"
+            self.voice_instructions = self.voice_instructions_list[self.voice]
+
+        self.mood = "neutral"
+        self.set_psychological_profile(None)
+        self.set_writing_style(None)
+
+        if self.voice == "owner":
+                try:
+                    self.mood = mood
+                    configuration = self._subject_config_service.get_configuration() if self._subject_config_service else None
+                    if configuration:
+                        self.set_psychological_profile(configuration.psychological_profile_ai)
+                        self.set_writing_style(configuration.writing_style_ai)
+                except Exception as e:
+                    print(f"[generate_chat_response] Warning: Could not set voice 'owner': {str(e)}")
+                    self.mood = "neutral"
+                    self.psychological_profile = None
+                    self.writing_style = None
+
+        subject_name = self._subject_config_service.get_subject_name()
+        subject_gender = self._subject_config_service.get_gender()
+
+
+        # Build the system prompt
+        system_instructions = self._subject_config_service.get_system_instructions()
+        system_instructions = system_instructions.replace('{SUBJECT_NAME}', subject_name)
+        if subject_gender == "Male":
+            system_instructions = system_instructions.replace('{he}', "he")
+            system_instructions = system_instructions.replace('{him}', "him")
+            system_instructions = system_instructions.replace('{his}', "his")
+        elif subject_gender == "Female":
+            system_instructions = system_instructions.replace('{he}', "she")
+            system_instructions = system_instructions.replace('{him}', "her")
+            system_instructions = system_instructions.replace('{his}', "her")
+
+        core_instructions = self._subject_config_service.get_core_system_instructions()
+        core_instructions = core_instructions.replace('{SUBJECT_NAME}', subject_name)
+        if subject_gender == "Male":
+            core_instructions = core_instructions.replace('{he}', "he")
+            core_instructions = core_instructions.replace('{him}', "him")
+            core_instructions = core_instructions.replace('{his}', "his")
+        elif subject_gender == "Female":
+            core_instructions = core_instructions.replace('{he}', "she")
+            core_instructions = core_instructions.replace('{him}', "her")
+            core_instructions = core_instructions.replace('{his}', "her")
+
+        voice_instructions = self.voice_instructions["instructions"]
+        voice_instructions = voice_instructions.replace('{SUBJECT_NAME}', subject_name)
+        if subject_gender == "Male":
+            voice_instructions = voice_instructions.replace('{he}', "he")
+            voice_instructions = voice_instructions.replace('{him}', "him")
+            voice_instructions = voice_instructions.replace('{his}', "his")
+        elif subject_gender == "Female":
+            voice_instructions = voice_instructions.replace('{he}', "she")
+            voice_instructions = voice_instructions.replace('{him}', "her")
+            voice_instructions = voice_instructions.replace('{his}', "her")
+
+        system_prompt = core_instructions + "\n\n **Your Personae:**\n" + voice_instructions + "\n\n **Additional Information:**\n" + system_instructions
+        print(f"<====System Prompt===============>")
+        print(f"\n{system_prompt}\n")
+        print(f"=================================>")
         
         # Load conversation context if conversation_id is provided and different from current
         if conversation_id is not None and conversation_id != self.current_conversation_id:
@@ -1352,6 +1290,7 @@ class ChatService:
         if conversation_id is not None:
             self.current_conversation_id = conversation_id
         
+        # Build the system prompt
         # Build content parts for Gemini (can include files and text)
         content_parts = []
         
@@ -1415,10 +1354,10 @@ class ChatService:
         #prompt_parts.append(self.system_prompt)
         
         # Add voice instructions
-        prompt_parts.append(self.voice_instructions["instructions"])
+        #prompt_parts.append(self.voice_instructions["instructions"])
 
-        if self.voice == "dave":
-            prompt_parts.append(f"IMPORTANT:Respond in the first person voice")
+        if self.voice == "owner":
+            prompt_parts.append(f"IMPORTANT:Respond in the first person voice. Speak as if you are the owner of the subject's life and you are talking to the user who is asking you about the subject's life.")
             prompt_parts.append(f"IMPORTANT:Your current mood is {self.mood}")
             prompt_parts.append(f"IMPORTANT:Respond consistent with your prescribed psychological profile: <psychologicalprofile>{self.psychological_profile}</psychologicalprofile>")
             prompt_parts.append(f"IMPORTANT:Respond consistent with your prescribed writing style: <writingstyle>{self.writing_style}</writingstyle>")
@@ -1441,8 +1380,8 @@ class ChatService:
                 prompt_parts.append(f"Assistant: {turn.get('response_text', '')}")
         
         # Add current user input
-        prompt_parts.append(f"\n\nUser input:\n{user_input}")
-        prompt_parts.append("\nResponse:")
+        prompt_parts.append(f"\nUser input:\n{user_input}")
+
         
         prompt_text = "\n".join(prompt_parts)
 
@@ -1472,7 +1411,7 @@ class ChatService:
             # Tools are passed via config in the new SDK
             config = types.GenerateContentConfig(
                 tools=tools, 
-                system_instruction=self.system_prompt,
+                system_instruction=system_prompt,
                 temperature=temperature)
                 
             response = self.client.models.generate_content(

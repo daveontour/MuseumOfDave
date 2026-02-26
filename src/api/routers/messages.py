@@ -21,9 +21,8 @@ from ...services import MessageService
 from ...services.gemini_service import GeminiService
 from ...services.message_service import ChatSessionInfo
 from ...services.exceptions import ServiceException, NotFoundError
-from ...services.subject_configuration_service import SubjectConfigurationService
 from ...utils.docker_utils import translate_path_to_container
-from ..deps import db
+from ..deps import db, subject_config_service
 from ..state import (
     # iMessage
     imessage_import_lock, imessage_import_cancelled, imessage_import_in_progress,
@@ -48,6 +47,7 @@ from ..state import (
     conversation_summary_sse_clients, conversation_summary_sse_clients_lock,
     _record_import_control_last_run,
 )
+
 
 router = APIRouter()
 
@@ -1246,17 +1246,19 @@ async def get_instagram_import_status():
 @router.post("/writing-style/summarize")
 async def summarize_writing_style_endpoint():
 
+    subject_name = os.getenv("SUBJECT_NAME", "Dave Burton")
+
     session = db.get_session()
     try:
-        total_available = session.query(IMessage).filter(IMessage.sender_name == "Dave Burton").count()
+        total_available = session.query(IMessage).filter(IMessage.sender_name == subject_name).count()
 
         if total_available == 0:
-            raise HTTPException(status_code=404, detail="No messages found for sender 'Dave Burton'")
+            raise HTTPException(status_code=404, detail=f"No messages found for sender '{subject_name}'")
 
         selected_messages = session.query(IMessage).options(
             joinedload(IMessage.media_attachments)
         ).filter(
-            IMessage.sender_name == "Dave Burton"
+            IMessage.sender_name == subject_name
         ).order_by(func.random()).limit(5000).all()
 
         sample_size = len(selected_messages)
@@ -1273,7 +1275,7 @@ async def summarize_writing_style_endpoint():
             })
 
         messages_data = {
-            "chat_session": "Dave Burton (writing style sample)",
+            "chat_session": f"{subject_name} (writing style sample)",
             "message_count": len(messages_data_list),
             "messages": messages_data_list
         }
@@ -1294,8 +1296,7 @@ async def summarize_writing_style_endpoint():
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error generating writing style summary: {str(e)}")
 
-    config_service = SubjectConfigurationService(db=db)
-    config_service.update_writing_style_ai(summary)
+    subject_config_service.update_writing_style_ai(summary)
 
     return {
         "status": "completed",
@@ -1311,18 +1312,21 @@ async def summarize_writing_style_endpoint():
 
 @router.post("/psychological-profile/summarize")
 async def summarize_psychological_profile_endpoint():
-    """Generate a psychological profile of Dave Burton using a random sample of 5000 messages."""
+    """Generate a psychological profile of the owner using a random sample of 5000 messages."""
+
+    subject_name = os.getenv("SUBJECT_NAME", "Dave Burton")
+
     session = db.get_session()
     try:
-        total_available = session.query(IMessage).filter(IMessage.sender_name == "Dave Burton").count()
+        total_available = session.query(IMessage).filter(IMessage.sender_name == subject_name).count()
 
         if total_available == 0:
-            raise HTTPException(status_code=404, detail="No messages found for sender 'Dave Burton'")
+            raise HTTPException(status_code=404, detail=f"No messages found for sender '{subject_name}'")
 
         selected_messages = session.query(IMessage).options(
             joinedload(IMessage.media_attachments)
         ).filter(
-            IMessage.sender_name == "Dave Burton"
+            IMessage.sender_name == subject_name
         ).order_by(func.random()).limit(5000).all()
 
         sample_size = len(selected_messages)
@@ -1339,7 +1343,7 @@ async def summarize_psychological_profile_endpoint():
             })
 
         messages_data = {
-            "chat_session": "Dave Burton (psychological profile sample)",
+            "chat_session": f"{subject_name} (psychological profile sample)",
             "message_count": len(messages_data_list),
             "messages": messages_data_list
         }
@@ -1360,8 +1364,7 @@ async def summarize_psychological_profile_endpoint():
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error generating psychological profile: {str(e)}")
 
-    config_service = SubjectConfigurationService(db=db)
-    config_service.update_psychological_profile_ai(profile)
+    subject_config_service.update_psychological_profile_ai(profile)
 
     return {
         "status": "completed",

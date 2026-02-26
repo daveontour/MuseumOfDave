@@ -96,6 +96,8 @@ const DOM = {
     loadingIndicator: document.getElementById('loading-indicator'),
     errorDisplay: document.getElementById('error-display'),
     infoBox: document.getElementById('info-box'),
+    infoBoxModal: document.getElementById('info-box-modal'),
+    infoBoxCloseBtn: document.getElementById('info-box-close-btn'),
     hamburgerMenu: document.getElementById('hamburger-menu'),
     configPage: document.querySelector('.config-page'),
     closeConfigBtn: document.getElementById('close-config'),

@@ -274,6 +274,69 @@ class SubjectConfigurationService:
         configuration = self.get_configuration()
         return configuration.subject_name if configuration else None
 
+    def get_gender(self) -> Optional[str]:
+        """Get the subject's gender.
+        
+        Returns:
+            Gender if configuration exists, None otherwise
+        """
+        configuration = self.get_configuration()
+        return configuration.gender if configuration else None
+
+    def get_family_name(self) -> Optional[str]:
+        """Get the subject's family name.
+        
+        Returns:
+            Family name if configuration exists, None otherwise
+        """
+        configuration = self.get_configuration()
+        return configuration.family_name if configuration else None
+
+    def get_other_names(self) -> Optional[str]:
+        """Get the subject's other names (comma-separated).
+        
+        Returns:
+            Other names if configuration exists, None otherwise
+        """
+        configuration = self.get_configuration()
+        return configuration.other_names if configuration else None
+
+    def get_email_addresses(self) -> Optional[str]:
+        """Get the subject's email addresses (comma-separated).
+        
+        Returns:
+            Email addresses if configuration exists, None otherwise
+        """
+        configuration = self.get_configuration()
+        return configuration.email_addresses if configuration else None
+
+    def get_phone_numbers(self) -> Optional[str]:
+        """Get the subject's phone numbers (comma-separated).
+        
+        Returns:
+            Phone numbers if configuration exists, None otherwise
+        """
+        configuration = self.get_configuration()
+        return configuration.phone_numbers if configuration else None
+
+    def get_whatsapp_handle(self) -> Optional[str]:
+        """Get the subject's WhatsApp handle.
+        
+        Returns:
+            WhatsApp handle if configuration exists, None otherwise
+        """
+        configuration = self.get_configuration()
+        return configuration.whatsapp_handle if configuration else None
+
+    def get_instagram_handle(self) -> Optional[str]:
+        """Get the subject's Instagram handle.
+        
+        Returns:
+            Instagram handle if configuration exists, None otherwise
+        """
+        configuration = self.get_configuration()
+        return configuration.instagram_handle if configuration else None
+
     def get_system_instructions(self) -> str:
         """Get system instructions with fallback to file.
         

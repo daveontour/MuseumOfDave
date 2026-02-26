@@ -547,8 +547,6 @@ const Chat = (() => {
 
     function clearChat() {
         DOM.chatBox.innerHTML = '';
-        DOM.infoBox.classList.remove('hidden');
-        DOM.chatBox.appendChild(DOM.infoBox); // Re-add info box if it's part of chatBox
     }
 
     function renderExistingMessages() {

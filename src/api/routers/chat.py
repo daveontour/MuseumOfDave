@@ -10,8 +10,7 @@ from sqlalchemy import func
 from ...services.exceptions import ValidationError, NotFoundError
 from ...services.gemini_service import GeminiService
 from ...services.chat_conversation_service import ChatConversationService
-from ...services.subject_configuration_service import SubjectConfigurationService
-from ..deps import db, chat_service
+from ..deps import db, chat_service, subject_config_service
 from ..state import (
     conversation_summary_lock,
     conversation_summary_in_progress,
@@ -19,6 +18,7 @@ from ..state import (
     get_conversation_summary_progress_state,
     broadcast_conversation_summary_event_sync,
 )
+from src.services import subject_configuration_service
 
 router = APIRouter()
 
@@ -95,38 +95,41 @@ async def generate_chat_response(request: ChatRequest):
     try:
         # Use global ChatService instance (maintains conversation history across requests)
         # Set voice if provided
-        if request.voice:
-            try:
-                chat_service.set_voice(request.voice)
-                print(f"[generate_chat_response] Voice set to: {request.voice}")
-            except Exception as e:
-                print(f"[generate_chat_response] Warning: Could not set voice '{request.voice}': {str(e)}")
+        # if request.voice:
+        #     try:
+        #         chat_service.set_voice(request.voice)
+        #         print(f"[generate_chat_response] Voice set to: {request.voice}")
+        #     except Exception as e:
+        #         print(f"[generate_chat_response] Warning: Could not set voice '{request.voice}': {str(e)}")
 
-            if request.voice == "owner":
-                try:
-                    print(f"[generate_chat_response] Setting mood to '{request.mood}'")
-                    chat_service.set_mood(request.mood)
-                    config_service = SubjectConfigurationService(db=db)
-                    configuration = config_service.get_configuration()
-                    if configuration:
-                        chat_service.set_psychological_profile(configuration.psychological_profile_ai)
-                        chat_service.set_writing_style(configuration.writing_style_ai)
-                except Exception as e:
-                    print(f"[generate_chat_response] Warning: Could not set voice 'secret_admirer': {str(e)}")
-            else:
-                print(f"[generate_chat_response]  Setting mood to 'neutral'")
-                chat_service.set_mood("neutral")
-                print(f"[generate_chat_response]Setting Psychological profile and writing style to None")
-                chat_service.set_psychological_profile(None)
-                chat_service.set_writing_style(None)
+        #     if request.voice == "owner":
+        #         try:
+        #             print(f"[generate_chat_response] Setting mood to '{request.mood}'")
+        #             chat_service.set_mood(request.mood)
+        #             configuration = subject_config_service.get_configuration()
+        #             if configuration:
+        #                 chat_service.set_psychological_profile(configuration.psychological_profile_ai)
+        #                 chat_service.set_writing_style(configuration.writing_style_ai)
+        #         except Exception as e:
+        #             print(f"[generate_chat_response] Warning: Could not set voice 'secret_admirer': {str(e)}")
+        #     else:
+        #         print(f"[generate_chat_response]  Setting mood to 'neutral'")
+        #         chat_service.set_mood("neutral")
+        #         print(f"[generate_chat_response]Setting Psychological profile and writing style to None")
+        #         chat_service.set_psychological_profile(None)
+        #         chat_service.set_writing_style(None)
 
-
+        mood = "neutral"
+        if request.mood:
+            mood = request.mood
         # Generate response using global chat_service instance
         #(Reference documents are uploaded to Gemini in the chat service )
         temperature = request.temperature if request.temperature is not None else 0.0
         response_text, metadata_json_str = chat_service.generate_response(
             request.prompt,
             temperature=temperature,
+            voice=request.voice,
+            mood=mood,
             conversation_id=request.conversation_id,
             db=db,
             companionMode=request.companionMode
@@ -443,8 +446,8 @@ async def get_subject_configuration():
         Dictionary with subject configuration or 404 if not set
     """
     try:
-        config_service = SubjectConfigurationService(db=db)
-        configuration = config_service.get_configuration()
+
+        configuration = subject_config_service.get_configuration()
 
         if not configuration:
             raise HTTPException(status_code=404, detail="Subject configuration not found")
@@ -486,8 +489,7 @@ async def create_or_update_subject_configuration(request: SubjectConfigurationRe
         Dictionary with created/updated configuration
     """
     try:
-        config_service = SubjectConfigurationService(db=db)
-        configuration = config_service.create_or_update_configuration(
+        configuration = subject_config_service.create_or_update_configuration(
             subject_name=request.subject_name,
             system_instructions=request.system_instructions,
             gender=request.gender,

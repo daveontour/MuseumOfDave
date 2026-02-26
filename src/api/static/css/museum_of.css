@@ -725,17 +725,58 @@ body {
     /* display: none; is handled by JS */
 }
 
-/* Info Box (shown when chat is empty) */
+/* Info Box Modal (welcome popup shown on first load) */
+.info-box-modal {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2500;
+}
+.info-box-modal.info-box-modal-closed {
+    display: none !important;
+}
+.info-box-modal .info-box {
+    position: relative;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+.info-box-close-btn {
+    position: absolute;
+    top: 12px;
+    right: 18px;
+    font-size: 1.7rem;
+    background: none;
+    border: none;
+    color: #5a6c7d;
+    cursor: pointer;
+    z-index: 10;
+    padding: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background-color 0.2s, color 0.2s;
+}
+.info-box-close-btn:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+    color: #2c3e50;
+}
+
+/* Info Box (content styling) */
 .info-box {
-    display: flex; /* Toggled by JS via .hidden */
+    display: flex;
     flex-direction: column;
     align-items: center;
     background-color: #d9e5f0;
     border-radius: 12px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     padding: 2rem;
-    margin: 2rem auto;
-    width: 85%;
+    padding-top: 3rem;
+    margin: 0;
+    width: 90%;
+    max-width: 700px;
     text-align: left;
     position: relative;
 }
@@ -1514,6 +1555,15 @@ body {
     justify-content: center;
     align-items: center;
     overflow-y: auto; /* For modals taller than viewport */
+}
+
+/* Info box modal is visible on load (welcome popup) */
+.info-box-modal.modal {
+    display: flex !important;
+}
+/* Closed state must override the above - use ID for higher specificity */
+#info-box-modal.info-box-modal-closed {
+    display: none !important;
 }
 
 /* Single image modal should appear above other modals */

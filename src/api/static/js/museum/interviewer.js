@@ -241,12 +241,6 @@ const InterviewerMode = (() => {
             // Clear interviewer chat
             DOM.interviewerChatBox.innerHTML = '';
             
-            // Show info box again
-            DOM.infoBox.classList.remove('hidden');
-            if (!DOM.chatBox.contains(DOM.infoBox)) {
-                DOM.chatBox.appendChild(DOM.infoBox);
-            }
-            
             // Reset interview state
             AppState.interviewState = 'initial';
             AppState.interviewSubjectName = 'Dave';

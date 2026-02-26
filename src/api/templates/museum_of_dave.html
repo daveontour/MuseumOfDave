@@ -220,70 +220,6 @@
                 <div id="conversation-indicator" style="display: none; margin-left: 1rem; padding: 0.5rem 1rem; background: #e3f2fd; border-radius: 4px; color: #1976d2; font-size: 0.9em;"></div>
             </div>
             <div id="chat-box">
-                <div id="info-box" class="info-box">
-                    <div class="info-box-content-wrapper" style="display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start; gap: 2rem;height:280px">
-                        <div class="info-content" style="width: 50%;">
-                            <ul>
-                                <li>Select a voice from the sidebar to get responses from different perspectives</li>
-                                <li>If you choose "{{owner}}'s own voice", you can also select his current mood</li>
-                                <li>Type your questions about {{owner}} in the chat box below</li>
-                                <li>Click "Suggestions" for some useful, provocative or fun suggestions</li>
-                                </ul>
-                        </div>
-                        <div id="voice-preview" class="voice-preview" style="width: 50%;display: inline;">
-                            <p style="font-weight: bold; color: #2c3e50; margin-bottom: 0.5rem; font-size: 1.1em;">Current Voice</p>
-                            <img src="/static/images/expert.png" alt="expert character" class="preview-image">
-                            <p class="preview-description">A knowledgeable expert who provides accurate, factual information</p>
-                        </div>
-                    </div>
-
-                    <div class="voice-flow-container" style="display: grid; grid-template-rows: repeat(2, 1fr); grid-template-columns: repeat(7, 1fr); gap: 15px;">
-                        <div class="voice-icon-wrapper" data-voice="owner" data-description="{{owner}}'s own voice">
-                            <img src="/static/images/{{owner_image_small}}" alt="owner" class="voice-icon">
-                        </div>
-
-                        <div class="voice-icon-wrapper" data-voice="expert" data-description="Expert analysis of {{owner}}'s situation">
-                            <img src="/static/images/expert_sm.png" alt="expert" class="voice-icon">
-                        </div>
-
-                        <div class="voice-icon-wrapper" data-voice="male_friend" data-description="A close male friend's view of {{owner}}">
-                            <img src="/static/images/male-friend_sm.png" alt="male-friend" class="voice-icon">
-                        </div>
-                        <div class="voice-icon-wrapper" data-voice="female_friend" data-description="A female friend's perspective on {{owner}}">
-                            <img src="/static/images/female-friend_sm.png" alt="female-friend" class="voice-icon">
-                        </div>
-                        <div class="voice-icon-wrapper" data-voice="psychologist" data-description="A professional psychological analysis">
-                            <img src="/static/images/psychologist_sm.png" alt="psychologist" class="voice-icon">
-                        </div>
-                        <div class="voice-icon-wrapper" data-voice="after_death" data-description="{{owner}}'s story from beyond">
-                            <img src="/static/images/after-death_sm.png" alt="after-death" class="voice-icon">
-                        </div>
-                         <div class="voice-icon-wrapper" data-voice="irish" data-description="An Irish perspective on {{owner}}">
-                            <img src="/static/images/irish_sm.png" alt="irish" class="voice-icon">
-                        </div>
-                        <div class="voice-icon-wrapper" data-voice="secret_admirer" data-description="A secret admirer's loving perspective">
-                            <img src="/static/images/{{admirer_image_small}}" alt="secret-admirer" class="voice-icon">
-                        </div>
-                        <div class="voice-icon-wrapper" data-voice="haiku" data-description="{{owner}}'s story in Haiku form">
-                            <img src="/static/images/haiku_sm.png" alt="haiku" class="voice-icon">
-                        </div>
-                        <div class="voice-icon-wrapper" data-voice="insult" data-description="A critical view of {{owner}}">
-                            <img src="/static/images/insult_sm.png" alt="insult" class="voice-icon">
-                        </div>
-                        <div class="voice-icon-wrapper" data-voice="earthchild" data-description="A nature-connected perspective">
-                            <img src="/static/images/earthchild_sm.png" alt="earthchild" class="voice-icon">
-                        </div>
-                        <div class="voice-icon-wrapper" data-voice="bar_girl" data-description="A bar girl's unique observations">
-                            <img src="/static/images/bar-girl_sm.png" alt="bar-girl" class="voice-icon">
-                        </div>
-                        <div class="voice-icon-wrapper" data-voice="parents" data-description="{{owner}}'s parents' perspective">
-                            <img src="/static/images/parents_sm.png" alt="parents" class="voice-icon">
-                        </div>
-                        <div class="voice-icon-wrapper" data-voice="preacher" data-description="A spiritual interpretation">
-                            <img src="/static/images/preacher_sm.png" alt="preacher" class="voice-icon">
-                        </div>
-                    </div>
-                </div>
                 <!-- Chat messages will be loaded here -->
                 {% for message in history %}
                 {% set role = message.role | replace('model', 'assistant') %}
@@ -1901,24 +1837,26 @@
         <div class="modal-content" style="max-width: 800px; width: 90vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 2rem; position: relative;">
             <button class="modal-close-btn" id="close-subject-config-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer;">&times;</button>
             <h2 style="margin-top: 0; color: #233366; font-size: 1.5em; text-align: center; margin-bottom: 1.5rem;">Subject Configuration</h2>
-            <div style="margin-bottom: 1.5em;">
-                <label for="subject-name-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Subject Name:</label>
-                <input id="subject-name-input" type="text" placeholder="Enter subject name..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" required />
-            </div>
-            <div style="margin-bottom: 1.5em;">
-                <label for="subject-gender-select" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Gender:</label>
-                <select id="subject-gender-select" style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;">
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                </select>
-            </div>
-            <div style="margin-bottom: 1.5em;">
-                <label for="family-name-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Family Name:</label>
-                <input id="family-name-input" type="text" placeholder="Enter family name..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
-            </div>
-            <div style="margin-bottom: 1.5em;">
-                <label for="other-names-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Other Names (comma-separated):</label>
-                <input id="other-names-input" type="text" placeholder="Enter other names, separated by commas..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
+            <div style="display: grid; grid-template-columns: 1fr 1fr; row-gap: 1.5em; column-gap: 5px; margin-bottom: 1.5em;">
+                <div style="min-width: 0;">
+                    <label for="subject-name-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Subject Name:</label>
+                    <input id="subject-name-input" type="text" placeholder="Enter subject name..." style="width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" required />
+                </div>
+                <div style="min-width: 0;">
+                    <label for="family-name-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Family Name:</label>
+                    <input id="family-name-input" type="text" placeholder="Enter family name..." style="width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
+                </div>
+                <div style="min-width: 0;">
+                    <label for="other-names-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Other Names (comma-separated):</label>
+                    <input id="other-names-input" type="text" placeholder="Enter other names, separated by commas..." style="width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
+                </div>
+                <div style="min-width: 0;">
+                    <label for="subject-gender-select" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Gender:</label>
+                    <select id="subject-gender-select" style="width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;">
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                    </select>
+                </div>
             </div>
             <div style="margin-bottom: 1.5em;">
                 <label for="email-addresses-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Email Addresses (comma-separated):</label>
@@ -1928,13 +1866,16 @@
                 <label for="phone-numbers-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Phone Numbers (comma-separated):</label>
                 <input id="phone-numbers-input" type="text" placeholder="Enter phone numbers, separated by commas..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
             </div>
-            <div style="margin-bottom: 1.5em;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; row-gap: 1.5em; column-gap: 5px; margin-bottom: 1.5em;">
+ 
+            <div style="margin-bottom: 1.5em;min-width: 0;">
                 <label for="whatsapp-handle-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">WhatsApp Handle:</label>
-                <input id="whatsapp-handle-input" type="text" placeholder="Enter WhatsApp handle..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
+                <input id="whatsapp-handle-input" type="text" placeholder="Enter WhatsApp handle..." style="width: 100%;box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
             </div>
-            <div style="margin-bottom: 1.5em;">
+            <div style="margin-bottom: 1.5em;"min-width: 0;">
                 <label for="instagram-handle-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Instagram Handle:</label>
-                <input id="instagram-handle-input" type="text" placeholder="Enter Instagram handle..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
+                <input id="instagram-handle-input" type="text" placeholder="Enter Instagram handle..." style="width: 100%;box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
+            </div>
             </div>
             <div style="margin-bottom: 1.5em;">
                 <label style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Writing Style (AI-generated):</label>
@@ -2080,6 +2021,74 @@
                         <button id="artefact-save-btn" class="modal-btn modal-btn-primary">Save</button>
                         <button id="artefact-delete-btn" class="modal-btn modal-btn-danger" style="display:none;">Delete</button>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info box modal at body level for reliable overlay and event handling -->
+    <div id="info-box-modal" class="modal info-box-modal"  onclick="if(event.target===this) window.closeInfoBoxModal && window.closeInfoBoxModal()">
+        <div id="info-box" class="info-box modal-content" style="width:1000px" onclick="event.stopPropagation()">
+            <button type="button" id="info-box-close-btn" class="info-box-close-btn" title="Close" onclick="window.closeInfoBoxModal && window.closeInfoBoxModal()">&times;</button>
+            <div class="info-box-content-wrapper" style="display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start; gap: 2rem;height:280px">
+                <div class="info-content" style="width: 50%;">
+                    <h2>{{ page_title }}</h2>
+                    <ul>
+                        <li>Select a voice from the sidebar to get responses from different perspectives</li>
+                        <li>If you choose "{{owner}}'s own voice", you can also select his current mood</li>
+                        <li>Type your questions about {{owner}} in the chat box below</li>
+                        <li>Click "Suggestions" for some useful, provocative or fun suggestions</li>
+                    </ul>
+                </div>
+                <div id="voice-preview" class="voice-preview" style="width: 50%;display: inline;">
+                    <p style="font-weight: bold; color: #2c3e50; margin-bottom: 0.5rem; font-size: 1.1em;">Current Voice</p>
+                    <img src="/static/images/expert.png" alt="expert character" class="preview-image">
+                    <p class="preview-description">A knowledgeable expert who provides accurate, factual information</p>
+                </div>
+            </div>
+
+            <div class="voice-flow-container" style="display: grid; grid-template-rows: repeat(2, 1fr); grid-template-columns: repeat(7, 1fr); gap: 15px;">
+                <div class="voice-icon-wrapper" data-voice="owner" data-description="{{owner}}'s own voice">
+                    <img src="/static/images/{{owner_image_small}}" alt="owner" class="voice-icon">
+                </div>
+                <div class="voice-icon-wrapper" data-voice="expert" data-description="Expert analysis of {{owner}}'s situation">
+                    <img src="/static/images/expert_sm.png" alt="expert" class="voice-icon">
+                </div>
+                <div class="voice-icon-wrapper" data-voice="male_friend" data-description="A close male friend's view of {{owner}}">
+                    <img src="/static/images/male-friend_sm.png" alt="male-friend" class="voice-icon">
+                </div>
+                <div class="voice-icon-wrapper" data-voice="female_friend" data-description="A female friend's perspective on {{owner}}">
+                    <img src="/static/images/female-friend_sm.png" alt="female-friend" class="voice-icon">
+                </div>
+                <div class="voice-icon-wrapper" data-voice="psychologist" data-description="A professional psychological analysis">
+                    <img src="/static/images/psychologist_sm.png" alt="psychologist" class="voice-icon">
+                </div>
+                <div class="voice-icon-wrapper" data-voice="after_death" data-description="{{owner}}'s story from beyond">
+                    <img src="/static/images/after-death_sm.png" alt="after-death" class="voice-icon">
+                </div>
+                <div class="voice-icon-wrapper" data-voice="irish" data-description="An Irish perspective on {{owner}}">
+                    <img src="/static/images/irish_sm.png" alt="irish" class="voice-icon">
+                </div>
+                <div class="voice-icon-wrapper" data-voice="secret_admirer" data-description="A secret admirer's loving perspective">
+                    <img src="/static/images/{{admirer_image_small}}" alt="secret-admirer" class="voice-icon">
+                </div>
+                <div class="voice-icon-wrapper" data-voice="haiku" data-description="{{owner}}'s story in Haiku form">
+                    <img src="/static/images/haiku_sm.png" alt="haiku" class="voice-icon">
+                </div>
+                <div class="voice-icon-wrapper" data-voice="insult" data-description="A critical view of {{owner}}">
+                    <img src="/static/images/insult_sm.png" alt="insult" class="voice-icon">
+                </div>
+                <div class="voice-icon-wrapper" data-voice="earthchild" data-description="A nature-connected perspective">
+                    <img src="/static/images/earthchild_sm.png" alt="earthchild" class="voice-icon">
+                </div>
+                <div class="voice-icon-wrapper" data-voice="bar_girl" data-description="A bar girl's unique observations">
+                    <img src="/static/images/bar-girl_sm.png" alt="bar-girl" class="voice-icon">
+                </div>
+                <div class="voice-icon-wrapper" data-voice="parents" data-description="{{owner}}'s parents' perspective">
+                    <img src="/static/images/parents_sm.png" alt="parents" class="voice-icon">
+                </div>
+                <div class="voice-icon-wrapper" data-voice="preacher" data-description="A spiritual interpretation">
+                    <img src="/static/images/preacher_sm.png" alt="preacher" class="voice-icon">
                 </div>
             </div>
         </div>

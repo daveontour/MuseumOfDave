@@ -14,6 +14,7 @@ from src.api import app
 import shutil
 import subprocess
 
+
 from src.services.gemini_service import ChatService
 from src.services.relationship_service import RelationshipService
 
@@ -31,11 +32,10 @@ def main( test: bool = False):
     if test:
         print("Running in test mode")
         test_gemini_service(db)
-    else :
-    # Initialize subject configuration from files
-        from src.services.subject_configuration_service import SubjectConfigurationService
-        config_service = SubjectConfigurationService(db=db)
-        config_service.initialize_from_files()
+    else:
+        # Initialize subject configuration from files
+        from src.api.deps import subject_config_service
+        subject_config_service.initialize_from_files()
         print("Subject configuration initialized from files.")
         
         # Start the API server

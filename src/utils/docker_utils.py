@@ -4,8 +4,8 @@ from pathlib import Path
 
 def translate_path_to_container(path) -> str:
     r"""
-    Translates a Windows host path (e.g., C:\Users\Dave\Photos) into
-    a Linux container path (e.g., /mnt/c/Users/Dave/Photos).
+    Translates a Windows host path (e.g., C:\Users\Fred\Photos) into
+    a Linux container path (e.g., /mnt/c/Users/Fred/Photos).
     
     This only applies translation if the app is running on Linux
     but receives a path that looks like a Windows path (has a drive letter).
@@ -25,8 +25,7 @@ def translate_path_to_container(path) -> str:
     if ':' not in path:
         return path
 
-    # Clean up the path: replace backslashes, remove drive colon
-    # "C:\Users\Dave" -> "c/Users/Dave"
+
     clean_path = path.replace('\\', '/')
     parts = clean_path.split(':', 1)
     
@@ -37,7 +36,7 @@ def translate_path_to_container(path) -> str:
     rest_of_path = parts[1]
     
     # Construct new path using the /mnt/ convention
-    # /mnt/c/Users/Dave
+
     translated_path = f"/mnt/{drive_letter}{rest_of_path}"
     
     # Optional: Log the translation for debugging

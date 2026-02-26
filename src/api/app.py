@@ -28,12 +28,9 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 
 app.include_router(admin.router)
-
-
 #Static file. This comes here to allow the routes in admin to take priority to serve the files that require templating# Static files
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-
 app.include_router(emails.router)
 app.include_router(attachments.router)
 app.include_router(messages.router)

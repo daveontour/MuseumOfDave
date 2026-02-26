@@ -41,7 +41,6 @@ const App = (() => {
         await Modals.ReferenceDocumentsNotification.checkAndShow(async () => {
             // This callback is called when user proceeds
             UI.clearError();
-            DOM.infoBox.classList.add('hidden');
             UI.setControlsEnabled(false);
             UI.showLoadingIndicator();
 
@@ -1354,6 +1353,23 @@ const App = (() => {
     }
 
     function init() {
+        // Info box modal: set up close first (before other inits that might throw)
+        window.closeInfoBoxModal = function() {
+            const modal = document.getElementById('info-box-modal');
+            if (modal) {
+                modal.classList.add('info-box-modal-closed');
+                if (typeof UI !== 'undefined' && UI.setControlsEnabled) UI.setControlsEnabled(true);
+            }
+        };
+        const infoBoxModal = document.getElementById('info-box-modal');
+        if (infoBoxModal) {
+            infoBoxModal.addEventListener('click', (e) => {
+                if (e.target === infoBoxModal) window.closeInfoBoxModal();
+            });
+            document.getElementById('info-box-close-btn')?.addEventListener('click', window.closeInfoBoxModal);
+            if (typeof UI !== 'undefined' && UI.setControlsEnabled) UI.setControlsEnabled(false);
+        }
+
         Config.init(); // Loads and applies settings, sets up its listeners
         Chat.renderExistingMessages();
         VoiceSelector.init(); // Sets initial voice state, creativity lock, listeners
@@ -1361,14 +1377,6 @@ const App = (() => {
         //SSE.init();
         //InterviewerMode.init(); // Initialize interviewer mode
         initEventListeners(); // Attach main app event listeners
-
-        // Initial info box visibility
-        if (DOM.chatBox.querySelectorAll('.message').length === 0 && DOM.infoBox) {
-            DOM.infoBox.classList.remove('hidden');
-            if (!DOM.chatBox.contains(DOM.infoBox)) DOM.chatBox.appendChild(DOM.infoBox);
-        } else if (DOM.infoBox) {
-            DOM.infoBox.classList.add('hidden');
-        }
          window.onbeforeunload = () => { SSE.close(); };
     }
     return { init, processFormSubmit };
