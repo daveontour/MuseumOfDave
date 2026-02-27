@@ -137,6 +137,9 @@
                     <button type="button" class="more-options-btn" id="artefacts-sidebar-btn">
                         <i class="fas fa-box-open"></i> Artefacts
                     </button>
+                    <button type="button" class="more-options-btn" id="sensitive-data-sidebar-btn">
+                        <i class="fas fa-lock"></i> Sensitive &amp; Private Data
+                    </button>
 
                 </div>
             </div>
@@ -685,12 +688,16 @@
 
         <!-- Import Input Modal -->
         <div id="import-input-modal" class="modal" style="display: none; position: fixed; z-index: 4000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center;">
-            <div class="modal-content" style="max-width: 500px; padding: 24px; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18);" onclick="event.stopPropagation()">
-                <h3 id="import-input-modal-title" style="margin: 0 0 20px 0; color: #233366;">Import Parameters</h3>
-                <div id="import-input-modal-body"></div>
-                <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;">
-                    <button type="button" id="import-input-modal-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
-                    <button type="button" id="import-input-modal-submit" class="modal-btn modal-btn-primary"><i class="fas fa-play"></i> Execute</button>
+            <div class="modal-content" style="max-width: 500px; padding: 0;" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h3 id="import-input-modal-title">Import Parameters</h3>
+                </div>
+                <div class="modal-body">
+                    <div id="import-input-modal-body"></div>
+                    <div style="margin-top: 1.5rem; display: flex; gap: 10px; justify-content: flex-end;">
+                        <button type="button" id="import-input-modal-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+                        <button type="button" id="import-input-modal-submit" class="modal-btn modal-btn-primary"><i class="fas fa-play"></i> Execute</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -701,9 +708,11 @@
 
         <!-- Facebook Choose Albums Modal  -->
         <div id="fb-albums-modal" class="modal">
-            <div class="modal-content" style="max-width: 1400px; width: 95vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 0; position: relative; display: flex; flex-direction: column; height: 90vh;">
-                <button class="modal-close-btn" id="close-fb-albums-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer; z-index: 10;">&times;</button>
-                <h2 style="margin: 0; padding: 1rem 2rem; color: #233366; font-size: 1.3em; border-bottom: 1px solid #dee2e6;">Facebook Albums</h2>
+            <div class="modal-content" style="max-width: 1400px; width: 95vw; padding: 0; display: flex; flex-direction: column; height: 90vh;">
+                <div class="modal-header">
+                    <h2>Facebook Albums</h2>
+                    <button class="modal-close-btn" id="close-fb-albums-modal">&times;</button>
+                </div>
                 <div style="display: flex; flex: 1; overflow: hidden;">
                     <!-- Master Pane (Left) - Resizable -->
                     <div id="fb-albums-master-pane" style="width: 350px; min-width: 200px; max-width: 600px; border-right: 1px solid #dee2e6; display: flex; flex-direction: column; background-color: #f8f9fa; position: relative;">
@@ -737,7 +746,7 @@
             <div class="modal-content tile-suggestions-modal-content">
                 <div class="modal-suggestions-header">
                     <h2 id="tile-suggestions-modal-title">Suggestions</h2>
-                    <button class="modal-suggestions-close-btn" id="modal-suggestions-close-btn">&times;</button>
+                    <button id="modal-suggestions-close-btn">&times;</button>
                 </div>
                 <p id="tile-suggestions-modal-description">Choose a suggestion from one of the categories below</p>
                 <div class="suggestions-table-wrapper">
@@ -752,96 +761,96 @@
 
         <!-- Ask AI Modal -->
         <div id="sms-ask-ai-modal" style="display: none; position: fixed; z-index: 4000 !important; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center;">
-            <div style="background-color: white; padding: 2rem; border-radius: 8px; max-width: 500px; width: 90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <div>
-                        <h2 style="margin: 0; color: #233366; font-size: 1.3em;">Ask the AI</h2>
-                        <p id="sms-ask-ai-conversation-title" style="margin: 4px 0 0 0; color: #666; font-size: 0.9em; font-weight: normal;"></p>
+            <div class="modal-content" style="max-width: 500px; width: 90%; padding: 0;">
+                <div class="modal-header">
+                    <div style="flex: 1; min-width: 0;">
+                        <h2>Ask the AI</h2>
+                        <p id="sms-ask-ai-conversation-title" style="margin: 2px 0 0 0; color: rgba(255,255,255,0.7); font-size: 0.85em;"></p>
                     </div>
-                    <button id="sms-ask-ai-close" style="background: none; border: none; font-size: 1.5em; color: #666; cursor: pointer; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;" title="Close">
-                        <i class="fas fa-times"></i>
-                    </button>
+                    <button class="modal-close-btn" id="sms-ask-ai-close">&times;</button>
                 </div>
-                <div style="margin-bottom: 1.5rem;">
-                    <label style="display: flex; align-items: center; padding: 12px; margin-bottom: 10px; cursor: pointer; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">
-                        <input type="radio" name="sms-ask-ai-option" value="summarise" checked style="margin-right: 10px; cursor: pointer;">
-                        <span style="color: #233366; font-size: 1em;">Summarise the Conversation</span>
-                    </label>
-                    <label style="display: flex; align-items: center; padding: 12px; margin-bottom: 10px; cursor: pointer; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">
-                        <input type="radio" name="sms-ask-ai-option" value="imaginary" style="margin-right: 10px; cursor: pointer;">
-                        <span style="color: #233366; font-size: 1em;">Create an Imaginary Conversation</span>
-                    </label>
-                    <label style="display: flex; align-items: center; padding: 12px; margin-bottom: 10px; cursor: pointer; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">
-                        <input type="radio" name="sms-ask-ai-option" value="other" style="margin-right: 10px; cursor: pointer;">
-                        <span style="color: #233366; font-size: 1em;">Other</span>
-                    </label>
-                </div>
-                <div id="sms-ask-ai-other-text" style="display: none; margin-bottom: 1.5rem;">
-                    <textarea id="sms-ask-ai-other-input" placeholder="Enter your question or request..." style="width: 100%; min-height: 100px; padding: 10px; border: 1px solid #bfc9da; border-radius: 4px; font-size: 14px; font-family: inherit; resize: vertical; box-sizing: border-box;"></textarea>
-                </div>
-                <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                    <button id="sms-ask-ai-cancel" style="padding: 10px 20px; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.95em; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#5a6268'" onmouseout="this.style.backgroundColor='#6c757d'">Cancel</button>
-                    <button id="sms-ask-ai-submit" style="padding: 10px 20px; background-color: #007AFF; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.95em; font-weight: 500; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#0056CC'" onmouseout="this.style.backgroundColor='#007AFF'">Submit</button>
+                <div class="modal-body">
+                    <div style="margin-bottom: 1.5rem;">
+                        <label style="display: flex; align-items: center; padding: 10px; margin-bottom: 8px; cursor: pointer; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">
+                            <input type="radio" name="sms-ask-ai-option" value="summarise" checked style="margin-right: 10px; cursor: pointer;">
+                            <span style="color: #333; font-size: 1em;">Summarise the Conversation</span>
+                        </label>
+                        <label style="display: flex; align-items: center; padding: 10px; margin-bottom: 8px; cursor: pointer; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">
+                            <input type="radio" name="sms-ask-ai-option" value="imaginary" style="margin-right: 10px; cursor: pointer;">
+                            <span style="color: #333; font-size: 1em;">Create an Imaginary Conversation</span>
+                        </label>
+                        <label style="display: flex; align-items: center; padding: 10px; margin-bottom: 8px; cursor: pointer; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">
+                            <input type="radio" name="sms-ask-ai-option" value="other" style="margin-right: 10px; cursor: pointer;">
+                            <span style="color: #333; font-size: 1em;">Other</span>
+                        </label>
+                    </div>
+                    <div id="sms-ask-ai-other-text" style="display: none; margin-bottom: 1.5rem;">
+                        <textarea id="sms-ask-ai-other-input" placeholder="Enter your question or request..." style="width: 100%; min-height: 100px; padding: 10px; border: 1px solid #bfc9da; border-radius: 4px; font-size: 14px; font-family: inherit; resize: vertical; box-sizing: border-box;"></textarea>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                        <button id="sms-ask-ai-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+                        <button id="sms-ask-ai-submit" class="modal-btn modal-btn-primary">Submit</button>
+                    </div>
                 </div>
             </div>
         </div>
         
         <!-- Conversation Summary Modal -->
         <div id="conversation-summary-modal" class="modal" style="display: none; position: fixed; z-index: 4000 !important; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center;">
-            <div class="modal-content" style="max-width: 800px; width: 90vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 2rem; position: relative;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <h2 style="margin: 0; color: #233366; font-size: 1.5em;">Conversation Summary</h2>
-                    <button id="close-conversation-summary-modal" style="background: none; border: none; font-size: 1.8em; color: #666; cursor: pointer; padding: 0; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'" title="Close">
-                        &times;
-                    </button>
+            <div class="modal-content" style="max-width: 800px; width: 90vw; padding: 0;">
+                <div class="modal-header">
+                    <h2>Conversation Summary</h2>
+                    <button class="modal-close-btn" id="close-conversation-summary-modal">&times;</button>
                 </div>
-                <div id="conversation-summary-progress" style="display: none; margin-bottom: 1rem; padding: 1rem; background-color: #f8f9fa; border-radius: 4px;">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <div class="spinner" style="border: 3px solid #f3f3f3; border-top: 3px solid #007AFF; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite;"></div>
-                        <span id="conversation-summary-progress-text" style="color: #666;">Generating summary...</span>
+                <div class="modal-body">
+                    <div id="conversation-summary-progress" style="display: none; margin-bottom: 1rem; padding: 1rem; background-color: #f8f9fa; border-radius: 4px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div class="spinner" style="border: 3px solid #f3f3f3; border-top: 3px solid #007AFF; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite;"></div>
+                            <span id="conversation-summary-progress-text" style="color: #666;">Generating summary...</span>
+                        </div>
                     </div>
-                </div>
-                <div id="conversation-summary-content" style="max-height: 60vh; overflow-y: auto; padding: 1rem; background-color: #f8f9fa; border-radius: 4px; line-height: 1.6; color: #333;">
-                    <!-- Summary content will be displayed here -->
-                </div>
-                <div id="conversation-summary-error" style="display: none; margin-top: 1rem; padding: 1rem; background-color: #fee; border: 1px solid #fcc; border-radius: 4px; color: #c33;">
-                    <!-- Error messages will be displayed here -->
+                    <div id="conversation-summary-content" style="max-height: 60vh; overflow-y: auto; padding: 1rem; background-color: #f8f9fa; border-radius: 4px; line-height: 1.6; color: #333;">
+                        <!-- Summary content will be displayed here -->
+                    </div>
+                    <div id="conversation-summary-error" style="display: none; margin-top: 1rem; padding: 1rem; background-color: #fee; border: 1px solid #fcc; border-radius: 4px; color: #c33;">
+                        <!-- Error messages will be displayed here -->
+                    </div>
                 </div>
             </div>
         </div>
         
         <!-- Email Ask AI Modal -->
         <div id="email-ask-ai-modal" style="display: none; position: fixed; z-index: 4000 !important; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center;">
-            <div style="background-color: white; padding: 2rem; border-radius: 8px; max-width: 500px; width: 90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <div>
-                        <h2 style="margin: 0; color: #233366; font-size: 1.3em;">Ask the AI</h2>
-                        <p id="email-ask-ai-email-subject" style="margin: 4px 0 0 0; color: #666; font-size: 0.9em; font-weight: normal;"></p>
+            <div class="modal-content" style="max-width: 500px; width: 90%; padding: 0;">
+                <div class="modal-header">
+                    <div style="flex: 1; min-width: 0;">
+                        <h2>Ask the AI</h2>
+                        <p id="email-ask-ai-email-subject" style="margin: 2px 0 0 0; color: rgba(255,255,255,0.7); font-size: 0.85em;"></p>
                     </div>
-                    <button id="email-ask-ai-close" style="background: none; border: none; font-size: 1.5em; color: #666; cursor: pointer; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;" title="Close">
-                        <i class="fas fa-times"></i>
-                    </button>
+                    <button class="modal-close-btn" id="email-ask-ai-close">&times;</button>
                 </div>
-                <div style="margin-bottom: 1.5rem;">
-                    <label style="display: flex; align-items: center; padding: 12px; margin-bottom: 10px; cursor: pointer; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">
-                        <input type="radio" name="email-ask-ai-option" value="summarise" checked style="margin-right: 10px; cursor: pointer;">
-                        <span style="color: #233366; font-size: 1em;">Summarise Emails with the same sender</span>
-                    </label>
-                    <label style="display: flex; align-items: center; padding: 12px; margin-bottom: 10px; cursor: pointer; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">
-                        <input type="radio" name="email-ask-ai-option" value="imaginary" style="margin-right: 10px; cursor: pointer;">
-                        <span style="color: #233366; font-size: 1em;">Create an Imaginary Response</span>
-                    </label>
-                    <label style="display: flex; align-items: center; padding: 12px; margin-bottom: 10px; cursor: pointer; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">
-                        <input type="radio" name="email-ask-ai-option" value="other" style="margin-right: 10px; cursor: pointer;">
-                        <span style="color: #233366; font-size: 1em;">Other</span>
-                    </label>
-                </div>
-                <div id="email-ask-ai-other-text" style="display: none; margin-bottom: 1.5rem;">
-                    <textarea id="email-ask-ai-other-input" placeholder="Enter your question or request..." style="width: 100%; min-height: 100px; padding: 10px; border: 1px solid #bfc9da; border-radius: 4px; font-size: 14px; font-family: inherit; resize: vertical; box-sizing: border-box;"></textarea>
-                </div>
-                <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                    <button id="email-ask-ai-cancel" style="padding: 10px 20px; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.95em; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#5a6268'" onmouseout="this.style.backgroundColor='#6c757d'">Cancel</button>
-                    <button id="email-ask-ai-submit" style="padding: 10px 20px; background-color: #007AFF; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.95em; font-weight: 500; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#0056CC'" onmouseout="this.style.backgroundColor='#007AFF'">Submit</button>
+                <div class="modal-body">
+                    <div style="margin-bottom: 1.5rem;">
+                        <label style="display: flex; align-items: center; padding: 10px; margin-bottom: 8px; cursor: pointer; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">
+                            <input type="radio" name="email-ask-ai-option" value="summarise" checked style="margin-right: 10px; cursor: pointer;">
+                            <span style="color: #333; font-size: 1em;">Summarise Emails with the same sender</span>
+                        </label>
+                        <label style="display: flex; align-items: center; padding: 10px; margin-bottom: 8px; cursor: pointer; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">
+                            <input type="radio" name="email-ask-ai-option" value="imaginary" style="margin-right: 10px; cursor: pointer;">
+                            <span style="color: #333; font-size: 1em;">Create an Imaginary Response</span>
+                        </label>
+                        <label style="display: flex; align-items: center; padding: 10px; margin-bottom: 8px; cursor: pointer; border-radius: 4px; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='transparent'">
+                            <input type="radio" name="email-ask-ai-option" value="other" style="margin-right: 10px; cursor: pointer;">
+                            <span style="color: #333; font-size: 1em;">Other</span>
+                        </label>
+                    </div>
+                    <div id="email-ask-ai-other-text" style="display: none; margin-bottom: 1.5rem;">
+                        <textarea id="email-ask-ai-other-input" placeholder="Enter your question or request..." style="width: 100%; min-height: 100px; padding: 10px; border: 1px solid #bfc9da; border-radius: 4px; font-size: 14px; font-family: inherit; resize: vertical; box-sizing: border-box;"></textarea>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                        <button id="email-ask-ai-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+                        <button id="email-ask-ai-submit" class="modal-btn modal-btn-primary">Submit</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -850,22 +859,20 @@
         <!-- Geo Metadata Locations Modal -->
         <div id="geo-metadata-modal" class="modal">
             <div class="modal-content geo-metadata-modal-content">
-                <button id="close-geo-metadata-modal" class="modal-close-btn">&times;</button>
-                <div style="position: absolute; top: 10px; left: 10px; z-index: 1000; display: flex; gap: 0.5em;">
-                    <button id="shuffle-photos-btn" class="modal-btn modal-btn-primary" style="background: #233366; color: white; border: none; padding: 0.5em 1em; border-radius: 6px; cursor: pointer; font-size: 0.9em;">
-                        <i class="fas fa-random" style="margin-right: 0.5em;"></i>Shuffle Photos
+                <div class="modal-header">
+                    <button id="shuffle-photos-btn" class="modal-btn" style="background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.3); padding: 0.4em 0.9em; font-size: 0.9em; flex-shrink: 0;">
+                        <i class="fas fa-random" style="margin-right: 0.4em;"></i>Shuffle
                     </button>
-                    <button id="refresh-locations-btn" class="modal-btn modal-btn-primary" style="background: #28a745; color: white; border: none; padding: 0.5em 1em; border-radius: 6px; cursor: pointer; font-size: 0.9em;">
-                        <i class="fas fa-sync-alt" style="margin-right: 0.5em;"></i>Refresh
+                    <button id="refresh-locations-btn" class="modal-btn" style="background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.3); padding: 0.4em 0.9em; font-size: 0.9em; flex-shrink: 0;">
+                        <i class="fas fa-sync-alt" style="margin-right: 0.4em;"></i>Refresh
                     </button>
+                    <h2 style="text-align: center;">Locations Map</h2>
+                    <button id="close-geo-metadata-modal" class="modal-close-btn">&times;</button>
                 </div>
-                <div style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 1000;">
-                    <h2 style="margin: 0; color: #233366; font-size: 1.5em;">Locations Map</h2>
-                </div>
-                 <div class="geo-metadata-tab-content geo-tab-images">
+                <div class="geo-metadata-tab-content geo-tab-images" style="flex: 1; height: auto; position: relative;">
                     <div id="map-view"></div>
                 </div>
-                <div id="geo-metadata-shown-count" style="padding: 1em; background-color: rgba(200, 200, 200, 0.3); position: absolute; bottom: 10px; left: 10px;">                   
+                <div id="geo-metadata-shown-count" style="padding: 1em; background-color: rgba(200, 200, 200, 0.3); position: absolute; bottom: 10px; left: 10px;">
                 </div>
             </div>
         </div>
@@ -1006,14 +1013,16 @@
         <!-- Email Gallery Modal -->
         <div id="email-gallery-modal" class="modal">
            <div class="modal-content email-gallery-modal-content">
-                <button id="close-email-gallery-modal" class="modal-close-btn">&times;</button>
+                <div class="modal-header">
+                    <h2>Email Gallery</h2>
+                    <button id="close-email-gallery-modal" class="modal-close-btn">&times;</button>
+                </div>
                 <div class="email-gallery-modal-body">
                     <!-- Master Pane -->
                     <div class="email-gallery-master-pane">
                         <div class="email-gallery-search-section">
                             <div class="email-metadata-filters">
                                 <div class="email-gallery-title">
-                                    <h2>Email Gallery</h2> 
                                 </div>
                                 <div class="email-gallery-search-row">
                                     <input type="text" id="email-gallery-search" placeholder="Search emails..." class="email-gallery-input">
@@ -1118,14 +1127,16 @@
         <!-- New Image Gallery Modal -->
         <div id="new-image-gallery-modal" class="modal">
            <div class="modal-content new-image-gallery-modal-content">
-                <button id="close-new-image-gallery-modal" class="modal-close-btn">&times;</button>
+                <div class="modal-header">
+                    <h2>Image Gallery</h2>
+                    <button id="close-new-image-gallery-modal" class="modal-close-btn">&times;</button>
+                </div>
                 <div class="new-image-gallery-modal-body">
                     <!-- Master Pane -->
                     <div class="new-image-gallery-master-pane">
                         <div class="new-image-gallery-search-section">
                             <div class="new-image-metadata-filters">
-                                <div class="new-image-gallery-title" style="display: flex; justify-content: space-between; align-items: center;">
-                                    <h2 style="margin: 0;">Image Gallery</h2>
+                                <div class="new-image-gallery-title" style="display: flex; justify-content: flex-end; align-items: center;">
                                     <label class="new-image-gallery-select-mode-toggle" style="display: flex; align-items: center; gap: 0.5em; cursor: pointer;">
                                         <input type="checkbox" id="new-image-gallery-select-mode" style="cursor: pointer;">
                                         <span>Select Mode</span>
@@ -1224,7 +1235,10 @@
         <!-- New Image Gallery Detail Modal -->
         <div id="new-image-gallery-detail-modal" class="modal">
             <div class="modal-content new-image-gallery-detail-modal-content">
-                <button id="close-new-image-gallery-detail-modal" class="modal-close-btn">&times;</button>
+                <div class="modal-header">
+                    <h2>Image Details</h2>
+                    <button id="close-new-image-gallery-detail-modal" class="modal-close-btn">&times;</button>
+                </div>
                 <div class="new-image-gallery-detail-modal-body">
                     <!-- Image Section -->
                     <div class="new-image-gallery-detail-image-section">
@@ -1232,8 +1246,7 @@
                     </div>
                     <!-- Metadata Section -->
                     <div class="new-image-gallery-detail-metadata-section">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
-                            <h2 style="margin: 0;">Image Metadata</h2>
+                        <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 1em; gap: 0.5em;">
                             <div style="display: flex; gap: 0.5em;">
                                 <button id="new-image-gallery-save-btn" class="modal-btn" style="display: none;" disabled>
                                     <i class="fas fa-save"></i> Save Changes
@@ -1331,33 +1344,35 @@
 
         <!-- Reference Documents Notification Modal -->
         <div id="reference-documents-notification-modal" class="modal" style="display: none; position: fixed; z-index: 4000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center;">
-            <div class="modal-content" style="max-width: 700px; width: 90vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 2rem; position: relative;">
-                <button class="modal-close-btn" id="close-reference-documents-notification-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer;">&times;</button>
-                <div style="margin-bottom: 1.5rem;">
-                    <h2 style="margin: 0 0 0.5rem 0; color: #233366; font-size: 1.5em;">Reference Documents</h2>
-                    <p style="margin: 0; color: #666; font-size: 0.95em;">Reference documents that will be included in your chat are shown below. Documents not selected for chat are also listed.</p>
+            <div class="modal-content" style="max-width: 700px; width: 90vw; padding: 0;">
+                <div class="modal-header">
+                    <h2>Reference Documents</h2>
+                    <button class="modal-close-btn" id="close-reference-documents-notification-modal">&times;</button>
                 </div>
-                <div id="reference-documents-notification-list" style="max-height: 400px; overflow-y: auto; margin-bottom: 1.5rem; border: 1px solid #e9ecef; border-radius: 8px; padding: 1rem;">
-                    <!-- Documents will be listed here -->
-                </div>
-                <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                    <button type="button" id="reference-documents-notification-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
-                    <button type="button" id="reference-documents-notification-proceed" class="modal-btn modal-btn-primary">Proceed</button>
+                <div class="modal-body">
+                    <p style="margin: 0 0 1rem 0; color: #666; font-size: 0.95em;">Reference documents that will be included in your chat are shown below. Documents not selected for chat are also listed.</p>
+                    <div id="reference-documents-notification-list" style="max-height: 400px; overflow-y: auto; margin-bottom: 1.5rem; border: 1px solid #e9ecef; border-radius: 8px; padding: 1rem;">
+                        <!-- Documents will be listed here -->
+                    </div>
+                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                        <button type="button" id="reference-documents-notification-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+                        <button type="button" id="reference-documents-notification-proceed" class="modal-btn modal-btn-primary">Proceed</button>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- Conversation List Modal -->
         <div id="conversation-list-modal" class="modal" style="display: none; position: fixed; z-index: 4000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center;">
-            <div class="modal-content" style="max-width: 800px; width: 90vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 2rem; position: relative; max-height: 80vh; overflow-y: auto;">
-                <button class="modal-close-btn" id="close-conversation-list-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer;">&times;</button>
-                <div style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
-                    <h2 style="margin: 0; color: #233366; font-size: 1.5em;">Conversations</h2>
-                    <button type="button" id="new-conversation-btn" class="modal-btn modal-btn-primary">
-                        <i class="fas fa-plus"></i> New Conversation
+            <div class="modal-content" style="max-width: 800px; width: 90vw; padding: 0; max-height: 80vh; display: flex; flex-direction: column;">
+                <div class="modal-header">
+                    <h2>Conversations</h2>
+                    <button type="button" id="new-conversation-btn" class="modal-btn" style="background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.3); flex-shrink: 0;">
+                        <i class="fas fa-plus"></i> New
                     </button>
+                    <button class="modal-close-btn" id="close-conversation-list-modal">&times;</button>
                 </div>
-                <div id="conversation-list-container" style="max-height: 500px; overflow-y: auto;">
+                <div id="conversation-list-container" style="flex: 1; overflow-y: auto; padding: 1.5rem;">
                     <!-- Conversations will be listed here -->
                 </div>
             </div>
@@ -1365,12 +1380,12 @@
 
         <!-- New Conversation Modal -->
         <div id="new-conversation-modal" class="modal" style="display: none; position: fixed; z-index: 4001; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center;">
-            <div class="modal-content" style="max-width: 500px; width: 90vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 2rem; position: relative;">
-                <button class="modal-close-btn" id="close-new-conversation-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer;">&times;</button>
-                <div style="margin-bottom: 1.5rem;">
-                    <h2 style="margin: 0 0 0.5rem 0; color: #233366; font-size: 1.5em;">New Conversation</h2>
-                    <p style="margin: 0; color: #666; font-size: 0.95em;">Create a new conversation to organize your chat history.</p>
+            <div class="modal-content" style="max-width: 500px; width: 90vw; padding: 0;">
+                <div class="modal-header">
+                    <h2>New Conversation</h2>
+                    <button class="modal-close-btn" id="close-new-conversation-modal">&times;</button>
                 </div>
+                <div class="modal-body">
                 <div style="margin-bottom: 1.5rem;">
                     <label for="new-conversation-title-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Conversation Title:</label>
                     <input type="text" id="new-conversation-title-input" placeholder="Enter conversation title..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
@@ -1400,13 +1415,14 @@
                 </div>
             </div>
         </div>
+        </div>
 
         <!-- Reference Documents Modal -->
         <div id="reference-documents-modal" class="modal">
             <div class="modal-content reference-documents-modal-content">
-                <button id="close-reference-documents-modal" class="modal-close-btn">&times;</button>
                 <div class="reference-documents-header">
                     <h2>Reference Documents</h2>
+                    <button id="close-reference-documents-modal" class="modal-close-btn">&times;</button>
                 </div>
                 <div class="reference-documents-body">
                     <!-- Search and Filters -->
@@ -1446,7 +1462,10 @@
         <!-- Relationships Modal -->
         <div id="relationships-modal" class="modal">
             <div class="modal-content relationships-modal-content">
-                <button id="close-relationships-modal" class="modal-close-btn">&times;</button>
+                <div class="modal-header">
+                    <h2>Relationships</h2>
+                    <button id="close-relationships-modal" class="modal-close-btn">&times;</button>
+                </div>
                 <div class="rel-dashboard">
 
                     <div class="rel-control-group rel-type-filters">
@@ -1515,9 +1534,10 @@
         <!-- Contacts Modal -->
         <div id="contacts-modal" class="modal">
             <div class="modal-content contacts-modal-content" style="max-width: 90vw;">
-
-                <button id="close-contacts-modal" class="modal-close-btn">&times;</button>
-                <h2 style="margin-top: 0; color: #233366;">Contacts</h2>
+                <div class="modal-header">
+                    <h2>Contacts</h2>
+                    <button id="close-contacts-modal" class="modal-close-btn">&times;</button>
+                </div>
                 <!-- <div style="margin-bottom: 1em;">
                     <button type="button" id="extract-contacts-btn" class="modal-btn modal-btn-primary">
                         <i class="fas fa-sync-alt"></i> Extract Contacts
@@ -1594,8 +1614,10 @@
         <!-- Upload Document Modal -->
         <div id="reference-documents-upload-modal" class="modal">
             <div class="modal-content reference-documents-upload-content">
-                <button id="close-reference-documents-upload-modal" class="modal-close-btn">&times;</button>
-                <h2>Upload Reference Document</h2>
+                <div class="modal-header">
+                    <h2>Upload Reference Document</h2>
+                    <button id="close-reference-documents-upload-modal" class="modal-close-btn">&times;</button>
+                </div>
                 <form id="reference-documents-upload-form" class="reference-documents-upload-form">
                     <div class="reference-documents-form-group">
                         <label for="reference-documents-upload-file">File *</label>
@@ -1642,8 +1664,10 @@
         <!-- Edit Document Modal -->
         <div id="reference-documents-edit-modal" class="modal">
             <div class="modal-content reference-documents-upload-content">
-                <button id="close-reference-documents-edit-modal" class="modal-close-btn">&times;</button>
-                <h2>Edit Document Metadata</h2>
+                <div class="modal-header">
+                    <h2>Edit Document Metadata</h2>
+                    <button id="close-reference-documents-edit-modal" class="modal-close-btn">&times;</button>
+                </div>
                 <form id="reference-documents-edit-form" class="reference-documents-upload-form">
                     <input type="hidden" id="reference-documents-edit-id">
                     <div class="reference-documents-form-group">
@@ -1689,34 +1713,36 @@
         <!-- Confirmation Modal -->
         <div id="confirmation-modal" class="modal confirmation-modal">
             <div class="modal-content confirmation-modal-content">
-                    <div class="confirmation-modal-header" style="display: flex; justify-content: space-between; align-items: center;">
-                        <h2 id="confirmation-modal-title" style="margin: 0;"></h2>
-                        <button class="modal-close-btn" id="close-confirmation-modal">&times;</button>
-                    </div>
-                <p id="confirmation-modal-text"></p>
+                <div class="confirmation-modal-header">
+                    <h2 id="confirmation-modal-title"></h2>
+                    <button class="modal-close-btn" id="close-confirmation-modal">&times;</button>
+                </div>
+                <div class="confirmation-modal-body">
+                    <p id="confirmation-modal-text"></p>
+                </div>
                 <div class="confirmation-modal-buttons">
-                        <button type="button" id="confirmation-modal-confirm" class="modal-btn modal-btn-primary">Confirm</button>
-    <button type="button" id="confirmation-modal-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
-</div>
-</div>
-</div>
+                    <button type="button" id="confirmation-modal-confirm" class="modal-btn modal-btn-primary">Confirm</button>
+                    <button type="button" id="confirmation-modal-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+                </div>
+            </div>
+        </div>
 
 <!-- Add Interviewee Modal -->
 <div id="add-interviewee-modal" class="modal">
-<div class="modal-content" style="max-width: 500px; width: 95vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 2rem; position: relative;">
-    <button class="modal-close-btn" id="close-add-interviewee-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer;">&times;</button>
-    <div class="modal-header">
-        <h2 style="margin: 0; color: #2c3e50;">Add New Interviewee</h2>
+    <div class="modal-content" style="max-width: 500px; width: 95vw; padding: 0;">
+        <div class="modal-header">
+            <h2>Add New Interviewee</h2>
+            <button class="modal-close-btn" id="close-add-interviewee-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <label for="new-interviewee-name" style="display: block; margin-bottom: 8px; color: #333; font-weight: bold;">Interviewee Name:</label>
+            <input type="text" id="new-interviewee-name" placeholder="Enter interviewee name..." style="width: 100%; padding: 10px; border: 1px solid #bfc9da; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
+            <div class="modal-btn-row" style="margin-top: 1.5em;">
+                <button type="button" id="add-interviewee-submit-btn" class="modal-btn modal-btn-primary">Add Interviewee</button>
+                <button type="button" id="add-interviewee-cancel-btn" class="modal-btn modal-btn-secondary">Cancel</button>
+            </div>
+        </div>
     </div>
-    <div class="modal-body" style="margin: 20px 0;">
-        <label for="new-interviewee-name" style="display: block; margin-bottom: 8px; color: #2c3e50; font-weight: bold;">Interviewee Name:</label>
-        <input type="text" id="new-interviewee-name" placeholder="Enter interviewee name..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
-    </div>
-    <div class="modal-btn-row" style="display: flex; gap: 10px; justify-content: flex-end;">
-        <button type="button" id="add-interviewee-submit-btn" class="modal-btn modal-btn-primary">Add Interviewee</button>
-        <button type="button" id="add-interviewee-cancel-btn" class="modal-btn modal-btn-secondary">Cancel</button>
-    </div>
-</div>
 </div>
 
         <!-- Single Image Modal -->
@@ -1744,25 +1770,32 @@
         <!-- Display album images Modal -->
         <div id="fb-album-modal" class="modal">
             <div class="modal-content tile-album-modal-content">
-                <button id="close-fb-album-modal" class="modal-album-close-btn">&times;</button>
-                <h2 id="fb-album-modal-title"></h2>
-                <p id="fb-album-modal-description"></p>
-                <div id="fb-album-container" class="fb-album-grid"></div>
+                <div class="fb-album-header">
+                    <div>
+                        <h2 id="fb-album-modal-title"></h2>
+                        <p id="fb-album-modal-description"></p>
+                    </div>
+                    <button id="close-fb-album-modal" class="modal-album-close-btn">&times;</button>
+                </div>
+                <div class="fb-album-body">
+                    <div id="fb-album-container" class="fb-album-grid"></div>
+                </div>
             </div>
         </div>
 
         <!-- SMS Messages Modal -->
         <div id="sms-messages-modal" class="modal">
-            <div class="modal-content" style="max-width: 1400px; width: 95vw; background: #fff; border-radius: 0; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 0; position: relative; display: flex; flex-direction: column; height: 90vh;">
-                <div style="display: flex; flex: 1; overflow: hidden;">
+            <div class="modal-content" style="max-width: 1400px; width: 95vw; background: #fff; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 0; position: relative; display: flex; flex-direction: column; height: 90vh;">
+                <div class="modal-header">
+                    <h2>Messages &amp; Chats</h2>
+                    <button class="modal-close-btn" id="close-sms-messages-modal" title="Close">&times;</button>
+                </div>
+                <div style="display: flex; flex: 1; min-height: 0; overflow: hidden;">
                     <!-- Master Pane (Left) - WhatsApp Style -->
                     <div id="sms-chat-list-pane" style="width: 400px; min-width: 300px; max-width: 500px; border-right: 1px solid #e9edef; display: flex; flex-direction: column; background-color: #f0f2f5;">
                         <!-- Chat List Header -->
-                        <div style="padding: 10px 16px; background-color: #f0f2f5; display: flex; align-items: center; gap: 12px; position: relative;">
-                            <div style="flex: 1;">
-                                <div style="color: #111b21; font-size: 16pt; font-weight: 500; margin-bottom: 4px;">Messages and Chats</div>
-                                <input type="text" id="sms-chat-search" placeholder="Search..." style="width: 100%; padding: 8px 12px; border-radius: 8px; border: none; background-color: #fff; font-size: 14px; box-sizing: border-box; color: #667781;">
-                            </div>
+                        <div style="padding: 10px 16px; background-color: #f0f2f5;">
+                            <input type="text" id="sms-chat-search" placeholder="Search..." style="width: 100%; padding: 8px 12px; border-radius: 8px; border: none; background-color: #fff; font-size: 14px; box-sizing: border-box; color: #667781;">
                         </div>
                         <!-- Filter Buttons -->
                         <div id="sms-chat-filters" style="padding: 8px 16px; background-color: #fff; border-bottom: 1px solid #e9edef; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
@@ -1798,7 +1831,7 @@
                     </div>
                     <!-- Slave Pane (Right) - Chat View -->
                     <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden; background-color: #efeae2; background-image: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iYSIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiPjxwYXRoIGQ9Ik0wIDBoMTAwdjEwMEgweiIgZmlsbD0iI2VmZWFlMiIvPjxwYXRoIGQ9Ik0yMCAyMGgxMHYxMEgyMHoiIGZpbGw9IiNkNWQ1ZDUiIG9wYWNpdHk9IjAuMDMiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiBmaWxsPSJ1cmwoI2EpIi8+PC9zdmc+'); position: relative;">
-                        <div id="sms-conversation-header" style="padding: 10px 16px 10px 16px; padding-right: 60px; border-bottom: 1px solid #e9edef; background-color: #f0f2f5; display: flex; justify-content: space-between; align-items: center; min-height: 60px; position: relative;">
+                        <div id="sms-conversation-header" style="padding: 10px 16px; border-bottom: 1px solid #e9edef; background-color: #f0f2f5; display: flex; justify-content: space-between; align-items: center; min-height: 60px;">
                             <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
                                 <div id="sms-conversation-type-icon" style="display: none; font-size: 20px;"></div>
                                 <div style="flex: 1;">
@@ -1816,7 +1849,6 @@
                                     <i class="fas fa-trash-alt"></i>
                                 </button>
                             </div>
-                            <button class="modal-close-btn" id="close-sms-messages-modal" style="position: absolute; top: 12px; right: 12px; background-color: rgba(255, 255, 255, 0.9); border: 1px solid #e9edef; color: #54656f; cursor: pointer; font-size: 1.7rem; padding: 6px 12px; border-radius: 6px; transition: all 0.2s; z-index: 1000; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-weight: bold; line-height: 1;" onmouseover="this.style.backgroundColor='#fff'; this.style.color='#111b21'; this.style.borderColor='#d1d7db';" onmouseout="this.style.backgroundColor='rgba(255,255,255,0.9)'; this.style.color='#54656f'; this.style.borderColor='#e9edef';" title="Close">&times;</button>
                         </div>
                         <div id="sms-conversation-messages" style="flex: 1; overflow-y: auto; padding: 20px; background-color: transparent;">
                             <div id="sms-conversation-instructions" style="text-align: center; padding: 3rem; color: #667781;">
@@ -1834,9 +1866,12 @@
 
     <!-- Subject Configuration Modal -->
     <div id="subject-configuration-modal" class="modal" style="z-index: 10000;">
-        <div class="modal-content" style="max-width: 800px; width: 90vw; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 2rem; position: relative;">
-            <button class="modal-close-btn" id="close-subject-config-modal" style="position: absolute; top: 12px; right: 18px; font-size: 1.7rem; background: none; border: none; color: #bfc9da; cursor: pointer;">&times;</button>
-            <h2 style="margin-top: 0; color: #233366; font-size: 1.5em; text-align: center; margin-bottom: 1.5rem;">Subject Configuration</h2>
+        <div class="modal-content" style="max-width: 800px; width: 90vw; padding: 0; max-height: 90vh; overflow-y: auto; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h2>Subject Configuration</h2>
+                <button class="modal-close-btn" id="close-subject-config-modal">&times;</button>
+            </div>
+            <div class="modal-body">
             <div style="display: grid; grid-template-columns: 1fr 1fr; row-gap: 1.5em; column-gap: 5px; margin-bottom: 1.5em;">
                 <div style="min-width: 0;">
                     <label for="subject-name-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Subject Name:</label>
@@ -1924,6 +1959,7 @@
                 <button type="button" id="cancel-subject-config-btn" class="modal-btn modal-btn-secondary">Cancel</button>
                 <button type="button" id="save-subject-config-btn" class="modal-btn modal-btn-primary">Save</button>
             </div>
+            </div><!-- end modal-body -->
         </div>
     </div>
 
@@ -1936,6 +1972,7 @@
     <script src="/static/js/museum/modals-comms.js" defer></script>
     <script src="/static/js/museum/modals-people.js" defer></script>
     <script src="/static/js/museum/modals-artefacts.js" defer></script>
+    <script src="/static/js/museum/modals-sensitive.js" defer></script>
     <script src="/static/js/museum/modals-settings.js" defer></script>
     <script src="/static/js/museum/interviewer.js" defer></script>
     <script src="/static/js/museum/app.js" defer></script>
@@ -1956,10 +1993,93 @@
         });
     </script>
 
+    <!-- ===== SENSITIVE DATA GALLERY MODAL ===== -->
+    <div id="sensitive-data-modal" class="modal">
+        <div class="modal-content sensitive-data-modal-content">
+            <div class="sensitive-data-modal-header">
+                <h2>Sensitive &amp; Private Information</h2>
+                <button class="modal-close-btn" id="close-sensitive-data-modal">&times;</button>
+            </div>
+            <div class="sensitive-data-toolbar">
+                <span id="sensitive-data-count-badge"></span>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input type="password" id="sensitive-data-password-input"
+                           class="new-image-gallery-input"
+                           placeholder="Enter password to decode..."
+                           style="width:200px;"/>
+                    <button id="sensitive-data-unlock-btn" class="modal-btn modal-btn-primary">Unlock</button>
+                    <button id="sensitive-data-hint-btn" class="modal-btn modal-btn-secondary">Hint</button>
+                </div>
+                <button id="sensitive-data-new-btn" class="modal-btn modal-btn-primary">+ New Record</button>
+            </div>
+            <div id="sensitive-data-table-container">
+                <table class="sensitive-data-table">
+                    <thead>
+                        <tr>
+                            <th>Description</th>
+                            <th>Details</th>
+                            <th>Private</th>
+                            <th>Sensitive</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sensitive-data-table-body">
+                        <tr><td colspan="5" style="text-align:center;padding:2rem;color:#666;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SENSITIVE DATA HINTS MODAL ===== -->
+    <div id="sensitive-data-hints-modal" class="modal">
+        <div class="modal-content sensitive-data-hints-content">
+            <div class="sensitive-data-hints-header">
+                <h3>Password Hints</h3>
+                <button class="modal-close-btn" id="close-sensitive-data-hints">&times;</button>
+            </div>
+            <div class="sensitive-data-hints-body">
+                <ul id="sensitive-data-hints-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SENSITIVE DATA DETAIL MODAL ===== -->
+    <div id="sensitive-data-detail-modal" class="modal">
+        <div class="modal-content sensitive-data-detail-content">
+            <div class="sensitive-data-detail-header">
+                <span id="sensitive-data-detail-title">Record Details</span>
+                <button class="modal-close-btn" id="close-sensitive-data-detail">&times;</button>
+            </div>
+            <div class="sensitive-data-detail-body">
+                <label class="artefact-field-label">Description</label>
+                <input id="sd-detail-description" class="new-image-gallery-input" placeholder="Short description"/>
+                <label class="artefact-field-label">Details</label>
+                <div class="sd-detail-tab-bar">
+                    <button class="sd-tab-btn active" data-tab="edit">Edit</button>
+                    <button class="sd-tab-btn" data-tab="preview">Preview</button>
+                </div>
+                <textarea id="sd-detail-details" class="artefact-story-textarea" placeholder="Sensitive data..."></textarea>
+                <div id="sd-detail-preview" class="sd-detail-markdown-preview rendered-content" style="display:none;"></div>
+                <div style="display:flex; gap:16px; margin-top:8px;">
+                    <label class="work-mode-label">
+                        <input type="checkbox" id="sd-detail-is-private" checked> Private
+                    </label>
+                    <label class="work-mode-label">
+                        <input type="checkbox" id="sd-detail-is-sensitive" checked> Sensitive
+                    </label>
+                </div>
+                <div class="artefact-detail-actions" style="margin-top:16px;">
+                    <button id="sd-detail-save-btn" class="modal-btn modal-btn-primary">Save</button>
+                    <button id="sd-detail-delete-btn" class="modal-btn modal-btn-danger" style="display:none;">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ===== ARTEFACTS GALLERY MODAL ===== -->
     <div id="artefacts-modal" class="modal">
         <div class="modal-content artefacts-modal-content">
-            <button class="modal-close-btn" id="close-artefacts-modal">&times;</button>
             <div class="artefacts-modal-header">
                 <div class="artefacts-header-title-row">
                     <h2 style="margin:0;">Artefact Gallery</h2>
@@ -1973,6 +2093,7 @@
                         <input id="artefacts-import-file" type="file" accept=".json,application/json" style="display:none"/>
                         <button id="artefacts-new-btn" class="modal-btn modal-btn-primary">+ New Artefact</button>
                     </div>
+                    <button class="modal-close-btn" id="close-artefacts-modal">&times;</button>
                 </div>
                 <div class="artefacts-header-search-row">
                     <input id="artefacts-search" class="new-image-gallery-input" placeholder="Search by name, description, tags or story..." style="flex:1; min-width:140px;"/>

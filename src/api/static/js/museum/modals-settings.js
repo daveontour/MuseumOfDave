@@ -1539,6 +1539,7 @@ Modals.initAll = () => {
         Modals.ConversationManager.init();
         Modals.SubjectConfiguration.init();
         Modals.Artefacts.init();
+        Modals.SensitiveData.init();
 };
 
 Modals.closeAll = () => {

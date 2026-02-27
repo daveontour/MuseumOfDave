@@ -410,6 +410,7 @@ const DOM = {
     newImageGallerySidebarBtn: document.getElementById('new-image-gallery-sidebar-btn'),
     suggestionsSidebarBtn: document.getElementById('suggestions-sidebar-btn'),
     artefactsSidebarBtn: document.getElementById('artefacts-sidebar-btn'),
+    sensitiveSidebarBtn: document.getElementById('sensitive-data-sidebar-btn'),
     artefactsModal: document.getElementById('artefacts-modal'),
     artefactsSearch: document.getElementById('artefacts-search'),
     artefactsThumbnailGrid: document.getElementById('artefacts-thumbnail-grid'),

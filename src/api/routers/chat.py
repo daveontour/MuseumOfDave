@@ -7,6 +7,8 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from sqlalchemy import func
 
+from google.genai.errors import ClientError
+
 from ...services.exceptions import ValidationError, NotFoundError
 from ...services.gemini_service import GeminiService
 from ...services.chat_conversation_service import ChatConversationService
@@ -194,6 +196,22 @@ async def generate_chat_response(request: ChatRequest):
         raise HTTPException(
             status_code=500,
             detail=str(e)
+        )
+    except ClientError as e:
+        # Gemini API errors (quota, rate limits, etc.)
+        import traceback
+        traceback.print_exc()
+        err_str = str(e)
+        if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
+            detail = (
+                "The AI service has reached its usage limit. "
+                "Please wait a minute and try again, or check your API plan and billing at "
+                "https://ai.google.dev/gemini-api/docs/rate-limits"
+            )
+            raise HTTPException(status_code=429, detail=detail)
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI service error: {err_str}"
         )
     except Exception as e:
         # Other errors

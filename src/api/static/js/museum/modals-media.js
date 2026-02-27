@@ -237,16 +237,19 @@ Modals.FBAlbums = (() => {
             Modals._openModal(DOM.fbAlbumsModal);
             selectedAlbumId = null;
             await loadAlbums();
-            
-            // Reset slave pane
-            if (DOM.fbAlbumsAlbumTitle) {
-                DOM.fbAlbumsAlbumTitle.textContent = 'Select an album';
-            }
-            if (DOM.fbAlbumsAlbumDescription) {
-                DOM.fbAlbumsAlbumDescription.textContent = '';
-            }
-            if (DOM.fbAlbumsImagesContainer) {
-                DOM.fbAlbumsImagesContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666; grid-column: 1 / -1;">Select an album to view images</div>';
+
+            if (filteredAlbums.length > 0) {
+                await selectAlbum(filteredAlbums[0].id);
+            } else {
+                if (DOM.fbAlbumsAlbumTitle) {
+                    DOM.fbAlbumsAlbumTitle.textContent = 'Select an album';
+                }
+                if (DOM.fbAlbumsAlbumDescription) {
+                    DOM.fbAlbumsAlbumDescription.textContent = '';
+                }
+                if (DOM.fbAlbumsImagesContainer) {
+                    DOM.fbAlbumsImagesContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666; grid-column: 1 / -1;">Select an album to view images</div>';
+                }
             }
         }
 

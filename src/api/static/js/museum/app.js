@@ -1317,6 +1317,12 @@ const App = (() => {
             });
         }
 
+        if (DOM.sensitiveSidebarBtn) {
+            DOM.sensitiveSidebarBtn.addEventListener('click', () => {
+                Modals.SensitiveData.open();
+            });
+        }
+
         // Interviewee management event listeners
         if (DOM.intervieweeSelect) {
             DOM.intervieweeSelect.addEventListener('change', handleIntervieweeSelectChange);

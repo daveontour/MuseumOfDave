@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from .deps import db, chat_service, templates  # noqa: F401
 
 # Import routers
-from .routers import admin, emails, attachments, messages, media, chat, relationships, documents, artefacts
+from .routers import admin, emails, attachments, messages, media, chat, relationships, documents, artefacts, sensitive
 
 # ---------------------------------------------------------------------------
 # Application
@@ -39,3 +39,4 @@ app.include_router(chat.router)
 app.include_router(relationships.router)
 app.include_router(documents.router)
 app.include_router(artefacts.router)
+app.include_router(sensitive.router)

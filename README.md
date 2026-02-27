@@ -18,10 +18,10 @@ MuseumOfDave/
 │   │   ├── models.py          # SQLAlchemy models
 │   │   ├── connection.py      # Database connection
 │   │   └── storage.py         # Storage operations
-│   └── api/                   # FastAPI package
-│       ├── __init__.py
-│       └── app.py             # API endpoints
-├── main.py                    # Entry point
+│   ├── api/                   # FastAPI package
+│   │   ├── __init__.py
+│   │   └── app.py             # API endpoints
+│   └── main.py                # Entry point
 ├── requirements.txt           # Python dependencies
 └── .env                       # Environment configuration
 ```
@@ -60,7 +60,7 @@ MuseumOfDave/
 
 Start the server:
 ```bash
-python main.py
+python src/main.py
 ```
 
 The server will:

@@ -37,7 +37,6 @@ COPY --from=go-builder /app/import-processor/import-processor /app/import-proces
 
 # Copy the Python application code
 COPY src/ ./src
-COPY main.py .
 # Copy other necessary files
 COPY .env.docker .env
 # Copy configuration files referenced by the app
@@ -57,4 +56,4 @@ RUN chmod +x /app/import-processor/import-processor
 EXPOSE 8000
 
 # Run the application
-CMD ["python", "main.py"]
+CMD ["python", "src/main.py"]

@@ -7,6 +7,12 @@ from sqlalchemy.orm import sessionmaker, Session
 from ..config import Config, get_config
 
 
+def _postgres_admin_connection_string(config: Config) -> str:
+    """Connection string for the postgres admin database (used to create databases)."""
+    db = config.db
+    return f"postgresql://{db.user}:{db.password}@{db.host}:{db.port}/postgres"
+
+
 class Database:
     """Database connection and management."""
 
@@ -186,10 +192,30 @@ class Database:
         return self.SessionLocal()
 
     def check_database_exists(self) -> bool:
-        """Check if database exists."""
+        """Check if database exists; create it if it does not."""
         try:
             with self.engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
                 return True
-        except Exception:
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "does not exist" in err_msg or "3d000" in err_msg:
+                return self._create_database()
+            return False
+
+    def _create_database(self) -> bool:
+        """Create the database using postgres admin connection."""
+        try:
+            admin_url = _postgres_admin_connection_string(self.config)
+            engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
+            db_name = self.config.db.name
+            with engine.connect() as conn:
+                # Escape double quotes in identifier
+                safe_name = db_name.replace('"', '""')
+                conn.execute(text(f'CREATE DATABASE "{safe_name}"'))
+            engine.dispose()
+            print(f"Created database '{db_name}'.")
+            return True
+        except Exception as e:
+            print(f"Failed to create database: {e}")
             return False

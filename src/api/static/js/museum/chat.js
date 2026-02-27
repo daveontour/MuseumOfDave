@@ -571,7 +571,7 @@ const ApiService = (() => {
             let errorMsg = `HTTP error! Status: ${response.status}`;
             try {
                 const errorData = await response.json();
-                errorMsg = errorData.error || errorMsg;
+                errorMsg = errorData.detail || errorData.error || errorMsg;
             } catch (e) {
                 const textError = await response.text();
                 errorMsg = textError || errorMsg;

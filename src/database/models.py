@@ -503,3 +503,17 @@ class Locations(Base):
     source_reference=Column(String(500), nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class SensitiveData(Base):
+    """Sensitive and private data records stored encoded."""
+
+    __tablename__ = "sensitive_data"
+
+    id = Column(Integer, primary_key=True)
+    description = Column(String(500), nullable=False)
+    details = Column(Text, nullable=True)
+    is_private = Column(Boolean, default=False, nullable=False)
+    is_sensitive = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
