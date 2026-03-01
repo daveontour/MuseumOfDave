@@ -517,3 +517,25 @@ class SensitiveData(Base):
     is_sensitive = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+class TrustedKey(Base):
+    """Sensitive and private data records stored encoded."""
+
+    __tablename__ = "trusted_keys"
+
+    id = Column(Integer, primary_key=True)
+    key = Column(Text, nullable=False)
+    is_master = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+class MasterKey(Base):
+    """Master key model."""
+
+    __tablename__ = "master_keys"
+
+    id = Column(Integer, primary_key=True)
+    comment = Column(String(500), nullable=False, default="Don't think I'm stupid enough to use this as a master key")
+    public_key = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
