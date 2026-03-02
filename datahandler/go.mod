@@ -1,4 +1,5 @@
-module encoder
+module datahandler
+
 
 go 1.24.0
 

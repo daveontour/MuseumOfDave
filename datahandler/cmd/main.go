@@ -15,11 +15,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	mathrand "math/rand"
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
@@ -75,23 +73,12 @@ func getDBPool() (*pgxpool.Pool, error) {
 //go:embed seed.txt
 var staticSeed []byte
 
-type timeSeededReader struct {
-	rng *mathrand.Rand
-}
-
-func (r *timeSeededReader) Read(p []byte) (n int, err error) {
-	for i := range p {
-		p[i] = byte(r.rng.Intn(256))
-	}
-	return len(p), nil
-}
-
 // getPepper retrieves the secret key from the OS environment
 func getPepper() string {
-	pepper := os.Getenv("APP_SECRET_PEPPER")
+	pepper := os.Getenv("ATTACHMENT_ALLOWED_TYPES")
 	if pepper == "" {
-		// In production, you should probably exit if this is missing
-		return "default-fallback-not-secure-2026"
+		fmt.Fprintf(os.Stderr, "PEPPER is not set\n")
+		os.Exit(1)
 	}
 	return pepper
 }
@@ -161,19 +148,19 @@ func getEncodedPassword(password string) string {
 	password, _ = encrypt(password, password)
 	return password
 }
-func readMasterKeysFromDB() (string, error) {
+func readMasterPublicKeyFromDB() (string, error) {
 	pool, err := getDBPool()
 	if err != nil {
 		return "", err
 	}
-	var privateKeyPEM string
+	var key string
 	err = pool.QueryRow(context.Background(),
 		`SELECT public_key FROM master_keys LIMIT 1`).
-		Scan(&privateKeyPEM)
+		Scan(&key)
 	if err != nil {
 		return "", fmt.Errorf("query master_keys: %w", err)
 	}
-	return privateKeyPEM, nil
+	return key, nil
 }
 
 // writeMasterKeysToDB inserts the key pair into the master_keys table.
@@ -219,7 +206,7 @@ func GetMasterPublicKey(password string) (string, error) {
 
 	// encoderPassword := getEncodedPassword(password)
 
-	encryptedPublic, err := readMasterKeysFromDB()
+	encryptedPublic, err := readMasterPublicKeyFromDB()
 	if err != nil {
 		return "", fmt.Errorf("read master keys: %w", err)
 	}
@@ -269,22 +256,22 @@ func generateTrustedKeys(userpassword string, masterpassword string, mKey string
 	}
 }
 
-func EncryptWithPublicKey(publicKeyPEM []byte, plaintext []byte) ([]byte, error) {
-	block, _ := pem.Decode(publicKeyPEM)
-	if block == nil {
-		return nil, fmt.Errorf("failed to decode PEM block")
-	}
-	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("parse public key: %w", err)
-	}
-	rsaPub, ok := pub.(*rsa.PublicKey)
-	if !ok {
-		return nil, fmt.Errorf("not an RSA public key")
-	}
-	hash := sha256.New()
-	return rsa.EncryptOAEP(hash, rand.Reader, rsaPub, plaintext, nil)
-}
+// func EncryptWithPublicKey(publicKeyPEM []byte, plaintext []byte) ([]byte, error) {
+// 	block, _ := pem.Decode(publicKeyPEM)
+// 	if block == nil {
+// 		return nil, fmt.Errorf("failed to decode PEM block")
+// 	}
+// 	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("parse public key: %w", err)
+// 	}
+// 	rsaPub, ok := pub.(*rsa.PublicKey)
+// 	if !ok {
+// 		return nil, fmt.Errorf("not an RSA public key")
+// 	}
+// 	hash := sha256.New()
+// 	return rsa.EncryptOAEP(hash, rand.Reader, rsaPub, plaintext, nil)
+// }
 
 // EncryptWithPublicKeyHybrid encrypts plaintext of any length using hybrid encryption:
 // a random AES-256 key encrypts the data; the key is encrypted with the RSA public key.
@@ -379,22 +366,23 @@ func parseRSAPrivateKey(privateKeyPEM []byte) (*rsa.PrivateKey, error) {
 	}
 	return x509.ParsePKCS1PrivateKey(block.Bytes)
 }
-func DecryptCipherText(privateKeyPEM []byte, ciphertext []byte) ([]byte, error) {
-	block, _ := pem.Decode(privateKeyPEM)
-	if block == nil {
-		return nil, fmt.Errorf("failed to decode PEM block")
-	}
-	priv, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("parse private key: %w", err)
-	}
-	hash := sha256.New()
-	plaintext, err := rsa.DecryptOAEP(hash, rand.Reader, priv, ciphertext, nil)
-	if err != nil {
-		return nil, fmt.Errorf("decrypt: %w", err)
-	}
-	return plaintext, nil
-}
+
+// func DecryptCipherText(privateKeyPEM []byte, ciphertext []byte) ([]byte, error) {
+// 	block, _ := pem.Decode(privateKeyPEM)
+// 	if block == nil {
+// 		return nil, fmt.Errorf("failed to decode PEM block")
+// 	}
+// 	priv, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("parse private key: %w", err)
+// 	}
+// 	hash := sha256.New()
+// 	plaintext, err := rsa.DecryptOAEP(hash, rand.Reader, priv, ciphertext, nil)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("decrypt: %w", err)
+// 	}
+// 	return plaintext, nil
+// }
 
 func getPrivateKeyFromDB(userpassword string, noReport bool) (string, error) {
 
@@ -483,7 +471,7 @@ func checkMasterPassword(password string) bool {
 			fmt.Fprintf(os.Stderr, "Unable to scan master public key: %v\n", err)
 			os.Exit(1)
 		}
-		_, err := decrypt(key, password)
+		_, err := decrypt(key, getEncodedPassword(password))
 		if err != nil {
 			return false
 		} else {
@@ -521,6 +509,13 @@ Commands:
 `
 
 func main() {
+	// Load .env so APP_SECRET_PEPPER and DB config are available
+	_ = godotenv.Load(".env")
+	if exe, err := os.Executable(); err == nil {
+		encoderDir := filepath.Dir(filepath.Dir(exe))
+		_ = godotenv.Load(filepath.Join(encoderDir, ".env"))
+	}
+
 	if len(os.Args) < 2 {
 		fmt.Fprint(os.Stderr, helpSummary)
 		os.Exit(1)
@@ -531,7 +526,7 @@ func main() {
 
 	switch cmd {
 	case "test":
-		testEncoder()
+		testEncoder(args)
 		os.Exit(0)
 	case "generatemasterkey":
 		generateMasterKey(args)
@@ -572,25 +567,25 @@ func main() {
 		os.Exit(0)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", cmd)
-		fmt.Fprint(os.Stderr, helpSummary)
+		fmt.Fprint(os.Stdout, helpSummary)
 		os.Exit(1)
 	}
 
 }
-func testEncoder() {
-	// Set the environment variable (In a real app, do this in your shell/docker)
-	fmt.Fprintf(os.Stderr, "Test encoder\n")
-	fmt.Fprintf(os.Stdin, "Test encoder\n")
+func testEncoder(args []string) {
+
+	masterpassword := args[0]
+	if checkMasterPassword(masterpassword) {
+		fmt.Fprintf(os.Stdout, "Master password is correct\n")
+	} else {
+		fmt.Fprintf(os.Stdout, "Master password is incorrect\n")
+	}
 	os.Exit(0)
 }
 
 func generateMasterKey(args []string) {
-	// Use milliseconds of current time for randomness as requested
-	seed := time.Now().UnixMilli()
-	rng := mathrand.New(mathrand.NewSource(seed))
-
 	// RSA 2048-bit keys (meets "at least 1024 bit" requirement)
-	priv, err := rsa.GenerateKey(&timeSeededReader{rng: rng}, 2048)
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Generating master key pair failed: %v\n", err)
 		os.Exit(1)
@@ -700,7 +695,7 @@ func getRecord(args []string) {
 
 	if privateKey == "" {
 		fmt.Fprintf(os.Stderr, "Private key is empty, returning empty record\n")
-		fmt.Fprintf(os.Stdin, "[]")
+		fmt.Fprintf(os.Stdout, "[]")
 		os.Exit(0)
 	}
 
@@ -761,7 +756,7 @@ func getRecord(args []string) {
 		os.Exit(1)
 	}
 	//format the records into JSON and output to stdout
-	jsonData, err := json.Marshal(records)
+	jsonData, err := json.Marshal(records[0])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to marshal records: %v\n", err)
 		os.Exit(1)
@@ -809,20 +804,13 @@ func createRecord(masterpassword string, id string) {
 		os.Exit(1)
 	}
 	encryptedDetails := base64.StdEncoding.EncodeToString(encryptedDetailsBytes)
-	// insert the record into the database
 	pool, err := getDBPool()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to get database pool: %v\n", err)
 		os.Exit(1)
 	}
-	_, err = pool.Exec(context.Background(), `INSERT INTO sensitive_data (description, details, is_private, is_sensitive) VALUES ($1, $2, $3, $4)`, description, encryptedDetails, is_private, is_sensitive)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to insert record into database: %v\n", err)
-		os.Exit(1)
-	}
 	if update {
-		//Delete the old record from the database
-		_, err = pool.Exec(context.Background(), `DEELTE from sensitive_data  WHERE id = $1`, id)
+		_, err = pool.Exec(context.Background(), `UPDATE sensitive_data SET description=$1, details=$2, is_private=$3, is_sensitive=$4 WHERE id=$5`, description, encryptedDetails, is_private, is_sensitive, id)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to update record in database: %v\n", err)
 			os.Exit(1)
@@ -830,6 +818,11 @@ func createRecord(masterpassword string, id string) {
 		fmt.Fprintf(os.Stdout, "Record updated in the database\n")
 		os.Exit(0)
 	} else {
+		_, err = pool.Exec(context.Background(), `INSERT INTO sensitive_data (description, details, is_private, is_sensitive) VALUES ($1, $2, $3, $4)`, description, encryptedDetails, is_private, is_sensitive)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to insert record into database: %v\n", err)
+			os.Exit(1)
+		}
 		fmt.Fprintf(os.Stdout, "Record created in the database\n")
 		os.Exit(0)
 	}
@@ -857,7 +850,6 @@ func getRecordCount() int {
 			fmt.Fprintf(os.Stderr, "Unable to scan record count: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Fprintf(os.Stdout, "Record count: %d\n", count)
 	}
 	if err := rows.Err(); err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to iterate rows: %v\n", err)
@@ -869,7 +861,7 @@ func getRecordCount() int {
 func getRecords(args []string) {
 
 	password := args[0]
-	_ = password
+	// _ = password
 
 	privateKey, err := getPrivateKeyFromDB(password, true)
 	if err != nil {
@@ -900,23 +892,27 @@ func getRecords(args []string) {
 			os.Exit(1)
 		}
 		if privateKey != "" {
-			//privateKey, _ = decrypt(privateKey, password)
-			fmt.Fprintf(os.Stderr, "Private key: %s\n", privateKey)
-			//base64 decode the details
-			detailsBytes, err := base64.StdEncoding.DecodeString(details)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Unable to decode details: %v\n", err)
-				os.Exit(1)
-			}
-			//	decryptedBytes, err := DecryptWithPrivateKeyHybrid([]byte(pkey), []byte(details))
-			decryptedBytes, err := DecryptWithPrivateKeyHybrid([]byte(privateKey), detailsBytes)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Unable to decrypt details: %v\n", err)
-				os.Exit(1)
-			}
-			details = string(decryptedBytes)
-		} else {
+			//Don't return the details if the private key is empty
 			details = "*****************"
+			// //privateKey, _ = decrypt(privateKey, password)
+			// fmt.Fprintf(os.Stderr, "Private key: %s\n", privateKey)
+			// //base64 decode the details
+			// detailsBytes, err := base64.StdEncoding.DecodeString(details)
+			// if err != nil {
+			// 	fmt.Fprintf(os.Stderr, "Unable to decode details: %v\n", err)
+			// 	os.Exit(1)
+			// }
+			// //	decryptedBytes, err := DecryptWithPrivateKeyHybrid([]byte(pkey), []byte(details))
+			// decryptedBytes, err := DecryptWithPrivateKeyHybrid([]byte(privateKey), detailsBytes)
+			// if err != nil {
+			// 	fmt.Fprintf(os.Stderr, "Unable to decrypt details: %v\n", err)
+			// 	os.Exit(1)
+			// }
+			// details = string(decryptedBytes)
+		} else {
+			//Don't return anything if the private key is empty
+			details = "*****************"
+			description = "*****************"
 		}
 
 		record := map[string]interface{}{

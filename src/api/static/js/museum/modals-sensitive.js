@@ -172,6 +172,7 @@ Modals.SensitiveData = (() => {
         if (deleteBtn) deleteBtn.style.display = 'inline-block';
 
         try {
+            debugger;
             const url = `/sensitive-data/${record.id}?password=${encodeURIComponent(_password)}`;
             const resp = await fetch(url);
             if (!resp.ok) {
