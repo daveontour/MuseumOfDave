@@ -2,13 +2,14 @@
 import json
 import re
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from sqlalchemy import func
 
 from google.genai.errors import ClientError
 
+from ...database.models import CompleteProfile
 from ...services.exceptions import ValidationError, NotFoundError
 from ...services.gemini_service import GeminiService
 from ...services.chat_conversation_service import ChatConversationService
@@ -56,6 +57,11 @@ class ConversationUpdateRequest(BaseModel):
     """Request model for updating a conversation."""
     title: Optional[str] = None
     voice: Optional[str] = None
+
+
+class CompleteProfileRequest(BaseModel):
+    """Request model for complete profile by name endpoint."""
+    full_name: str
 
 
 class SubjectConfigurationRequest(BaseModel):
@@ -450,6 +456,119 @@ async def get_conversation_turns(conversation_id: int, limit: int = Query(30, ge
         print(f"Error in get_conversation_turns: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error getting conversation turns: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# Complete Profile (background) Endpoint
+# ---------------------------------------------------------------------------
+
+def _run_complete_profile_task(name: str) -> None:
+    """Run get_complete_profile_by_name in background. Errors are logged."""
+    try:
+        chat_service.get_complete_profile_by_name(name)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[complete_profile_task] Error for name '{name}': {e}")
+
+
+@router.get("/chat/complete-profile/names")
+async def list_complete_profile_names():
+    """Return list of contact names that have complete profiles."""
+    session = db.get_session()
+    try:
+        rows = session.query(CompleteProfile.name).all()
+        return {"names": [r[0] for r in rows if r[0]]}
+    finally:
+        session.close()
+
+
+@router.get("/chat/complete-profile")
+async def get_complete_profile(name: str = Query(..., description="Contact name")):
+    """Get complete profile for a contact by name. Returns 404 if not found."""
+    session = db.get_session()
+    try:
+        row = session.query(CompleteProfile).filter(CompleteProfile.name == name).first()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"No complete profile found for '{name}'")
+        return {"name": row.name, "profile": row.profile}
+    finally:
+        session.close()
+
+
+class CompleteProfileUpdateRequest(BaseModel):
+    """Request model for updating a complete profile."""
+    name: str
+    profile: str
+
+
+@router.put("/chat/complete-profile")
+async def update_complete_profile(request: CompleteProfileUpdateRequest):
+    """Update the markdown profile for a contact. Creates record if missing."""
+    name = (request.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+    session = db.get_session()
+    try:
+        row = session.query(CompleteProfile).filter(CompleteProfile.name == name).first()
+        if row:
+            row.profile = request.profile or ""
+            session.commit()
+            return {"name": row.name, "message": "Profile updated"}
+        # Create if not found (e.g. manual entry)
+        new_row = CompleteProfile(name=name, profile=request.profile or "")
+        session.add(new_row)
+        session.commit()
+        return {"name": name, "message": "Profile created"}
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        session.close()
+
+
+@router.delete("/chat/complete-profile")
+async def delete_complete_profile(name: str = Query(..., description="Contact name")):
+    """Delete a complete profile by contact name."""
+    name = (name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+    session = db.get_session()
+    try:
+        row = session.query(CompleteProfile).filter(CompleteProfile.name == name).first()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"No complete profile found for '{name}'")
+        session.delete(row)
+        session.commit()
+        return {"message": f"Profile for '{name}' deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        session.close()
+
+
+@router.post("/chat/complete-profile")
+async def start_complete_profile(request: CompleteProfileRequest, background_tasks: BackgroundTasks):
+    """Start generating a complete profile for a contact by full name.
+
+    The request returns immediately while profile generation runs in the background.
+    This can take several minutes depending on message volume.
+
+    Args:
+        request: CompleteProfileRequest with full_name
+        background_tasks: FastAPI BackgroundTasks for fire-and-forget execution
+
+    Returns:
+        Acknowledgment that the task has been submitted
+    """
+    name = (request.full_name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="full_name is required")
+    background_tasks.add_task(_run_complete_profile_task, name)
+    return {"status": "submitted", "message": f"Complete profile generation started for '{name}'. Processing runs in the background."}
 
 
 # ---------------------------------------------------------------------------

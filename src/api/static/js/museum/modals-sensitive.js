@@ -16,7 +16,20 @@ Modals.SensitiveData = (() => {
     // Gallery Modal
     // -------------------------------------------------------------------------
 
-    function open() {
+    async function open() {
+        try {
+            const resp = await fetch('/sensitive-data/key-count');
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            if ((data.count || 0) === 0) {
+                _showNoMasterKeyModal();
+                return;
+            }
+        } catch (err) {
+            console.error('[SensitiveData] key-count error:', err);
+            alert('Unable to check trusted keys. Please try again.');
+            return;
+        }
         const modal = document.getElementById('sensitive-data-modal');
         if (modal) modal.style.display = 'flex';
         _loadCount();
@@ -126,6 +139,74 @@ Modals.SensitiveData = (() => {
         if (modal) modal.style.display = 'none';
     }
 
+    function _showNoMasterKeyModal() {
+        const modal = document.getElementById('sensitive-data-no-master-key-modal');
+        const pwInput = document.getElementById('sensitive-data-master-key-password');
+        const confirmInput = document.getElementById('sensitive-data-master-key-confirm');
+        const errorEl = document.getElementById('sensitive-data-no-master-key-error');
+        if (modal) modal.style.display = 'flex';
+        if (pwInput) pwInput.value = '';
+        if (confirmInput) confirmInput.value = '';
+        if (errorEl) {
+            errorEl.textContent = '';
+            errorEl.style.display = 'none';
+        }
+    }
+
+    function _closeNoMasterKeyModal() {
+        const modal = document.getElementById('sensitive-data-no-master-key-modal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    async function _createMasterKey() {
+        const pwInput = document.getElementById('sensitive-data-master-key-password');
+        const confirmInput = document.getElementById('sensitive-data-master-key-confirm');
+        const errorEl = document.getElementById('sensitive-data-no-master-key-error');
+        if (!pwInput) return;
+        const password = pwInput.value.trim();
+        const confirm = confirmInput ? confirmInput.value.trim() : '';
+        if (!password) {
+            if (errorEl) {
+                errorEl.textContent = 'Please enter a password.';
+                errorEl.style.display = 'block';
+            }
+            return;
+        }
+        if (password !== confirm) {
+            if (errorEl) {
+                errorEl.textContent = 'Passwords do not match.';
+                errorEl.style.display = 'block';
+            }
+            return;
+        }
+        if (errorEl) {
+            errorEl.textContent = '';
+            errorEl.style.display = 'none';
+        }
+        try {
+            const resp = await fetch('/sensitive-data/master-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password })
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.detail || `HTTP ${resp.status}`);
+            }
+            _closeNoMasterKeyModal();
+            const modal = document.getElementById('sensitive-data-modal');
+            if (modal) modal.style.display = 'flex';
+            _loadCount();
+            _loadRecords();
+        } catch (err) {
+            console.error('[SensitiveData] create master key error:', err);
+            if (errorEl) {
+                errorEl.textContent = err.message || 'Failed to create master key.';
+                errorEl.style.display = 'block';
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Details tab: Edit / Preview
     // -------------------------------------------------------------------------
@@ -172,7 +253,6 @@ Modals.SensitiveData = (() => {
         if (deleteBtn) deleteBtn.style.display = 'inline-block';
 
         try {
-            debugger;
             const url = `/sensitive-data/${record.id}?password=${encodeURIComponent(_password)}`;
             const resp = await fetch(url);
             if (!resp.ok) {
@@ -181,7 +261,7 @@ Modals.SensitiveData = (() => {
             }
             const data = await resp.json();
 
-            if (titleEl) titleEl.textContent = data.description || 'Record Details';
+            if (titleEl) titleEl.textContent = 'Sensitive Recort: '+data.description || 'Record Details';
             _setField('sd-detail-description', data.description || '');
             _setField('sd-detail-details', data.details || '');
 
@@ -367,6 +447,51 @@ Modals.SensitiveData = (() => {
         if (hintsModal) {
             hintsModal.addEventListener('click', e => {
                 if (e.target === hintsModal) _closeHintsModal();
+            });
+        }
+
+        const noMasterKeyCloseBtn = document.getElementById('close-sensitive-data-no-master-key');
+        if (noMasterKeyCloseBtn) noMasterKeyCloseBtn.addEventListener('click', _closeNoMasterKeyModal);
+
+        const noMasterKeyCancelBtn = document.getElementById('sensitive-data-no-master-key-cancel');
+        if (noMasterKeyCancelBtn) noMasterKeyCancelBtn.addEventListener('click', _closeNoMasterKeyModal);
+
+        const createMasterKeyBtn = document.getElementById('sensitive-data-create-master-key-btn');
+        if (createMasterKeyBtn) createMasterKeyBtn.addEventListener('click', _createMasterKey);
+
+        const noMasterKeyModal = document.getElementById('sensitive-data-no-master-key-modal');
+        if (noMasterKeyModal) {
+            noMasterKeyModal.addEventListener('click', e => {
+                if (e.target === noMasterKeyModal) _closeNoMasterKeyModal();
+            });
+        }
+
+        const masterKeyPwInput = document.getElementById('sensitive-data-master-key-password');
+        const masterKeyConfirmInput = document.getElementById('sensitive-data-master-key-confirm');
+        const pwEnterHandler = e => { if (e.key === 'Enter') _createMasterKey(); };
+        if (masterKeyPwInput) masterKeyPwInput.addEventListener('keydown', pwEnterHandler);
+        if (masterKeyConfirmInput) masterKeyConfirmInput.addEventListener('keydown', pwEnterHandler);
+
+        const pwToggle = document.getElementById('sensitive-data-master-key-password-toggle');
+        if (pwToggle) {
+            pwToggle.addEventListener('click', () => {
+                const inp = document.getElementById('sensitive-data-master-key-password');
+                if (!inp) return;
+                const isPassword = inp.type === 'password';
+                inp.type = isPassword ? 'text' : 'password';
+                pwToggle.innerHTML = isPassword ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>';
+                pwToggle.title = isPassword ? 'Hide password' : 'Show password';
+            });
+        }
+        const confirmToggle = document.getElementById('sensitive-data-master-key-confirm-toggle');
+        if (confirmToggle) {
+            confirmToggle.addEventListener('click', () => {
+                const inp = document.getElementById('sensitive-data-master-key-confirm');
+                if (!inp) return;
+                const isPassword = inp.type === 'password';
+                inp.type = isPassword ? 'text' : 'password';
+                confirmToggle.innerHTML = isPassword ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>';
+                confirmToggle.title = isPassword ? 'Hide password' : 'Show password';
             });
         }
 

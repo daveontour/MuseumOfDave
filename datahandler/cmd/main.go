@@ -488,6 +488,7 @@ Usage:
   encoder generatekey  [userpassword] [masterpassword]
   encoder deletetrustedkey [userpassword] [masterpassword]
   encoder getrecordcount
+  encoder getkeycount
   encoder getrecord [id] [password]
   encoder getrecords [password]
   encoder createrecord [masterpassword]     (reads base64 JSON from stdin)
@@ -500,6 +501,7 @@ Commands:
   generatekey         Generate a trusted key for the user password.
   deletetrustedkey    Delete a trusted key (cannot delete master password).
   getrecordcount      Return count of sensitive_data records.
+  getkeycount         Return count of trusted_keys.
   getrecord           Get single record by id, decrypt with user's private key.
   getrecords          Get all records, decrypt with user's private key.
   createrecord        Create record; reads base64-encoded JSON from stdin.
@@ -540,6 +542,10 @@ func main() {
 		deleteTrustedKey(args)
 		fmt.Fprintf(os.Stdout, "Trusted key deleted from database\n")
 		os.Exit(0)
+	case "getkeycount":
+		count := getKeyCount()
+		fmt.Fprintf(os.Stdout, "{ \"count\": %d }", count)
+		os.Exit(0)
 	case "getrecordcount":
 		count := getRecordCount()
 		fmt.Fprintf(os.Stdout, "{ \"count\": %d }", count)
@@ -571,6 +577,35 @@ func main() {
 		os.Exit(1)
 	}
 
+}
+
+func getKeyCount() any {
+	//Connect to the database and get the count of keys in the trusted_keys table
+	pool, err := getDBPool()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to get database pool: %v\n", err)
+		os.Exit(1)
+	}
+	rows, err := pool.Query(context.Background(), `SELECT COUNT(*) FROM trusted_keys`)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to get key count: %v\n", err)
+		os.Exit(1)
+	}
+	defer rows.Close()
+	var count int
+	count = 0
+	for rows.Next() {
+		err = rows.Scan(&count)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Unable to scan key count: %v\n", err)
+			os.Exit(1)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to iterate rows: %v\n", err)
+		os.Exit(1)
+	}
+	return count
 }
 func testEncoder(args []string) {
 

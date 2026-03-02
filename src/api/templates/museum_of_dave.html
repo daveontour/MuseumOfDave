@@ -131,6 +131,9 @@
                     <button type="button" class="more-options-btn" id="contacts-sidebar-btn">
                         <i class="fas fa-address-book"></i> Contacts
                     </button>
+                    <button type="button" class="more-options-btn" id="profiles-sidebar-btn">
+                        <i class="fas fa-id-card"></i> Profiles
+                    </button>
                     <button type="button" class="more-options-btn" id="relationships-btn">
                         <i class="fas fa-project-diagram"></i> Relationships
                     </button>
@@ -406,8 +409,9 @@
                 <button class="config-tab-button" data-tab="api-docs">
                     <i class="fas fa-book"></i> API Docs
                 </button>
-
-
+                <button class="config-tab-button" data-tab="manage-keys">
+                    <i class="fas fa-key"></i> Manage Keys
+                </button>
             </div>
             <div class="config-content" style="height:calc(100vh - 170px)">
                 <div class="config-tab-content active" id="settings-tab">
@@ -490,6 +494,28 @@
                 </div>
                 <div class="config-tab-content" id="api-docs-tab">
                     <iframe id="api-docs-iframe" src="/docs"></iframe>
+                </div>
+                <div class="config-tab-content" id="manage-keys-tab">
+                    <section class="config-section">
+                        <h3>Trusted Keys</h3>
+                        <div class="setting-group">
+                            <p style="color: #666; margin-bottom: 10px;">
+                                Create additional trusted keys or remove keys that are no longer needed. You need the master password to manage keys.
+                            </p>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                                <button type="button" id="create-trusted-key-btn" class="modal-btn modal-btn-primary">
+                                    <i class="fas fa-plus"></i> Create Trusted Key
+                                </button>
+                                <button type="button" id="delete-trusted-key-btn" class="modal-btn modal-btn-secondary">
+                                    <i class="fas fa-minus"></i> Delete Trusted Key
+                                </button>
+                                <button type="button" id="create-new-master-key-btn" class="modal-btn" style="background-color: #dc3545; color: white;">
+                                    <i class="fas fa-key"></i> Create New Master Key
+                                </button>
+                            </div>
+                            <div id="manage-keys-status" style="margin-top: 10px; padding: 10px; border-radius: 4px; display: none;"></div>
+                        </div>
+                    </section>
                 </div>
                 <div class="config-tab-content" id="images-grid-tab">
                     <div class="images-grid-viewer">
@@ -1588,7 +1614,7 @@
                                     <th class="contacts-sortable-header" data-sort="numimessages" style="padding: 10px; text-align: center;width: 100px; cursor: pointer;">iMessage</th>
                                     <th class="contacts-sortable-header" data-sort="numinstagram" style="padding: 10px; text-align: center;width: 100px; cursor: pointer;">Instagram</th>
                                     <th class="contacts-sortable-header" data-sort="numfacebook" style="padding: 10px; text-align: center;width: 100px; cursor: pointer;">Facebook</th>
-                                    <th style="padding: 10px; text-align: center; width: 80px;">Actions</th>
+                                    <th style="padding: 10px; text-align: center; width: 120px;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="contacts-table-body">
@@ -1605,6 +1631,79 @@
                                 <button type="button" id="contacts-prev-btn" class="modal-btn modal-btn-secondary" disabled><i class="fas fa-chevron-left"></i> Prev</button>
                                 <button type="button" id="contacts-next-btn" class="modal-btn modal-btn-secondary" disabled><i class="fas fa-chevron-right"></i> Next</button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profiles Modal -->
+        <div id="profiles-modal" class="modal" style="display: none;">
+            <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-header">
+                    <h2>Profiles</h2>
+                    <button class="modal-close-btn" id="close-profiles-modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div style="margin-bottom: 1rem;">
+                        <label class="artefact-field-label">Create complete profile for contact</label>
+                        <div style="display: flex; gap: 0.5rem; align-items: flex-start; flex-wrap: wrap;">
+                            <div style="flex: 1; min-width: 200px; position: relative;">
+                                <input type="text" id="profiles-contact-input" class="new-image-gallery-input"
+                                       placeholder="Type to search contact..."
+                                       style="width: 100%;" autocomplete="off">
+                                <div id="profiles-contact-dropdown" style="display: none; position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; background: #fff; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000; margin-top: 2px;"></div>
+                            </div>
+                            <button type="button" id="profiles-create-btn" class="modal-btn modal-btn-primary" disabled>
+                                <i class="fas fa-sync-alt"></i> Create Profile
+                            </button>
+                        </div>
+                        <p style="margin: 0.5rem 0 0 0; font-size: 0.85em; color: #666;">Type to search contacts. Profile generation runs in the background and may take several minutes.</p>
+                    </div>
+                    <hr style="margin: 1rem 0; border: none; border-top: 1px solid #ddd;">
+                    <div>
+                        <label class="artefact-field-label">Contacts with complete profiles</label>
+                        <div id="profiles-loading" style="padding: 1em; text-align: center; color: #666;">
+                            <i class="fas fa-spinner fa-spin"></i> Loading...
+                        </div>
+                        <div id="profiles-table-container" style="display: none;">
+                            <table class="contacts-table" style="width: 100%; margin-top: 0.5rem;">
+                                <thead>
+                                    <tr style="background: #f0f4f8; border-bottom: 2px solid #bfc9da;">
+                                        <th style="padding: 8px; text-align: left;">Name</th>
+                                        <th style="padding: 8px; text-align: center; width: 140px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="profiles-table-body">
+                                </tbody>
+                            </table>
+                            <p id="profiles-empty-msg" style="display: none; padding: 1em; color: #666; text-align: center;">No complete profiles yet. Create one using the dropdown above.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Complete Profile View/Edit Modal -->
+        <div id="complete-profile-modal" class="modal" style="display: none;">
+            <div class="modal-content" style="max-width: 700px; max-height: 85vh;">
+                <div class="modal-header">
+                    <h3 id="complete-profile-modal-title">Complete Profile</h3>
+                    <button class="modal-close-btn" id="close-complete-profile-modal">&times;</button>
+                </div>
+                <div class="modal-body" style="overflow-y: auto; max-height: 70vh;">
+                    <div class="sd-detail-tab-bar" style="margin-bottom: 0.5rem;">
+                        <button type="button" class="sd-tab-btn complete-profile-tab active" data-tab="view">View</button>
+                        <button type="button" class="sd-tab-btn complete-profile-tab" data-tab="edit">Edit</button>
+                    </div>
+                    <div id="complete-profile-view-pane" class="complete-profile-pane" style="display: block;">
+                        <div id="complete-profile-content" class="rendered-content" style="white-space: pre-wrap; font-size: 0.95em;"></div>
+                    </div>
+                    <div id="complete-profile-edit-pane" class="complete-profile-pane" style="display: none;">
+                        <textarea id="complete-profile-edit-textarea" class="artefact-story-textarea" placeholder="Edit profile markdown..." style="min-height: 300px; width: 100%; font-family: monospace; font-size: 0.9em;"></textarea>
+                        <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem; gap: 0.5rem;">
+                            <div id="complete-profile-save-error" style="color: #dc3545; display: none;"></div>
+                            <button type="button" id="complete-profile-save-btn" class="modal-btn modal-btn-primary"><i class="fas fa-save"></i> Save</button>
                         </div>
                     </div>
                 </div>
@@ -2040,6 +2139,154 @@
             </div>
             <div class="sensitive-data-hints-body">
                 <ul id="sensitive-data-hints-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SENSITIVE DATA NO MASTER KEY MODAL ===== -->
+    <div id="sensitive-data-no-master-key-modal" class="modal" style="display: none;">
+        <div class="modal-content sensitive-data-hints-content" style="max-width: 400px;">
+            <div class="sensitive-data-hints-header">
+                <h3>No Master Key Set</h3>
+                <button class="modal-close-btn" id="close-sensitive-data-no-master-key">&times;</button>
+            </div>
+            <div class="sensitive-data-hints-body">
+                <p style="margin-bottom: 1rem;">A master key is required to use Sensitive &amp; Private Data. Create one by entering a password below. Keep this password safe—you will need it to unlock records.</p>
+                <label class="artefact-field-label">Master Password</label>
+                <div style="position: relative; margin-bottom: 1rem;">
+                    <input type="password" id="sensitive-data-master-key-password" class="new-image-gallery-input"
+                           placeholder="Enter a password for the master key"
+                           style="width:100%; padding-right: 2.5rem;"/>
+                    <button type="button" id="sensitive-data-master-key-password-toggle" class="modal-btn"
+                            style="position:absolute; right:4px; top:50%; transform:translateY(-50%); padding:0.25em 0.5em; background:transparent; border:none; cursor:pointer; color:#666;"
+                            title="Show password"><i class="fas fa-eye"></i></button>
+                </div>
+                <label class="artefact-field-label">Confirm Password</label>
+                <div style="position: relative; margin-bottom: 1rem;">
+                    <input type="password" id="sensitive-data-master-key-confirm" class="new-image-gallery-input"
+                           placeholder="Enter the password again"
+                           style="width:100%; padding-right: 2.5rem;"/>
+                    <button type="button" id="sensitive-data-master-key-confirm-toggle" class="modal-btn"
+                            style="position:absolute; right:4px; top:50%; transform:translateY(-50%); padding:0.25em 0.5em; background:transparent; border:none; cursor:pointer; color:#666;"
+                            title="Show password"><i class="fas fa-eye"></i></button>
+                </div>
+                <div id="sensitive-data-no-master-key-error" style="color: #dc3545; margin-bottom: 0.5rem; display: none;"></div>
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button id="sensitive-data-no-master-key-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+                    <button id="sensitive-data-create-master-key-btn" class="modal-btn modal-btn-primary">Create Master Key</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== CREATE NEW MASTER KEY MODAL (multi-step confirmation) ===== -->
+    <div id="create-new-master-key-modal" class="modal" style="display: none;">
+        <div class="modal-content sensitive-data-hints-content" style="max-width: 480px;">
+            <div class="sensitive-data-hints-header">
+                <h3 style="color: #dc3545;">Create New Master Key</h3>
+                <button class="modal-close-btn" id="close-create-new-master-key-modal">&times;</button>
+            </div>
+            <div class="sensitive-data-hints-body">
+                <!-- Step 1: Warning and confirmation -->
+                <div id="create-new-master-key-step1">
+                    <div style="background: rgba(220,53,69,0.15); border: 1px solid #dc3545; border-radius: 6px; padding: 1rem; margin-bottom: 1rem;">
+                        <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: #721c24;">This action cannot be undone.</p>
+                        <p style="margin: 0; color: #721c24; font-size: 0.95em;">
+                            Creating a new master key will <strong>delete all existing trusted keys</strong>. Any sensitive data encrypted with those keys will become <strong>permanently unrecoverable</strong>. Only the new master password will be able to access sensitive data going forward.
+                        </p>
+                    </div>
+                    <label style="display: flex; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.75rem; cursor: pointer;">
+                        <input type="checkbox" id="create-master-key-understand-keys" style="margin-top: 0.25rem; cursor: pointer;">
+                        <span>I understand that all existing trusted keys will be deleted</span>
+                    </label>
+                    <label style="display: flex; align-items: flex-start; gap: 0.5rem; margin-bottom: 1rem; cursor: pointer;">
+                        <input type="checkbox" id="create-master-key-understand-data" style="margin-top: 0.25rem; cursor: pointer;">
+                        <span>I understand that existing sensitive data may become permanently unrecoverable</span>
+                    </label>
+                    <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                        <button id="create-new-master-key-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+                        <button id="create-new-master-key-continue" class="modal-btn" style="background-color: #dc3545; color: white;" disabled>I Understand, Continue</button>
+                    </div>
+                </div>
+                <!-- Step 2: Password entry -->
+                <div id="create-new-master-key-step2" style="display: none;">
+                    <p style="margin-bottom: 1rem;">Enter the new master password. This will be the only key that can access sensitive data.</p>
+                    <label class="artefact-field-label">Master Password</label>
+                    <div style="position: relative; margin-bottom: 1rem;">
+                        <input type="password" id="create-new-master-key-password" class="new-image-gallery-input"
+                               placeholder="Enter new master password"
+                               style="width:100%; padding-right: 2.5rem;"/>
+                        <button type="button" id="create-new-master-key-password-toggle" class="modal-btn"
+                                style="position:absolute; right:4px; top:50%; transform:translateY(-50%); padding:0.25em 0.5em; background:transparent; border:none; cursor:pointer; color:#666;"
+                                title="Show password"><i class="fas fa-eye"></i></button>
+                    </div>
+                    <label class="artefact-field-label">Confirm Password</label>
+                    <div style="position: relative; margin-bottom: 1rem;">
+                        <input type="password" id="create-new-master-key-confirm" class="new-image-gallery-input"
+                               placeholder="Enter the password again"
+                               style="width:100%; padding-right: 2.5rem;"/>
+                        <button type="button" id="create-new-master-key-confirm-toggle" class="modal-btn"
+                                style="position:absolute; right:4px; top:50%; transform:translateY(-50%); padding:0.25em 0.5em; background:transparent; border:none; cursor:pointer; color:#666;"
+                                title="Show password"><i class="fas fa-eye"></i></button>
+                    </div>
+                    <div id="create-new-master-key-error" style="color: #dc3545; margin-bottom: 0.5rem; display: none;"></div>
+                    <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                        <button id="create-new-master-key-back" class="modal-btn modal-btn-secondary">Back</button>
+                        <button id="create-new-master-key-submit" class="modal-btn" style="background-color: #dc3545; color: white;"><i class="fas fa-key"></i> Create New Master Key</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== CREATE TRUSTED KEY MODAL ===== -->
+    <div id="create-trusted-key-modal" class="modal" style="display: none;">
+        <div class="modal-content sensitive-data-hints-content" style="max-width: 400px;">
+            <div class="sensitive-data-hints-header">
+                <h3>Create Trusted Key</h3>
+                <button class="modal-close-btn" id="close-create-trusted-key-modal">&times;</button>
+            </div>
+            <div class="sensitive-data-hints-body">
+                <p style="margin-bottom: 1rem;">Create a new trusted key for a user password. The user password will unlock Sensitive &amp; Private Data records. You need the master password to create keys.</p>
+                <label class="artefact-field-label">User Password</label>
+                <input type="password" id="create-trusted-key-user-password" class="new-image-gallery-input"
+                       placeholder="Password for the new trusted key"
+                       style="width:100%; margin-bottom: 1rem;"/>
+                <label class="artefact-field-label">Master Password</label>
+                <input type="password" id="create-trusted-key-master-password" class="new-image-gallery-input"
+                       placeholder="Master password"
+                       style="width:100%; margin-bottom: 1rem;"/>
+                <div id="create-trusted-key-error" style="color: #dc3545; margin-bottom: 0.5rem; display: none;"></div>
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button id="create-trusted-key-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+                    <button id="create-trusted-key-submit" class="modal-btn modal-btn-primary"><i class="fas fa-plus"></i> Create</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== DELETE TRUSTED KEY MODAL ===== -->
+    <div id="delete-trusted-key-modal" class="modal" style="display: none;">
+        <div class="modal-content sensitive-data-hints-content" style="max-width: 400px;">
+            <div class="sensitive-data-hints-header">
+                <h3>Delete Trusted Key</h3>
+                <button class="modal-close-btn" id="close-delete-trusted-key-modal">&times;</button>
+            </div>
+            <div class="sensitive-data-hints-body">
+                <p style="margin-bottom: 1rem;">Remove a trusted key. Enter the user password whose key you want to delete, and the master password. The master key cannot be deleted.</p>
+                <label class="artefact-field-label">User Password (key to delete)</label>
+                <input type="password" id="delete-trusted-key-user-password" class="new-image-gallery-input"
+                       placeholder="Password of the key to delete"
+                       style="width:100%; margin-bottom: 1rem;"/>
+                <label class="artefact-field-label">Master Password</label>
+                <input type="password" id="delete-trusted-key-master-password" class="new-image-gallery-input"
+                       placeholder="Master password"
+                       style="width:100%; margin-bottom: 1rem;"/>
+                <div id="delete-trusted-key-error" style="color: #dc3545; margin-bottom: 0.5rem; display: none;"></div>
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button id="delete-trusted-key-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+                    <button id="delete-trusted-key-submit" class="modal-btn" style="background-color: #dc3545; color: white;"><i class="fas fa-minus"></i> Delete</button>
+                </div>
             </div>
         </div>
     </div>

@@ -42,6 +42,11 @@ class MasterKeyRequest(BaseModel):
     password: str
 
 
+class TrustedKeyRequest(BaseModel):
+    user_password: str
+    master_password: str
+
+
 # ---------------------------------------------------------------------------
 # Routes — count first to avoid FastAPI matching "count" as an {id}
 # ---------------------------------------------------------------------------
@@ -72,6 +77,52 @@ async def generate_master_key(request: MasterKeyRequest):
         raise HTTPException(status_code=500, detail=f"Error generating master key: {str(e)}")
 
 
+@router.post("/sensitive-data/trusted-key", status_code=201)
+async def create_trusted_key(request: TrustedKeyRequest):
+    """Create a trusted key for a user password via the datahandler external command."""
+    if not _has_password(request.user_password):
+        raise HTTPException(status_code=403, detail="User password is required")
+    if not _has_password(request.master_password):
+        raise HTTPException(status_code=403, detail="Master password is required")
+    try:
+        result = subprocess.run(
+            [str(_DATAHANDLER), "generatekey", request.user_password, request.master_password],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail=result.stderr.strip() or "Error creating trusted key")
+        return {"message": result.stdout.strip()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error creating trusted key: {str(e)}")
+
+
+@router.delete("/sensitive-data/trusted-key")
+async def delete_trusted_key(request: TrustedKeyRequest):
+    """Delete a trusted key via the datahandler external command. Master key cannot be deleted."""
+    if not _has_password(request.user_password):
+        raise HTTPException(status_code=403, detail="User password is required")
+    if not _has_password(request.master_password):
+        raise HTTPException(status_code=403, detail="Master password is required")
+    try:
+        result = subprocess.run(
+            [str(_DATAHANDLER), "deletetrustedkey", request.user_password, request.master_password],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail=result.stderr.strip() or "Error deleting trusted key")
+        return {"message": result.stdout.strip()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error deleting trusted key: {str(e)}")
+
+
 @router.get("/sensitive-data/count")
 async def count_sensitive_data():
     """Return the total number of sensitive data records."""
@@ -89,6 +140,25 @@ async def count_sensitive_data():
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error counting records: {str(e)}")
+
+
+@router.get("/sensitive-data/key-count")
+async def count_trusted_keys():
+    """Return the total number of trusted keys."""
+    try:
+        result = subprocess.run(
+            [str(_DATAHANDLER), "getkeycount"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail=f"Error counting keys: {result.stderr.strip()}")
+        return json.loads(result.stdout)
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error counting keys: {str(e)}")
 
 
 @router.get("/sensitive-data")

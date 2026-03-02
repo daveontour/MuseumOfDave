@@ -1304,6 +1304,13 @@ const App = (() => {
             });
         }
 
+        const profilesSidebarBtn = document.getElementById('profiles-sidebar-btn');
+        if (profilesSidebarBtn) {
+            profilesSidebarBtn.addEventListener('click', () => {
+                Modals.Profiles.open();
+            });
+        }
+
         const relationshipsBtn = document.getElementById('relationships-btn');
         if (relationshipsBtn) {
             relationshipsBtn.addEventListener('click', () => {

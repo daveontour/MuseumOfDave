@@ -78,6 +78,17 @@ class ContactsListResponse(BaseModel):
     total: int
 
 
+class ContactNameId(BaseModel):
+    """Minimal contact model: id and name only."""
+    id: int
+    name: str
+
+
+class ContactsNamesListResponse(BaseModel):
+    """Response model for light contact list (id and name only)."""
+    contacts: List[ContactNameId]
+
+
 class RelationshipGraphNode(BaseModel):
     """Node for the relationship graph."""
     id: str
@@ -328,6 +339,39 @@ async def get_relationship_strength(
 ALLOWED_CONTACT_ORDER_COLUMNS = frozenset(
     {"id", "name", "email", "numemails", "numsms", "numwhatsapp", "numimessages", "numinstagram", "numfacebook"}
 )
+
+
+@router.get("/contacts/names", response_model=ContactsNamesListResponse)
+async def get_contacts_names():
+    """Light endpoint: return all contacts with id and name only. No filtering."""
+    session = db.get_session()
+    try:
+        query = session.query(Contacts.id, Contacts.name)
+        query = query.filter(
+                or_(
+                    Contacts.name.is_(None),
+                    (Contacts.name == ''),
+                    Contacts.name.op('!~')('^[0-9\\s+]+$'),
+                )
+            )
+        msg_sum = (
+                func.coalesce(Contacts.numemails, 0)
+                + func.coalesce(Contacts.numfacebook, 0)
+                + func.coalesce(Contacts.numwhatsapp, 0)
+                + func.coalesce(Contacts.numsms, 0)
+                + func.coalesce(Contacts.numimessages, 0)
+                + func.coalesce(Contacts.numinstagram, 0)
+            )
+        query = query.filter(msg_sum > 0)
+        rows = query.order_by(Contacts.name).all()
+        # rows = session.query(Contacts.id, Contacts.name).order_by(Contacts.name).all()
+        return ContactsNamesListResponse(
+            contacts=[ContactNameId(id=r[0], name=r[1] or "") for r in rows]
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving contacts: {str(e)}")
+    finally:
+        session.close()
 
 
 @router.get("/contacts", response_model=ContactsListResponse)

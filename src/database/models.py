@@ -518,6 +518,17 @@ class SensitiveData(Base):
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
+class CompleteProfile(Base):
+    """Complete Profile model."""
+
+    __tablename__ = "complete_profiles"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(500), nullable=False)
+    profile = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
 class TrustedKey(Base):
     """Sensitive and private data records stored encoded."""
 

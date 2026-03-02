@@ -12,7 +12,7 @@ import google.genai as genai
 from google.genai import types
 
 from ..database import Database
-from ..database.models import ReferenceDocument, IMessage, Email, GeminiFile, ChatConversation, ChatTurn
+from ..database.models import ReferenceDocument, IMessage, Email, GeminiFile, ChatConversation, ChatTurn, CompleteProfile
 from sqlalchemy import or_
 from pympler import asizeof
 
@@ -1052,6 +1052,29 @@ class ChatService:
             print(f"Interim summary: {interimSummary}")
 
         print(f"Final interim summary: {interimSummary}")
+
+        # Insert or update the complete_profiles table
+        if self.db:
+            session = self.db.get_session()
+            try:
+                existing = session.query(CompleteProfile).filter(CompleteProfile.name == name).first()
+                if existing:
+                    existing.profile = interimSummary
+                    session.commit()
+                    print(f"[get_complete_profile_by_name] Updated complete profile for '{name}'")
+                else:
+                    new_profile = CompleteProfile(name=name, profile=interimSummary)
+                    session.add(new_profile)
+                    session.commit()
+                    print(f"[get_complete_profile_by_name] Inserted complete profile for '{name}'")
+            except Exception as e:
+                session.rollback()
+                print(f"[get_complete_profile_by_name] Error saving to complete_profiles: {e}")
+                raise
+            finally:
+                session.close()
+        else:
+            print("[get_complete_profile_by_name] No database configured, skipping save to complete_profiles")
            
     def _get_tools_config(self) -> List[Any]:
         """Get the tools configuration for Gemini function calling.

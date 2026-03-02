@@ -1516,6 +1516,294 @@ Modals.SubjectConfiguration = (() => {
 })();
 
 
+Modals.ManageKeys = (() => {
+    function _showStatus(msg, isError = false) {
+        const el = document.getElementById('manage-keys-status');
+        if (!el) return;
+        el.textContent = msg;
+        el.style.display = 'block';
+        el.style.color = isError ? '#dc3545' : '#28a745';
+        el.style.backgroundColor = isError ? 'rgba(220,53,69,0.1)' : 'rgba(40,167,69,0.1)';
+    }
+
+    function _closeCreateModal() {
+        const modal = document.getElementById('create-trusted-key-modal');
+        if (modal) modal.style.display = 'none';
+        const userPw = document.getElementById('create-trusted-key-user-password');
+        const masterPw = document.getElementById('create-trusted-key-master-password');
+        const err = document.getElementById('create-trusted-key-error');
+        if (userPw) userPw.value = '';
+        if (masterPw) masterPw.value = '';
+        if (err) { err.textContent = ''; err.style.display = 'none'; }
+    }
+
+    function _closeDeleteModal() {
+        const modal = document.getElementById('delete-trusted-key-modal');
+        if (modal) modal.style.display = 'none';
+        const userPw = document.getElementById('delete-trusted-key-user-password');
+        const masterPw = document.getElementById('delete-trusted-key-master-password');
+        const err = document.getElementById('delete-trusted-key-error');
+        if (userPw) userPw.value = '';
+        if (masterPw) masterPw.value = '';
+        if (err) { err.textContent = ''; err.style.display = 'none'; }
+    }
+
+    function _openCreateNewMasterKeyModal() {
+        const modal = document.getElementById('create-new-master-key-modal');
+        const step1 = document.getElementById('create-new-master-key-step1');
+        const step2 = document.getElementById('create-new-master-key-step2');
+        const cb1 = document.getElementById('create-master-key-understand-keys');
+        const cb2 = document.getElementById('create-master-key-understand-data');
+        const continueBtn = document.getElementById('create-new-master-key-continue');
+        const pwInput = document.getElementById('create-new-master-key-password');
+        const confirmInput = document.getElementById('create-new-master-key-confirm');
+        const errEl = document.getElementById('create-new-master-key-error');
+        if (modal) modal.style.display = 'flex';
+        if (step1) step1.style.display = 'block';
+        if (step2) step2.style.display = 'none';
+        if (cb1) cb1.checked = false;
+        if (cb2) cb2.checked = false;
+        if (continueBtn) continueBtn.disabled = true;
+        if (pwInput) pwInput.value = '';
+        if (confirmInput) confirmInput.value = '';
+        if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+    }
+
+    function _closeCreateNewMasterKeyModal() {
+        const modal = document.getElementById('create-new-master-key-modal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function _createNewMasterKeyToStep2() {
+        const step1 = document.getElementById('create-new-master-key-step1');
+        const step2 = document.getElementById('create-new-master-key-step2');
+        if (step1) step1.style.display = 'none';
+        if (step2) step2.style.display = 'block';
+    }
+
+    function _createNewMasterKeyToStep1() {
+        const step1 = document.getElementById('create-new-master-key-step1');
+        const step2 = document.getElementById('create-new-master-key-step2');
+        if (step1) step1.style.display = 'block';
+        if (step2) step2.style.display = 'none';
+        const errEl = document.getElementById('create-new-master-key-error');
+        if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+    }
+
+    async function _submitCreateNewMasterKey() {
+        const pwInput = document.getElementById('create-new-master-key-password');
+        const confirmInput = document.getElementById('create-new-master-key-confirm');
+        const errEl = document.getElementById('create-new-master-key-error');
+        const password = pwInput ? pwInput.value.trim() : '';
+        const confirm = confirmInput ? confirmInput.value.trim() : '';
+        if (!password) {
+            if (errEl) { errEl.textContent = 'Please enter a password.'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (password !== confirm) {
+            if (errEl) { errEl.textContent = 'Passwords do not match.'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+        try {
+            const resp = await fetch('/sensitive-data/master-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password })
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                throw new Error(data.detail || `HTTP ${resp.status}`);
+            }
+            _closeCreateNewMasterKeyModal();
+            _showStatus(data.message || 'New master key created successfully.');
+        } catch (e) {
+            console.error('[ManageKeys] create new master key error:', e);
+            if (errEl) { errEl.textContent = e.message || 'Failed to create master key.'; errEl.style.display = 'block'; }
+        }
+    }
+
+    async function _createTrustedKey() {
+        const userPw = document.getElementById('create-trusted-key-user-password');
+        const masterPw = document.getElementById('create-trusted-key-master-password');
+        const errEl = document.getElementById('create-trusted-key-error');
+        const userPassword = userPw ? userPw.value.trim() : '';
+        const masterPassword = masterPw ? masterPw.value.trim() : '';
+        if (!userPassword) {
+            if (errEl) { errEl.textContent = 'User password is required.'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (!masterPassword) {
+            if (errEl) { errEl.textContent = 'Master password is required.'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+        try {
+            const resp = await fetch('/sensitive-data/trusted-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_password: userPassword, master_password: masterPassword })
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                throw new Error(data.detail || `HTTP ${resp.status}`);
+            }
+            _closeCreateModal();
+            _showStatus(data.message || 'Trusted key created successfully.');
+        } catch (e) {
+            console.error('[ManageKeys] create error:', e);
+            if (errEl) { errEl.textContent = e.message || 'Failed to create trusted key.'; errEl.style.display = 'block'; }
+        }
+    }
+
+    async function _deleteTrustedKey() {
+        const userPw = document.getElementById('delete-trusted-key-user-password');
+        const masterPw = document.getElementById('delete-trusted-key-master-password');
+        const errEl = document.getElementById('delete-trusted-key-error');
+        const userPassword = userPw ? userPw.value.trim() : '';
+        const masterPassword = masterPw ? masterPw.value.trim() : '';
+        if (!userPassword) {
+            if (errEl) { errEl.textContent = 'User password is required.'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (!masterPassword) {
+            if (errEl) { errEl.textContent = 'Master password is required.'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+        try {
+            const resp = await fetch('/sensitive-data/trusted-key', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_password: userPassword, master_password: masterPassword })
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                throw new Error(data.detail || `HTTP ${resp.status}`);
+            }
+            _closeDeleteModal();
+            _showStatus(data.message || 'Trusted key deleted successfully.');
+        } catch (e) {
+            console.error('[ManageKeys] delete error:', e);
+            if (errEl) { errEl.textContent = e.message || 'Failed to delete trusted key.'; errEl.style.display = 'block'; }
+        }
+    }
+
+    function init() {
+        const createBtn = document.getElementById('create-trusted-key-btn');
+        if (createBtn) createBtn.addEventListener('click', () => {
+            const modal = document.getElementById('create-trusted-key-modal');
+            if (modal) modal.style.display = 'flex';
+        });
+
+        const deleteBtn = document.getElementById('delete-trusted-key-btn');
+        if (deleteBtn) deleteBtn.addEventListener('click', () => {
+            const modal = document.getElementById('delete-trusted-key-modal');
+            if (modal) modal.style.display = 'flex';
+        });
+
+        const closeCreate = document.getElementById('close-create-trusted-key-modal');
+        if (closeCreate) closeCreate.addEventListener('click', _closeCreateModal);
+
+        const closeDelete = document.getElementById('close-delete-trusted-key-modal');
+        if (closeDelete) closeDelete.addEventListener('click', _closeDeleteModal);
+
+        const cancelCreate = document.getElementById('create-trusted-key-cancel');
+        if (cancelCreate) cancelCreate.addEventListener('click', _closeCreateModal);
+
+        const cancelDelete = document.getElementById('delete-trusted-key-cancel');
+        if (cancelDelete) cancelDelete.addEventListener('click', _closeDeleteModal);
+
+        const submitCreate = document.getElementById('create-trusted-key-submit');
+        if (submitCreate) submitCreate.addEventListener('click', _createTrustedKey);
+
+        const submitDelete = document.getElementById('delete-trusted-key-submit');
+        if (submitDelete) submitDelete.addEventListener('click', _deleteTrustedKey);
+
+        const createModal = document.getElementById('create-trusted-key-modal');
+        if (createModal) {
+            createModal.addEventListener('click', e => {
+                if (e.target === createModal) _closeCreateModal();
+            });
+        }
+
+        const deleteModal = document.getElementById('delete-trusted-key-modal');
+        if (deleteModal) {
+            deleteModal.addEventListener('click', e => {
+                if (e.target === deleteModal) _closeDeleteModal();
+            });
+        }
+
+        // Create New Master Key
+        const createNewMasterKeyBtn = document.getElementById('create-new-master-key-btn');
+        if (createNewMasterKeyBtn) createNewMasterKeyBtn.addEventListener('click', _openCreateNewMasterKeyModal);
+
+        const closeCreateNewMasterKeyBtn = document.getElementById('close-create-new-master-key-modal');
+        if (closeCreateNewMasterKeyBtn) closeCreateNewMasterKeyBtn.addEventListener('click', _closeCreateNewMasterKeyModal);
+
+        const cancelCreateNewMasterKeyBtn = document.getElementById('create-new-master-key-cancel');
+        if (cancelCreateNewMasterKeyBtn) cancelCreateNewMasterKeyBtn.addEventListener('click', _closeCreateNewMasterKeyModal);
+
+        const cbUnderstandKeys = document.getElementById('create-master-key-understand-keys');
+        const cbUnderstandData = document.getElementById('create-master-key-understand-data');
+        const continueNewMasterKeyBtn = document.getElementById('create-new-master-key-continue');
+        function _updateContinueEnabled() {
+            if (continueNewMasterKeyBtn) {
+                continueNewMasterKeyBtn.disabled = !(cbUnderstandKeys && cbUnderstandKeys.checked && cbUnderstandData && cbUnderstandData.checked);
+            }
+        }
+        if (cbUnderstandKeys) cbUnderstandKeys.addEventListener('change', _updateContinueEnabled);
+        if (cbUnderstandData) cbUnderstandData.addEventListener('change', _updateContinueEnabled);
+
+        if (continueNewMasterKeyBtn) continueNewMasterKeyBtn.addEventListener('click', _createNewMasterKeyToStep2);
+
+        const backNewMasterKeyBtn = document.getElementById('create-new-master-key-back');
+        if (backNewMasterKeyBtn) backNewMasterKeyBtn.addEventListener('click', _createNewMasterKeyToStep1);
+
+        const submitNewMasterKeyBtn = document.getElementById('create-new-master-key-submit');
+        if (submitNewMasterKeyBtn) submitNewMasterKeyBtn.addEventListener('click', _submitCreateNewMasterKey);
+
+        const createNewMasterKeyModal = document.getElementById('create-new-master-key-modal');
+        if (createNewMasterKeyModal) {
+            createNewMasterKeyModal.addEventListener('click', e => {
+                if (e.target === createNewMasterKeyModal) _closeCreateNewMasterKeyModal();
+            });
+        }
+
+        const pwToggleNew = document.getElementById('create-new-master-key-password-toggle');
+        if (pwToggleNew) {
+            pwToggleNew.addEventListener('click', () => {
+                const inp = document.getElementById('create-new-master-key-password');
+                if (!inp) return;
+                const isPassword = inp.type === 'password';
+                inp.type = isPassword ? 'text' : 'password';
+                pwToggleNew.innerHTML = isPassword ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>';
+                pwToggleNew.title = isPassword ? 'Hide password' : 'Show password';
+            });
+        }
+        const confirmToggleNew = document.getElementById('create-new-master-key-confirm-toggle');
+        if (confirmToggleNew) {
+            confirmToggleNew.addEventListener('click', () => {
+                const inp = document.getElementById('create-new-master-key-confirm');
+                if (!inp) return;
+                const isPassword = inp.type === 'password';
+                inp.type = isPassword ? 'text' : 'password';
+                confirmToggleNew.innerHTML = isPassword ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>';
+                confirmToggleNew.title = isPassword ? 'Hide password' : 'Show password';
+            });
+        }
+
+        const pwInputNew = document.getElementById('create-new-master-key-password');
+        const confirmInputNew = document.getElementById('create-new-master-key-confirm');
+        const enterHandler = e => { if (e.key === 'Enter') _submitCreateNewMasterKey(); };
+        if (pwInputNew) pwInputNew.addEventListener('keydown', enterHandler);
+        if (confirmInputNew) confirmInputNew.addEventListener('keydown', enterHandler);
+    }
+
+    return { init };
+})();
+
+
 Modals.initAll = () => {
         Modals.Suggestions.init();
         Modals.FBAlbums.init();
@@ -1540,6 +1828,8 @@ Modals.initAll = () => {
         Modals.SubjectConfiguration.init();
         Modals.Artefacts.init();
         Modals.SensitiveData.init();
+        Modals.ManageKeys.init();
+        Modals.Profiles.init();
 };
 
 Modals.closeAll = () => {
@@ -1587,6 +1877,10 @@ Modals.closeAll = () => {
         try {
             if (Modals.Contacts && Modals.Contacts.close) Modals.Contacts.close();
         } catch (e) { console.debug('Error closing Contacts modal:', e); }
+        
+        try {
+            if (Modals.Profiles && Modals.Profiles.close) Modals.Profiles.close();
+        } catch (e) { console.debug('Error closing Profiles modal:', e); }
         
         try {
             if (Modals.Relationships && Modals.Relationships.close) Modals.Relationships.close();

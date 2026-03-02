@@ -29,6 +29,7 @@ Modals.Contacts = (() => {
         const selectedIds = new Set();
         let sortColumn = 'name';
         let sortOrder = 'asc';
+        let profileNamesSet = new Set();
 
         function getPageSizeFromInputs() {
             const topVal = DOM.contactsPageSize ? parseInt(DOM.contactsPageSize.value, 10) : NaN;
@@ -110,12 +111,22 @@ Modals.Contacts = (() => {
                 if (emailContainsAt) url.searchParams.set('email_contains_at', 'true');
                 if (excludePhoneNumbers) url.searchParams.set('exclude_phone_numbers', 'true');
                 if (searchTerm) url.searchParams.set('search', searchTerm);
-                const response = await fetch(url.toString());
-                if (!response.ok) throw new Error('Failed to load contacts');
-                const data = await response.json();
+                const [contactsResponse, profileNamesResponse] = await Promise.all([
+                    fetch(url.toString()),
+                    fetch('/chat/complete-profile/names')
+                ]);
+                if (!contactsResponse.ok) throw new Error('Failed to load contacts');
+                const data = await contactsResponse.json();
                 const contacts = data.contacts || [];
                 totalContacts = data.total || 0;
                 currentPage = page;
+
+                if (profileNamesResponse.ok) {
+                    const profileData = await profileNamesResponse.json();
+                    profileNamesSet = new Set((profileData.names || []).map(n => String(n).trim()));
+                } else {
+                    profileNamesSet = new Set();
+                }
 
                 DOM.contactsTableBody.innerHTML = '';
                 contacts.forEach(c => {
@@ -127,6 +138,10 @@ Modals.Contacts = (() => {
                     const cb = canSelect ? `<input type="checkbox" class="contacts-row-cb" data-contact-id="${c.id}">` : '';
                     const deleteBtn = canSelect ? `<button type="button" class="contacts-delete-btn modal-btn modal-btn-secondary" data-contact-id="${c.id}" title="Delete contact" style="padding: 4px 8px; font-size: 0.85em;"><i class="fas fa-trash-alt"></i></button>` : '';
                     const contactName = c.name || '';
+                    const hasProfile = contactName && profileNamesSet.has(contactName);
+                    const runProfileBtn = contactName ? `<button type="button" class="contacts-run-profile-btn modal-btn modal-btn-secondary" data-contact-name="${escapeHtml(contactName)}" title="Generate complete profile" style="padding: 4px 8px; font-size: 0.85em;"><i class="fas fa-sync-alt"></i></button>` : '';
+                    const viewProfileBtn = hasProfile ? `<button type="button" class="contacts-view-profile-btn modal-btn modal-btn-primary" data-contact-name="${escapeHtml(contactName)}" title="View complete profile" style="padding: 4px 8px; font-size: 0.85em;"><i class="fas fa-id-card"></i></button>` : '';
+                    const actionBtns = [viewProfileBtn, runProfileBtn, deleteBtn].filter(Boolean).join(' ');
                     row.innerHTML = `
                         <td style="padding: 8px; text-align: center;">${cb}</td>
                         <td style="padding: 8px;width: 300px;">${escapeHtml(contactName)}</td>
@@ -137,7 +152,7 @@ Modals.Contacts = (() => {
                         <td style="padding: 8px; text-align: center;width: 100px;">${renderCountCell(c.numimessages, contactName)}</td>
                         <td style="padding: 8px; text-align: center;width: 100px;">${renderCountCell(c.numinstagram, contactName)}</td>
                         <td style="padding: 8px; text-align: center;width: 100px;">${renderCountCell(c.numfacebook, contactName)}</td>
-                        <td style="padding: 8px; text-align: center;width: 80px;">${deleteBtn}</td>
+                        <td style="padding: 8px; text-align: center;width: 120px;">${actionBtns}</td>
                     `;
                     DOM.contactsTableBody.appendChild(row);
                 });
@@ -154,6 +169,12 @@ Modals.Contacts = (() => {
 
                 DOM.contactsTableBody.querySelectorAll('.contacts-delete-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => handleDeleteSingle(e));
+                });
+                DOM.contactsTableBody.querySelectorAll('.contacts-run-profile-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => handleRunCompleteProfile(e));
+                });
+                DOM.contactsTableBody.querySelectorAll('.contacts-view-profile-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => handleViewCompleteProfile(e));
                 });
 
                 if (DOM.contactsSelectAll) {
@@ -263,6 +284,134 @@ Modals.Contacts = (() => {
                 }
             }
         }
+
+        async function handleRunCompleteProfile(e) {
+            const btn = e.target.closest('.contacts-run-profile-btn');
+            if (!btn) return;
+            const name = btn.dataset.contactName;
+            if (!name) return;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            try {
+                const resp = await fetch('/chat/complete-profile', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ full_name: name })
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || `HTTP ${resp.status}`);
+                }
+                const data = await resp.json();
+                alert(data.message || 'Complete profile generation started. This runs in the background and may take several minutes.');
+            } catch (err) {
+                console.error('Run complete profile error:', err);
+                alert('Error: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+            }
+        }
+
+        let currentProfileName = '';
+        let currentProfileText = '';
+
+        function switchCompleteProfileTab(tab) {
+            const viewPane = document.getElementById('complete-profile-view-pane');
+            const editPane = document.getElementById('complete-profile-edit-pane');
+            document.querySelectorAll('.complete-profile-tab').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tab);
+            });
+            if (tab === 'view') {
+                if (viewPane) viewPane.style.display = 'block';
+                if (editPane) editPane.style.display = 'none';
+                const contentEl = document.getElementById('complete-profile-content');
+                if (contentEl && typeof marked !== 'undefined' && currentProfileText) {
+                    contentEl.innerHTML = marked.parse(currentProfileText);
+                } else if (contentEl) {
+                    contentEl.textContent = currentProfileText || '(No profile content)';
+                }
+            } else {
+                if (viewPane) viewPane.style.display = 'none';
+                if (editPane) editPane.style.display = 'block';
+                const textarea = document.getElementById('complete-profile-edit-textarea');
+                if (textarea) textarea.value = currentProfileText;
+            }
+        }
+
+        async function handleSaveCompleteProfile() {
+            const name = currentProfileName;
+            const textarea = document.getElementById('complete-profile-edit-textarea');
+            const errEl = document.getElementById('complete-profile-save-error');
+            if (!name) return;
+            const profileText = textarea ? textarea.value : '';
+            if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+            try {
+                const resp = await fetch('/chat/complete-profile', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, profile: profileText })
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || `HTTP ${resp.status}`);
+                }
+                currentProfileText = profileText;
+                switchCompleteProfileTab('view');
+            } catch (err) {
+                console.error('Save complete profile error:', err);
+                if (errEl) { errEl.textContent = err.message; errEl.style.display = 'block'; }
+            }
+        }
+
+        async function _openProfileByName(name, silentOn404 = false) {
+            if (!name) return false;
+            try {
+                const resp = await fetch('/chat/complete-profile?name=' + encodeURIComponent(name));
+                if (!resp.ok) {
+                    if (resp.status === 404 && silentOn404) return false;
+                    if (resp.status === 404) {
+                        alert('No complete profile found for this contact. Generate one first.');
+                        return false;
+                    }
+                    throw new Error('Failed to load profile');
+                }
+                const data = await resp.json();
+                currentProfileName = data.name || name;
+                currentProfileText = data.profile || '';
+                const modal = document.getElementById('complete-profile-modal');
+                const titleEl = document.getElementById('complete-profile-modal-title');
+                const contentEl = document.getElementById('complete-profile-content');
+                if (titleEl) titleEl.textContent = 'Complete Profile: ' + currentProfileName;
+                if (contentEl) {
+                    if (typeof marked !== 'undefined' && currentProfileText) {
+                        contentEl.innerHTML = marked.parse(currentProfileText);
+                    } else {
+                        contentEl.textContent = currentProfileText || '(No profile content)';
+                    }
+                }
+                const textarea = document.getElementById('complete-profile-edit-textarea');
+                if (textarea) textarea.value = currentProfileText;
+                switchCompleteProfileTab('view');
+                if (modal) {
+                    modal.style.display = 'flex';
+                    Modals._openModal(modal);
+                }
+                return true;
+            } catch (err) {
+                console.error('View complete profile error:', err);
+                if (!silentOn404) alert('Error: ' + err.message);
+                return false;
+            }
+        }
+
+        async function handleViewCompleteProfile(e) {
+            const btn = e.target.closest('.contacts-view-profile-btn');
+            if (!btn) return;
+            const name = btn.dataset.contactName;
+            if (name) await _openProfileByName(name);
+        }
+
         function open() {
             selectedIds.clear();
             Modals._openModal(DOM.contactsModal);
@@ -339,7 +488,239 @@ Modals.Contacts = (() => {
                 DOM.contactsSearch.addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
                 DOM.contactsSearch.addEventListener('blur', runSearch);
             }
+            const closeCompleteProfileBtn = document.getElementById('close-complete-profile-modal');
+            if (closeCompleteProfileBtn) {
+                closeCompleteProfileBtn.addEventListener('click', () => {
+                    const m = document.getElementById('complete-profile-modal');
+                    if (m) Modals._closeModal(m);
+                });
+            }
+            const completeProfileModal = document.getElementById('complete-profile-modal');
+            if (completeProfileModal) {
+                completeProfileModal.addEventListener('click', (e) => {
+                    if (e.target === completeProfileModal) Modals._closeModal(completeProfileModal);
+                });
+            }
+            document.querySelectorAll('.complete-profile-tab').forEach(btn => {
+                btn.addEventListener('click', () => switchCompleteProfileTab(btn.dataset.tab));
+            });
+            const saveProfileBtn = document.getElementById('complete-profile-save-btn');
+            if (saveProfileBtn) saveProfileBtn.addEventListener('click', handleSaveCompleteProfile);
         }
+        return { init, open, close, openProfileByName: (name) => _openProfileByName(name) };
+})();
+
+
+Modals.Profiles = (() => {
+        const modal = () => document.getElementById('profiles-modal');
+        const contactInput = () => document.getElementById('profiles-contact-input');
+        const contactDropdown = () => document.getElementById('profiles-contact-dropdown');
+        const createBtn = () => document.getElementById('profiles-create-btn');
+        let allContactNames = [];
+        const loadingEl = () => document.getElementById('profiles-loading');
+        const tableContainer = () => document.getElementById('profiles-table-container');
+        const tableBody = () => document.getElementById('profiles-table-body');
+        const emptyMsg = () => document.getElementById('profiles-empty-msg');
+
+        function escapeHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        function showContactDropdown(query) {
+            const dropdown = contactDropdown();
+            const input = contactInput();
+            if (!dropdown || !input) return;
+            const q = (query || input.value || '').trim().toLowerCase();
+            const matches = q
+                ? allContactNames.filter(n => n.toLowerCase().includes(q))
+                : allContactNames;
+            if (matches.length === 0) {
+                dropdown.style.display = 'none';
+                return;
+            }
+            dropdown.innerHTML = matches.map(n =>
+                `<div class="profiles-contact-option" data-name="${escapeHtml(n)}" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;">${escapeHtml(n)}</div>`
+            ).join('');
+            dropdown.style.display = 'block';
+            dropdown.querySelectorAll('.profiles-contact-option').forEach(opt => {
+                opt.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const name = opt.dataset.name;
+                    if (input) input.value = name;
+                    dropdown.style.display = 'none';
+                    updateCreateBtnState();
+                });
+            });
+        }
+
+        function hideContactDropdown() {
+            const dropdown = contactDropdown();
+            if (dropdown) dropdown.style.display = 'none';
+        }
+
+        async function loadContactNames() {
+            const input = contactInput();
+            if (!input) return;
+            try {
+                const resp = await fetch('/contacts/names');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const contacts = data.contacts || [];
+                allContactNames = [...new Set(contacts.map(c => c.name).filter(n => n && n.trim()))].sort();
+                input.value = '';
+                updateCreateBtnState();
+            } catch (err) {
+                console.error('Profiles load contacts error:', err);
+            }
+        }
+
+        function updateCreateBtnState() {
+            const input = contactInput();
+            const btn = createBtn();
+            if (btn) btn.disabled = !input || !(input.value || '').trim();
+        }
+
+        async function loadProfileNames() {
+            const tbody = tableBody();
+            const loading = loadingEl();
+            const container = tableContainer();
+            const empty = emptyMsg();
+            if (!tbody) return;
+            if (loading) loading.style.display = 'block';
+            if (container) container.style.display = 'none';
+            if (empty) empty.style.display = 'none';
+            try {
+                const resp = await fetch('/chat/complete-profile/names');
+                if (!resp.ok) throw new Error('Failed to load');
+                const data = await resp.json();
+                const names = (data.names || []).filter(n => n && n.trim()).sort();
+                tbody.innerHTML = '';
+                names.forEach(name => {
+                    const tr = document.createElement('tr');
+                    tr.style.cursor = 'pointer';
+                    tr.style.borderBottom = '1px solid #eee';
+                    tr.dataset.profileName = name;
+                    tr.innerHTML = `
+                        <td style="padding: 8px;">${String(name).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
+                        <td style="padding: 8px; text-align: center;">
+                            <button type="button" class="modal-btn modal-btn-primary profiles-view-btn" title="View and edit" style="padding: 4px 8px; font-size: 0.85em; margin-right: 4px;"><i class="fas fa-id-card"></i></button>
+                            <button type="button" class="modal-btn modal-btn-secondary profiles-delete-btn" title="Delete profile" style="padding: 4px 8px; font-size: 0.85em; background-color: #dc3545; color: white;"><i class="fas fa-trash-alt"></i></button>
+                        </td>
+                    `;
+                    tr.addEventListener('click', (e) => {
+                        if (e.target.closest('.profiles-delete-btn')) return;
+                        e.stopPropagation();
+                        Modals.Contacts.openProfileByName(name);
+                    });
+                    const delBtn = tr.querySelector('.profiles-delete-btn');
+                    if (delBtn) {
+                        delBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            handleDeleteProfile(name);
+                        });
+                    }
+                    tbody.appendChild(tr);
+                });
+                if (loading) loading.style.display = 'none';
+                if (container) container.style.display = 'block';
+                if (empty) empty.style.display = names.length === 0 ? 'block' : 'none';
+            } catch (err) {
+                console.error('Profiles load error:', err);
+                if (loading) { loading.innerHTML = '<span style="color: #c00;">Error loading profiles</span>'; loading.style.display = 'block'; }
+            }
+        }
+
+        async function handleCreateProfile() {
+            const input = contactInput();
+            const btn = createBtn();
+            if (!input || !btn) return;
+            const name = (input.value || '').trim();
+            if (!name) return;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+            try {
+                const resp = await fetch('/chat/complete-profile', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ full_name: name })
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || `HTTP ${resp.status}`);
+                }
+                const data = await resp.json();
+                alert(data.message || 'Profile generation started. This runs in the background.');
+                await loadProfileNames();
+            } catch (err) {
+                console.error('Create profile error:', err);
+                alert('Error: ' + err.message);
+            } finally {
+                updateCreateBtnState();
+                if (btn) btn.innerHTML = '<i class="fas fa-sync-alt"></i> Create Profile';
+            }
+        }
+
+        async function handleDeleteProfile(name) {
+            if (!confirm(`Delete the complete profile for "${name}"? This cannot be undone.`)) return;
+            try {
+                const resp = await fetch('/chat/complete-profile?name=' + encodeURIComponent(name), { method: 'DELETE' });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || `HTTP ${resp.status}`);
+                }
+                await loadProfileNames();
+            } catch (err) {
+                console.error('Delete profile error:', err);
+                alert('Error: ' + err.message);
+            }
+        }
+
+        function open() {
+            Modals._openModal(modal());
+            loadContactNames();
+            loadProfileNames();
+        }
+
+        function close() {
+            Modals._closeModal(modal());
+        }
+
+        function init() {
+            const closeBtn = document.getElementById('close-profiles-modal');
+            if (closeBtn) closeBtn.addEventListener('click', close);
+            const m = modal();
+            if (m) m.addEventListener('click', (e) => { if (e.target === m) close(); });
+            const input = contactInput();
+            if (input) {
+                input.addEventListener('input', () => {
+                    updateCreateBtnState();
+                    showContactDropdown();
+                });
+                input.addEventListener('focus', () => showContactDropdown());
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') {
+                        hideContactDropdown();
+                        return;
+                    }
+                    if (e.key === 'Enter') {
+                        const first = contactDropdown().querySelector('.profiles-contact-option');
+                        if (first) {
+                            first.click();
+                            e.preventDefault();
+                        }
+                        return;
+                    }
+                });
+                input.addEventListener('blur', () => {
+                    setTimeout(hideContactDropdown, 150);
+                });
+            }
+            const btn = createBtn();
+            if (btn) btn.addEventListener('click', handleCreateProfile);
+        }
+
         return { init, open, close };
 })();
 
