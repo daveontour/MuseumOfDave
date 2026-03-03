@@ -58,3 +58,6 @@ Thumbs.db
 
 # Project specific
 history.json
+
+.claude/
+.git/

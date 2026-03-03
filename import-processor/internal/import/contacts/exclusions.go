@@ -16,33 +16,18 @@ type NameEmailPair struct {
 
 // ExclusionsConfig holds email and name exclusion patterns
 type ExclusionsConfig struct {
-	Email      []string       `json:"email"`
-	Name       []string       `json:"name"`
-	NameEmail  []NameEmailPair `json:"name_email"`
+	Email     []string        `json:"email"`
+	Name      []string        `json:"name"`
+	NameEmail []NameEmailPair `json:"name_email"`
 }
 
 var defaultNameEmailExclusions = []NameEmailPair{
-	{Name: "Kerri Whitney", Email: "dave_on_tour@yahoo.com"},
+	{},
 }
 
 var defaultExclusions = ExclusionsConfig{
-	Email: []string{
-		"no-reply", "noreply", "no-response", "noresponse",
-		"no-reply@", "noreply@", "no-response@", "noresponse@",
-		"/O=", "thales", "marketing", "info@", "news@", "mail@",
-		"help@", "contact@", "customer-service@",
-		"customer-support@", "billing@", "accounts@", "hello@", "undisclosed@",
-		"notification@", "ticket@", "tickets@", "ticketing@", "ticketing-system@",
-		"ticketing-system-email@", "ticketing-system-email-address@", "do-not-reply@",
-		"helpdesk@", "no_reply", "customerservice@", "support@",
-		"feedback@", "online@", "order-update@", "shipment-tracking@",
-		"auto-confirm@", "messages@", "socials@", "newsletters@", "admin@",
-	},
-	Name: []string{
-		"news@", "mail@", "help@", "contact@", "customer-service@",
-		"customer-support@", "billing@", "accounts@", "info@", "hello@",
-		"undisclosed", "/O=", "satyam", "thales", "marketing",
-	},
+	Email:     []string{},
+	Name:      []string{},
 	NameEmail: defaultNameEmailExclusions,
 }
 
