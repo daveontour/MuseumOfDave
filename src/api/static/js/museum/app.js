@@ -410,7 +410,7 @@ const App = (() => {
                 }
                 
                 // Load control defaults when any control tab is opened (if not already loaded)
-                const controlTabs = ['import-controls'];
+                const controlTabs = ['import-messages-controls', 'import-images-controls'];
                 if (controlTabs.includes(targetTab) && Object.keys(controlDefaults).length === 0) {
                     loadControlDefaults();
                 } else if (controlTabs.includes(targetTab)) {
@@ -418,7 +418,7 @@ const App = (() => {
                     populateControlDefaults();
                 }
                 // Load last run times when Import Controls tab is opened
-                if (targetTab === 'import-controls') {
+                if (controlTabs.includes(targetTab)) {
                     loadImportControlLastRun();
                 }
             });
@@ -457,6 +457,8 @@ const App = (() => {
                     facebook_albums: 'import-last-run-facebook_albums',
                     facebook_places: 'import-last-run-facebook_places',
                     filesystem: 'import-last-run-filesystem',
+                    reference_import: 'import-last-run-reference_import',
+                    image_export: 'import-last-run-image_export',
                     thumbnails: 'import-last-run-thumbnails',
                     contacts: 'import-last-run-contacts'
                 };
@@ -911,9 +913,9 @@ const App = (() => {
             });
         }
 
-        // Unified Import Controls (table layout, modal inputs, single status box)
-        const importStatusText = document.getElementById('import-controls-status-text');
-        const importCancelBtn = document.getElementById('import-controls-cancel-btn');
+        // Unified Import Controls (table layout, modal inputs, shared status box in both tabs)
+        const importStatusTextEls = () => document.querySelectorAll('.import-controls-status-text');
+        const importCancelBtns = () => document.querySelectorAll('.import-controls-cancel-btn');
         const importInputModal = document.getElementById('import-input-modal');
         const importInputModalTitle = document.getElementById('import-input-modal-title');
         const importInputModalBody = document.getElementById('import-input-modal-body');
@@ -932,15 +934,17 @@ const App = (() => {
             facebook_albums: '/facebook/albums/import/cancel',
             facebook_places: '/facebook/import-places/cancel',
             filesystem: '/images/import/cancel',
+            reference_import: '/images/import-reference/cancel',
+            image_export: '/images/export/cancel',
             thumbnails: '/images/process-thumbnails/cancel',
             contacts: '/contacts/extract/cancel'
         };
 
         function setImportStatus(text, isError = false) {
-            if (importStatusText) {
-                importStatusText.textContent = text || 'Idle';
-                importStatusText.style.color = isError ? '#dc3545' : '#666';
-            }
+            importStatusTextEls().forEach(el => {
+                el.textContent = text || 'Idle';
+                el.style.color = isError ? '#dc3545' : '#666';
+            });
         }
 
         function setExecuting(importType, executing) {
@@ -957,7 +961,7 @@ const App = (() => {
                     btn.classList.remove('import-executing');
                 }
             });
-            if (importCancelBtn) importCancelBtn.style.display = executing ? 'inline-block' : 'none';
+            importCancelBtns().forEach(btn => { btn.style.display = executing ? 'inline-block' : 'none'; });
         }
 
         function formatProgressLine(importType, data) {
@@ -977,7 +981,11 @@ const App = (() => {
                 case 'facebook_places':
                     return data.status_line || `Places: ${data.places_imported || 0} imported`;
                 case 'filesystem':
-                    return `File: ${data.current_file || '-'} | ${data.files_processed || 0}/${data.total_files || 0} | ${data.images_imported || 0} imported, ${data.images_updated || 0} updated | ${data.errors || 0} errors`;
+                    return `File: ${data.current_file || '-'} | ${data.files_processed || 0}/${data.total_files || 0} | ${data.images_imported || 0} imported, ${data.images_referenced || 0} referenced, ${data.images_updated || 0} updated | ${data.errors || 0} errors`;
+                case 'reference_import':
+                    return `Item: ${data.processed || 0}/${data.total || 0} | ${data.imported || 0} imported, ${data.skipped || 0} skipped | ${data.errors || 0} errors`;
+                case 'image_export':
+                    return `Item: ${data.processed || 0}/${data.total || 0} | ${data.exported || 0} exported, ${data.skipped || 0} skipped | ${data.errors || 0} errors`;
                 case 'thumbnails':
                     const p1 = `Phase 1: ${data.phase1_scanned || 0} scanned, ${data.phase1_updated || 0} updated`;
                     const p2 = `Phase 2: ${data.phase2_scanned || 0}/${data.phase2_total || 0} scanned, ${data.phase2_processed || 0} processed, ${data.phase2_errors || 0} errors`;
@@ -1013,7 +1021,9 @@ const App = (() => {
             imessage: { needsInput: true, title: 'iMessage Import', fields: [{ id: 'directory_path', key: 'imessage_directory_path', label: 'Directory Path', placeholder: 'Path to iMessage conversation subdirectories', required: true }], run: async (vals) => { const r = await fetch('/imessages/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ directory_path: vals.directory_path }) }); return r; }, stream: '/imessages/import/stream' },
             facebook_albums: { needsInput: true, title: 'Facebook Albums Import', fields: [{ id: 'directory_path', key: 'facebook_albums_import_directory', label: 'Export Directory', placeholder: 'e.g., G:\\My Drive\\meta-2026-Jan-11\\your_facebook_activity\\posts', required: true }], run: async (vals) => { const r = await fetch('/facebook/albums/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ directory_path: vals.directory_path }) }); return r; }, stream: '/facebook/albums/import/stream' },
             facebook_places: { needsInput: true, title: 'Facebook Places Import', fields: [{ id: 'file_path', key: 'facebook_places_import_file', label: 'Facebook Posts JSON File', placeholder: 'e.g., G:\\My Drive\\meta-2026-Jan-11\\your_posts__check_ins__photos_and_videos_1.json', required: true }], run: async (vals) => { const r = await fetch('/facebook/import-places', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_path: vals.file_path }) }); return r; }, stream: '/facebook/import-places/stream' },
-            filesystem: { needsInput: true, title: 'Filesystem Image Import', fields: [{ id: 'root_directory', key: 'filesystem_import_directory', label: 'Root Directory(ies)', placeholder: 'e.g., C:\\Users\\Dave\\Pictures; D:\\Photos', required: true }, { id: 'max_images', key: 'filesystem_import_max_images', label: 'Max Images (Optional)', placeholder: 'Leave empty for all', required: false, type: 'number' }], run: async (vals) => { const body = { root_directory: vals.root_directory, create_thumb_and_get_exif: false }; if (vals.max_images) body.max_images = parseInt(vals.max_images, 10); const r = await fetch('/images/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return r; }, stream: '/images/import/stream' },
+            filesystem: { needsInput: true, title: 'Filesystem Image Import', fields: [{ id: 'root_directory', key: 'filesystem_import_directory', label: 'Root Directory(ies)', placeholder: 'e.g., C:\\Users\\Dave\\Pictures; D:\\Photos', required: true }, { id: 'max_images', key: 'filesystem_import_max_images', label: 'Max Images (Optional)', placeholder: 'Leave empty for all', required: false, type: 'number' }, { id: 'reference_mode', key: 'filesystem_import_reference_mode', label: 'Reference only — leave images on filesystem', required: false, type: 'checkbox' }], run: async (vals) => { const body = { root_directory: vals.root_directory, create_thumb_and_get_exif: false, reference_mode: !!vals.reference_mode }; if (vals.max_images) body.max_images = parseInt(vals.max_images, 10); const r = await fetch('/images/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return r; }, stream: '/images/import/stream' },
+            reference_import: { needsInput: false, title: 'Import Reference Images to Database', run: async () => { const r = await fetch('/images/import-reference', { method: 'POST' }); return r; }, stream: '/images/import-reference/stream' },
+            image_export: { needsInput: true, title: 'Export Images to Filesystem', fields: [{ id: 'target_directory', key: 'image_export_directory', label: 'Target Directory', placeholder: 'e.g., C:\\Users\\Dave\\Exports\\images', required: true }], run: async (vals) => { const r = await fetch('/images/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_directory: vals.target_directory }) }); return r; }, stream: '/images/export/stream' },
             thumbnails: { needsInput: false, title: 'Image Processing', run: async () => { const r = await fetch('/images/process-thumbnails', { method: 'POST' }); return r; }, stream: '/images/process-thumbnails/stream' },
             contacts: { needsInput: false, title: 'Contacts Merge', run: async () => { const r = await fetch('/contacts/extract', { method: 'POST' }); return r; }, stream: '/contacts/extract/stream' }
         };
@@ -1095,17 +1105,21 @@ const App = (() => {
             const cfg = importConfigs[importType];
             if (!cfg || !cfg.needsInput) { onSubmit({}); return; }
             importInputModalTitle.textContent = cfg.title;
-            importInputModalBody.innerHTML = cfg.fields.map(f => `
-                <div class="setting-group" style="margin-bottom: 15px;">
-                    <label for="import-modal-${f.id}" style="display: block; margin-bottom: 5px; font-weight: 500;">${f.label}</label>
-                    <input type="${f.type || 'text'}" id="import-modal-${f.id}" placeholder="${f.placeholder || ''}" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
-                </div>
-            `).join('');
+            importInputModalBody.innerHTML = cfg.fields.map(f => {
+                if (f.type === 'checkbox') {
+                    return `<div class="setting-group" style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;"><input type="checkbox" id="import-modal-${f.id}" style="width: 16px; height: 16px;"><label for="import-modal-${f.id}" style="font-weight: 500; cursor: pointer;">${f.label}</label></div>`;
+                }
+                return `<div class="setting-group" style="margin-bottom: 15px;"><label for="import-modal-${f.id}" style="display: block; margin-bottom: 5px; font-weight: 500;">${f.label}</label><input type="${f.type || 'text'}" id="import-modal-${f.id}" placeholder="${f.placeholder || ''}" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;"></div>`;
+            }).join('');
             cfg.fields.forEach(f => {
                 const el = document.getElementById(`import-modal-${f.id}`);
                 if (el && typeof getControlValue === 'function') {
                     const val = getControlValue(f.key, typeof controlDefaults !== 'undefined' ? controlDefaults[f.key] : null);
-                    el.value = (val !== undefined && val !== null ? String(val) : '') || '';
+                    if (f.type === 'checkbox') {
+                        el.checked = val === true || val === 'true';
+                    } else {
+                        el.value = (val !== undefined && val !== null ? String(val) : '') || '';
+                    }
                 }
             });
             importInputModal.style.display = 'flex';
@@ -1117,10 +1131,15 @@ const App = (() => {
                 let valid = true;
                 cfg.fields.forEach(f => {
                     const el = document.getElementById(`import-modal-${f.id}`);
-                    const v = el ? el.value.trim() : '';
-                    if (f.required && !v) valid = false;
-                    vals[f.id] = v;
-                    if (typeof saveControlValue === 'function') saveControlValue(f.key, v);
+                    if (f.type === 'checkbox') {
+                        vals[f.id] = el ? el.checked : false;
+                        if (typeof saveControlValue === 'function') saveControlValue(f.key, el ? el.checked : false);
+                    } else {
+                        const v = el ? el.value.trim() : '';
+                        if (f.required && !v) valid = false;
+                        vals[f.id] = v;
+                        if (typeof saveControlValue === 'function') saveControlValue(f.key, v);
+                    }
                 });
                 if (!valid && cfg.fields.some(f => f.required)) return;
                 importInputModal.style.display = 'none';
@@ -1195,8 +1214,8 @@ const App = (() => {
             });
         });
 
-        if (importCancelBtn) {
-            importCancelBtn.addEventListener('click', async () => {
+        importCancelBtns().forEach(btn => {
+            btn.addEventListener('click', async () => {
                 if (!currentImportType) return;
                 const endpoint = cancelEndpoints[currentImportType];
                 if (!endpoint) return;
@@ -1204,14 +1223,14 @@ const App = (() => {
                     await fetch(endpoint, { method: 'POST' });
                 } catch (e) { console.warn('Cancel error:', e); }
             });
-        }
+        });
 
         function resetImportControls() {
             closeCurrentEventSource();
             importInProgress = false;
             currentImportType = null;
             setImportStatus('Idle');
-            if (importCancelBtn) importCancelBtn.style.display = 'none';
+            importCancelBtns().forEach(btn => { btn.style.display = 'none'; });
             document.querySelectorAll('.import-execute-btn').forEach(btn => {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-play"></i> Execute';
@@ -1221,19 +1240,18 @@ const App = (() => {
             if (typeof loadImportControlLastRun === 'function') loadImportControlLastRun();
         }
 
-        const importResetBtn = document.getElementById('import-controls-reset-btn');
-        if (importResetBtn) {
-            importResetBtn.addEventListener('click', () => resetImportControls());
-        }
+        document.querySelectorAll('.import-controls-reset-btn').forEach(btn => {
+            btn.addEventListener('click', () => resetImportControls());
+        });
 
         async function checkInitialImportStatus() {
-            const types = ['email_processing','imessage','whatsapp','facebook','instagram','facebook_albums','facebook_places','filesystem','thumbnails','contacts'];
-            const statusEndpoints = { email_processing: '/emails/process/status', imessage: '/imessages/import/status', whatsapp: '/whatsapp/import/status', facebook: '/facebook/import/status', instagram: '/instagram/import/status', facebook_albums: '/facebook/albums/import/status', facebook_places: '/facebook/import-places/status', filesystem: '/images/import/status', thumbnails: '/images/process-thumbnails/status', contacts: '/contacts/extract/status' };
+            const types = ['email_processing','imessage','whatsapp','facebook','instagram','facebook_albums','facebook_places','filesystem','reference_import','image_export','thumbnails','contacts'];
+            const statusEndpoints = { email_processing: '/emails/process/status', imessage: '/imessages/import/status', whatsapp: '/whatsapp/import/status', facebook: '/facebook/import/status', instagram: '/instagram/import/status', facebook_albums: '/facebook/albums/import/status', facebook_places: '/facebook/import-places/status', filesystem: '/images/import/status', reference_import: '/images/import-reference/status', image_export: '/images/export/status', thumbnails: '/images/process-thumbnails/status', contacts: '/contacts/extract/status' };
             for (const t of types) {
                 try {
                     const r = await fetch(statusEndpoints[t]);
                     const s = await r.json();
-                    if (s.in_progress) { importInProgress = true; currentImportType = t; setExecuting(t, true); if (importCancelBtn) importCancelBtn.style.display = 'inline-block'; connectToImportStream(t); return; }
+                    if (s.in_progress) { importInProgress = true; currentImportType = t; setExecuting(t, true); connectToImportStream(t); return; }
                 } catch (_) {}
             }
         }

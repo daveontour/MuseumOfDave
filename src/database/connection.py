@@ -58,7 +58,18 @@ class Database:
         print("Creating tables...")
         from .models import Base
         Base.metadata.create_all(self.engine)
-        
+
+        # Migrations for columns added after initial schema
+        try:
+            with self.engine.connect() as conn:
+                conn.execute(text(
+                    "ALTER TABLE media_items ADD COLUMN IF NOT EXISTS "
+                    "is_referenced BOOLEAN NOT NULL DEFAULT FALSE"
+                ))
+                conn.commit()
+        except Exception as e:
+            print(f"Warning: Could not apply is_referenced migration: {e}")
+
         # Create index for plain_text column
         try:
             with self.engine.connect() as conn:

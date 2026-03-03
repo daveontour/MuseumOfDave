@@ -168,6 +168,9 @@ class Config:
             "filesystem_import_directory": os.getenv("DEFAULT_FILESYSTEM_IMPORT_DIRECTORY", ""),
             "filesystem_import_max_images": os.getenv("DEFAULT_FILESYSTEM_IMPORT_MAX_IMAGES", ""),
             "filesystem_import_create_thumbnail": os.getenv("DEFAULT_FILESYSTEM_IMPORT_CREATE_THUMBNAIL", "false").lower() == "true",
+
+            # Image Export
+            "image_export_directory": os.getenv("DEFAULT_IMAGE_EXPORT_DIRECTORY", ""),
         }
     
     def get_filesystem_exclude_patterns(self) -> list:

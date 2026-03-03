@@ -264,6 +264,7 @@ class MediaMetadata(Base):
     is_spam = Column(Boolean, default=False, nullable=False)
     is_important = Column(Boolean, default=False, nullable=False)
     use_by_ai = Column(Boolean, default=False, nullable=True)
+    is_referenced = Column(Boolean, default=False, nullable=False)
     source=Column(String(255), nullable=True)
     source_reference=Column(String(500), nullable=True)
     media_blob = relationship("MediaBlob", back_populates="media_metadata", uselist=False, cascade="all, delete")

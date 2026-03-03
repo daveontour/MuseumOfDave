@@ -434,7 +434,7 @@ Modals.Contacts = (() => {
                 }
                 const data = await response.json();
                 if (data.status === 'started') {
-                    alert('Contacts extract started. Open Import Controls tab for progress.');
+                    alert('Contacts extract started. Open Import Messages Controls tab for progress.');
                 }
             } catch (err) {
                 console.error('Error extracting contacts:', err);

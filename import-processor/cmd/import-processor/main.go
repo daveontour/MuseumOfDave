@@ -867,6 +867,7 @@ func runFilesystem() {
 	var excludes stringSlice
 	fs.Var(&excludes, "exclude", "Exclude pattern (can be repeated)")
 	maxImages := fs.Int("max", 0, "Maximum number of images to import (0 = no limit)")
+	referenceMode := fs.Bool("reference", false, "Reference only — leave images on filesystem, store path only")
 	fs.Parse(os.Args[2:])
 
 	cfg, err := config.Load()
@@ -938,8 +939,8 @@ func runFilesystem() {
 	}
 
 	progressCallback := func(stats filesystemimport.ImportStats) {
-		fmt.Fprintf(os.Stderr, "\rProcessed: %d | Imported: %d | Updated: %d | Errors: %d",
-			stats.FilesProcessed, stats.ImagesImported, stats.ImagesUpdated, stats.Errors)
+		fmt.Fprintf(os.Stderr, "\rProcessed: %d | Imported: %d | Referenced: %d | Updated: %d | Errors: %d",
+			stats.FilesProcessed, stats.ImagesImported, stats.ImagesReferenced, stats.ImagesUpdated, stats.Errors)
 	}
 
 	cancelledCheck := func() bool {
@@ -954,6 +955,7 @@ func runFilesystem() {
 		directories,
 		excludePatterns,
 		maxPtr,
+		*referenceMode,
 		progressCallback,
 		cancelledCheck,
 	)
@@ -972,6 +974,7 @@ func runFilesystem() {
 	fmt.Printf("Total files: %d\n", stats.TotalFiles)
 	fmt.Printf("Files processed: %d\n", stats.FilesProcessed)
 	fmt.Printf("Images imported: %d\n", stats.ImagesImported)
+	fmt.Printf("Images referenced: %d\n", stats.ImagesReferenced)
 	fmt.Printf("Images updated: %d\n", stats.ImagesUpdated)
 	fmt.Printf("Errors: %d\n", stats.Errors)
 
@@ -1069,9 +1072,11 @@ func listFilesToProcess(directoryPath string) error {
 
 // mediaItemWork represents a work item for processing
 type mediaItemWork struct {
-	MediaItemID int64
-	BlobID      int64
-	MediaType   *string
+	MediaItemID     int64
+	BlobID          int64
+	MediaType       *string
+	IsReferenced    bool
+	SourceReference *string
 }
 
 // processResult represents the result of processing a media item
@@ -1124,24 +1129,29 @@ func processThumbnailsAndExif(ctx context.Context, db *database.DB, reprocess bo
 	var query string
 	if reprocess {
 		query = `
-		SELECT 
+		SELECT
 			mi.id as media_item_id,
 			mi.media_blob_id,
-			mi.media_type
+			mi.media_type,
+			mi.is_referenced,
+			mi.source_reference
 		FROM media_items mi
 		INNER JOIN media_blob mb ON mi.media_blob_id = mb.id
-		WHERE mb.image_data IS NOT NULL AND LENGTH(mb.image_data) > 0
+		WHERE (mb.image_data IS NOT NULL AND LENGTH(mb.image_data) > 0)
+		   OR mi.is_referenced = true
 		ORDER BY mi.id
 		`
 	} else {
 		query = `
-		SELECT 
+		SELECT
 			mi.id as media_item_id,
 			mi.media_blob_id,
-			mi.media_type
+			mi.media_type,
+			mi.is_referenced,
+			mi.source_reference
 		FROM media_items mi
 		INNER JOIN media_blob mb ON mi.media_blob_id = mb.id
-		WHERE mi.processed = false 
+		WHERE mi.processed = false
 		   OR mb.thumbnail_data IS NULL
 		   OR LENGTH(mb.thumbnail_data) = 0
 		ORDER BY mi.id
@@ -1158,12 +1168,13 @@ func processThumbnailsAndExif(ctx context.Context, db *database.DB, reprocess bo
 
 	var workItems []mediaItemWork
 	var mediaItemID, blobID int64
-	var mediaType *string
+	var mediaType, sourceReference *string
+	var isReferenced bool
 	var scannedCount, skippedCount int
 
 	for rows.Next() {
 		scannedCount++
-		if err := rows.Scan(&mediaItemID, &blobID, &mediaType); err != nil {
+		if err := rows.Scan(&mediaItemID, &blobID, &mediaType, &isReferenced, &sourceReference); err != nil {
 			fmt.Fprintf(os.Stderr, "Error scanning row %d: %v\n", scannedCount, err)
 			continue
 		}
@@ -1178,9 +1189,11 @@ func processThumbnailsAndExif(ctx context.Context, db *database.DB, reprocess bo
 		}
 
 		workItems = append(workItems, mediaItemWork{
-			MediaItemID: mediaItemID,
-			BlobID:      blobID,
-			MediaType:   mediaType,
+			MediaItemID:     mediaItemID,
+			BlobID:          blobID,
+			MediaType:       mediaType,
+			IsReferenced:    isReferenced,
+			SourceReference: sourceReference,
 		})
 
 		if len(workItems)%500 == 0 {
@@ -1277,15 +1290,29 @@ func processThumbnailsAndExif(ctx context.Context, db *database.DB, reprocess bo
 
 func processMediaItem(ctx context.Context, db *database.DB, processor *services.Processor, work mediaItemWork) processResult {
 	var imageData []byte
-	loadImageQuery := `SELECT image_data FROM media_blob WHERE id = $1`
-	err := db.Pool.QueryRow(ctx, loadImageQuery, work.BlobID).Scan(&imageData)
-	if err != nil {
-		return processResult{Success: false, Error: fmt.Errorf("failed to load image data for blob_id=%d: %w",
-			work.BlobID, err)}
+
+	if work.IsReferenced {
+		// Read image data directly from the filesystem path
+		if work.SourceReference == nil || *work.SourceReference == "" {
+			return processResult{Success: false, Error: fmt.Errorf("referenced media_item_id=%d has no source_reference path", work.MediaItemID)}
+		}
+		var err error
+		imageData, err = os.ReadFile(*work.SourceReference)
+		if err != nil {
+			return processResult{Success: false, Error: fmt.Errorf("failed to read referenced file %s for media_item_id=%d: %w",
+				*work.SourceReference, work.MediaItemID, err)}
+		}
+	} else {
+		loadImageQuery := `SELECT image_data FROM media_blob WHERE id = $1`
+		err := db.Pool.QueryRow(ctx, loadImageQuery, work.BlobID).Scan(&imageData)
+		if err != nil {
+			return processResult{Success: false, Error: fmt.Errorf("failed to load image data for blob_id=%d: %w",
+				work.BlobID, err)}
+		}
 	}
 
 	if len(imageData) == 0 {
-		return processResult{Success: false, Error: fmt.Errorf("image data is empty for blob_id=%d", work.BlobID)}
+		return processResult{Success: false, Error: fmt.Errorf("image data is empty for media_item_id=%d", work.MediaItemID)}
 	}
 
 	thumbData, exifData, err := processor.CreateThumbAndGetExif(imageData, true, true, 200)
@@ -1373,24 +1400,25 @@ func listEntriesToProcess(ctx context.Context, db *database.DB, reprocess bool) 
 	var query string
 	if reprocess {
 		query = `
-		SELECT 
+		SELECT
 			mi.id as media_item_id,
 			mi.media_blob_id,
 			mi.media_type
 		FROM media_items mi
 		INNER JOIN media_blob mb ON mi.media_blob_id = mb.id
-		WHERE mb.image_data IS NOT NULL AND LENGTH(mb.image_data) > 0
+		WHERE (mb.image_data IS NOT NULL AND LENGTH(mb.image_data) > 0)
+		   OR mi.is_referenced = true
 		ORDER BY mi.id
 		`
 	} else {
 		query = `
-		SELECT 
+		SELECT
 			mi.id as media_item_id,
 			mi.media_blob_id,
 			mi.media_type
 		FROM media_items mi
 		INNER JOIN media_blob mb ON mi.media_blob_id = mb.id
-		WHERE mi.processed = false 
+		WHERE mi.processed = false
 		   OR mb.thumbnail_data IS NULL
 		   OR LENGTH(mb.thumbnail_data) = 0
 		ORDER BY mi.id

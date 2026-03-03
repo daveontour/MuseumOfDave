@@ -297,23 +297,32 @@ class ImageService:
             
         else:
             content = image_blob.image_data
-            if content is None:
-                raise NotFoundError(f"Image with ID {image_id} has no image data")
-            
-            # Get content type from metadata
+
+            # Get content type from metadata (needed for both blob and filesystem paths)
             session = self.db.get_session()
             try:
                 if id_type == "metadata":
-                    # We already know the metadata ID, so query directly
                     metadata = session.query(MediaMetadata).filter(
                         MediaMetadata.id == image_id
                     ).first()
                 else:
-                    # Query metadata by blob_id
                     metadata = session.query(MediaMetadata).filter(
                         MediaMetadata.media_blob_id == image_blob.id
                     ).first()
-                
+
+                if content is None:
+                    # Blob has no data — serve from filesystem for referenced images
+                    if metadata and metadata.is_referenced and metadata.source_reference:
+                        try:
+                            with open(metadata.source_reference, 'rb') as f:
+                                content = f.read()
+                        except (FileNotFoundError, PermissionError) as e:
+                            raise NotFoundError(
+                                f"Referenced image file not found at {metadata.source_reference}: {e}"
+                            )
+                    else:
+                        raise NotFoundError(f"Image with ID {image_id} has no image data")
+
                 if metadata and metadata.media_type:
                     content_type = metadata.media_type
                 else:

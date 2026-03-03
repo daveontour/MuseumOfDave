@@ -14,6 +14,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from sqlalchemy import or_, func, and_
+from sqlalchemy.orm import joinedload
 
 from ...database import Database, FacebookAlbum
 from ...database.models import MediaMetadata, MediaBlob, AlbumMedia, Locations, ImportControlLastRun
@@ -57,6 +58,22 @@ from ..state import (
     broadcast_facebook_places_progress_event_sync,
     facebook_places_sse_clients,
     facebook_places_sse_clients_lock,
+    reference_import_lock,
+    reference_import_cancelled,
+    reference_import_in_progress,
+    update_reference_import_progress_state,
+    get_reference_import_progress_state,
+    broadcast_reference_import_event_sync,
+    reference_import_sse_clients,
+    reference_import_sse_clients_lock,
+    image_export_lock,
+    image_export_cancelled,
+    image_export_in_progress,
+    update_image_export_progress_state,
+    get_image_export_progress_state,
+    broadcast_image_export_event_sync,
+    image_export_sse_clients,
+    image_export_sse_clients_lock,
     _record_import_control_last_run,
 )
 
@@ -92,6 +109,7 @@ class ImportFilesystemImagesRequest(BaseModel):
     root_directory: str
     max_images: Optional[int] = None
     create_thumb_and_get_exif: bool = False
+    reference_mode: bool = False
 
 
 class ImportFilesystemImagesResponse(BaseModel):
@@ -101,9 +119,15 @@ class ImportFilesystemImagesResponse(BaseModel):
     files_processed: int = 0
     total_files: int = 0
     images_imported: int = 0
+    images_referenced: int = 0
     images_updated: int = 0
     errors: int = 0
     timestamp: datetime
+
+
+class ExportImagesRequest(BaseModel):
+    """Request model for exporting images to filesystem."""
+    target_directory: str
 
 
 class MediaMetadataResponse(BaseModel):
@@ -229,11 +253,12 @@ def _parse_facebook_places_stdout(stdout: str) -> tuple[int, int, int, list[str]
     return places_imported, places_created, places_updated, errors, status_message
 
 
-def _parse_filesystem_stdout(stdout: str) -> tuple[int, int, int, int, int, list[str], str]:
-    """Parse import-processor filesystem stdout. Returns (total_files, files_processed, images_imported, images_updated, errors, error_messages, status_message)."""
+def _parse_filesystem_stdout(stdout: str) -> tuple[int, int, int, int, int, int, list[str], str]:
+    """Parse import-processor filesystem stdout. Returns (total_files, files_processed, images_imported, images_referenced, images_updated, errors, error_messages, status_message)."""
     total_files = 0
     files_processed = 0
     images_imported = 0
+    images_referenced = 0
     images_updated = 0
     errors = 0
     error_messages: list[str] = []
@@ -246,6 +271,9 @@ def _parse_filesystem_stdout(stdout: str) -> tuple[int, int, int, int, int, list
     m3 = re.search(r"Images imported: (\d+)", stdout)
     if m3:
         images_imported = int(m3.group(1))
+    m_ref = re.search(r"Images referenced: (\d+)", stdout)
+    if m_ref:
+        images_referenced = int(m_ref.group(1))
     m4 = re.search(r"Images updated: (\d+)", stdout)
     if m4:
         images_updated = int(m4.group(1))
@@ -265,12 +293,12 @@ def _parse_filesystem_stdout(stdout: str) -> tuple[int, int, int, int, int, list
         status_parts.append(f"Total files: {total_files}")
     if files_processed > 0:
         status_parts.append(f"Processed: {files_processed}")
-    if images_imported > 0 or images_updated > 0:
-        status_parts.append(f"Imported: {images_imported}, Updated: {images_updated}")
+    if images_imported > 0 or images_referenced > 0 or images_updated > 0:
+        status_parts.append(f"Imported: {images_imported}, Referenced: {images_referenced}, Updated: {images_updated}")
     if errors > 0:
         status_parts.append(f"Errors: {errors}")
     status_message = "Import completed. " + "; ".join(status_parts) if status_parts else "Import completed."
-    return (total_files, files_processed, images_imported, images_updated, errors, error_messages, status_message)
+    return (total_files, files_processed, images_imported, images_referenced, images_updated, errors, error_messages, status_message)
 
 
 def _parse_thumbnails_stdout(stdout: str) -> tuple[int, int, int, str]:
@@ -429,6 +457,7 @@ def import_filesystem_background_subprocess(
     directory_paths: List[str],
     max_images: Optional[int],
     exclude_patterns: List[str],
+    reference_mode: bool = False,
 ):
     """Background task: run import-processor filesystem, stream stderr via SSE, broadcast completion."""
     global filesystem_import_in_progress
@@ -444,6 +473,7 @@ def import_filesystem_background_subprocess(
         files_processed=0,
         total_files=0,
         images_imported=0,
+        images_referenced=0,
         images_updated=0,
         errors=0,
         error_messages=[],
@@ -460,6 +490,8 @@ def import_filesystem_background_subprocess(
             args.extend(["--exclude", pat])
         if max_images and max_images > 0:
             args.extend(["--max", str(max_images)])
+        if reference_mode:
+            args.append("--reference")
         proc = subprocess.Popen(
             args,
             cwd=str(cwd),
@@ -511,13 +543,14 @@ def import_filesystem_background_subprocess(
                 update_filesystem_import_progress_state(status="error", error_messages=[err_msg], status_line=err_msg)
                 broadcast_filesystem_import_progress_event_sync("error", get_filesystem_import_progress_state())
             else:
-                total, proc_count, imp, upd, errs, err_msgs, status_message = _parse_filesystem_stdout(stdout or "")
+                total, proc_count, imp, ref, upd, errs, err_msgs, status_message = _parse_filesystem_stdout(stdout or "")
                 update_filesystem_import_progress_state(
                     status="completed",
                     status_line=status_message,
                     total_files=total,
                     files_processed=proc_count,
                     images_imported=imp,
+                    images_referenced=ref,
                     images_updated=upd,
                     errors=errs,
                     error_messages=err_msgs,
@@ -922,6 +955,7 @@ async def import_filesystem_images(
         validated_paths,
         request.max_images,
         exclude_patterns,
+        request.reference_mode,
     )
 
     return ImportFilesystemImagesResponse(
@@ -1184,6 +1218,565 @@ async def get_thumbnail_processing_status():
             "in_progress": thumbnail_processing_in_progress,
             "cancelled": thumbnail_processing_cancelled.is_set(),
             **progress_state
+        }
+
+
+# ---------------------------------------------------------------------------
+# Reference import (import referenced images into database) routes
+# ---------------------------------------------------------------------------
+
+def import_reference_images_background():
+    """Background task: import referenced images into database (copy file bytes to media_blob)."""
+    global reference_import_in_progress
+
+    with reference_import_lock:
+        reference_import_in_progress = True
+        reference_import_cancelled.clear()
+
+    update_reference_import_progress_state(
+        status="in_progress",
+        status_line="Starting reference import...",
+        total=0,
+        processed=0,
+        imported=0,
+        skipped=0,
+        errors=0,
+        error_message=None,
+        error_messages=[],
+    )
+    broadcast_reference_import_event_sync("status", {"status_line": "Starting reference import..."})
+
+    try:
+        session = db.get_session()
+        try:
+            items = session.query(MediaMetadata).filter(
+                MediaMetadata.is_referenced == True,
+                MediaMetadata.source_reference.isnot(None),
+                MediaMetadata.source_reference != "",
+            ).all()
+            total = len(items)
+        finally:
+            session.close()
+
+        update_reference_import_progress_state(total=total)
+        status_line = f"Found {total} referenced images to import"
+        update_reference_import_progress_state(status_line=status_line)
+        broadcast_reference_import_event_sync("progress", get_reference_import_progress_state())
+
+        imported = 0
+        skipped = 0
+        errors = 0
+        error_messages = []
+
+        for i, item in enumerate(items):
+            if reference_import_cancelled.is_set():
+                update_reference_import_progress_state(
+                    status="cancelled",
+                    status_line="Processing cancelled.",
+                    processed=i,
+                    imported=imported,
+                    skipped=skipped,
+                    errors=errors,
+                    error_messages=error_messages,
+                )
+                broadcast_reference_import_event_sync("cancelled", get_reference_import_progress_state())
+                break
+
+            path_str = translate_path_to_container(item.source_reference)
+            path = Path(path_str)
+
+            if not path.exists() or not path.is_file():
+                skipped += 1
+                err_msg = f"File not found: {item.source_reference}"
+                error_messages.append(err_msg)
+                update_reference_import_progress_state(
+                    processed=i + 1,
+                    skipped=skipped,
+                    errors=errors,
+                    error_messages=error_messages,
+                    status_line=f"Item {i + 1}/{total}: skipped (file not found)",
+                )
+                broadcast_reference_import_event_sync("progress", get_reference_import_progress_state())
+                continue
+
+            try:
+                image_data = path.read_bytes()
+            except (IOError, OSError) as e:
+                errors += 1
+                err_msg = f"Failed to read {item.source_reference}: {e}"
+                error_messages.append(err_msg)
+                update_reference_import_progress_state(
+                    processed=i + 1,
+                    errors=errors,
+                    error_messages=error_messages,
+                    status_line=f"Item {i + 1}/{total}: error reading file",
+                )
+                broadcast_reference_import_event_sync("progress", get_reference_import_progress_state())
+                continue
+
+            sess = db.get_session()
+            try:
+                blob = sess.query(MediaBlob).filter(MediaBlob.id == item.media_blob_id).first()
+                meta = sess.query(MediaMetadata).filter(MediaMetadata.id == item.id).first()
+                if blob and meta:
+                    blob.image_data = image_data
+                    blob.updated_at = datetime.now(timezone.utc)
+                    meta.is_referenced = False
+                    meta.updated_at = datetime.now(timezone.utc)
+                    sess.commit()
+                    imported += 1
+                else:
+                    errors += 1
+                    err_msg = f"media_item {item.id} or blob not found"
+                    error_messages.append(err_msg)
+            except Exception as e:
+                sess.rollback()
+                errors += 1
+                err_msg = f"Failed to update media_item {item.id}: {e}"
+                error_messages.append(err_msg)
+            finally:
+                sess.close()
+
+            update_reference_import_progress_state(
+                processed=i + 1,
+                imported=imported,
+                skipped=skipped,
+                errors=errors,
+                error_messages=error_messages,
+                status_line=f"Item {i + 1}/{total}: {imported} imported, {skipped} skipped, {errors} errors",
+            )
+            broadcast_reference_import_event_sync("progress", get_reference_import_progress_state())
+
+        if not reference_import_cancelled.is_set():
+            status_msg = f"Completed: {imported} imported, {skipped} skipped, {errors} errors"
+            update_reference_import_progress_state(
+                status="completed",
+                status_line=status_msg,
+                processed=total,
+                imported=imported,
+                skipped=skipped,
+                errors=errors,
+                error_message="; ".join(error_messages[:5]) if error_messages else None,
+                error_messages=error_messages,
+            )
+            broadcast_reference_import_event_sync("completed", get_reference_import_progress_state())
+
+    except Exception as e:
+        err_msg = str(e)
+        update_reference_import_progress_state(
+            status="error",
+            error_message=err_msg,
+            status_line=err_msg,
+        )
+        broadcast_reference_import_event_sync("error", get_reference_import_progress_state())
+    finally:
+        state = get_reference_import_progress_state()
+        result = state.get("status", "error")
+        msg = state.get("error_message") or state.get("status_line")
+        _record_import_control_last_run("reference_import", result, msg)
+        with reference_import_lock:
+            reference_import_in_progress = False
+
+
+@router.post("/images/import-reference")
+async def start_reference_import(background_tasks: BackgroundTasks):
+    """Start importing referenced images into the database.
+
+    Reads files from source_reference, stores bytes in media_blob.image_data,
+    and sets is_referenced=False.
+
+    Returns:
+        Response indicating import has started
+    """
+    global reference_import_in_progress
+
+    with reference_import_lock:
+        if reference_import_in_progress:
+            raise HTTPException(
+                status_code=400,
+                detail="Reference import is already in progress"
+            )
+
+    background_tasks.add_task(import_reference_images_background)
+
+    return {"message": "Reference import started", "status": "started"}
+
+
+@router.get("/images/import-reference/stream")
+async def stream_reference_import_progress(request: Request):
+    """Stream reference import progress via Server-Sent Events."""
+    async def event_generator():
+        client_queue = asyncio.Queue()
+
+        with reference_import_sse_clients_lock:
+            reference_import_sse_clients.append(client_queue)
+
+        try:
+            initial_state = get_reference_import_progress_state()
+            event_data = {"type": "progress", "data": initial_state}
+            yield f"data: {json.dumps(event_data)}\n\n"
+
+            if initial_state.get("status") in ("completed", "cancelled", "error"):
+                final_event = {"type": initial_state["status"], "data": initial_state}
+                yield f"data: {json.dumps(final_event)}\n\n"
+                return
+
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    message = await asyncio.wait_for(client_queue.get(), timeout=1.0)
+                    yield message
+                    progress_state = get_reference_import_progress_state()
+                    if progress_state.get("status") in ("completed", "cancelled", "error"):
+                        break
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+                except Exception as e:
+                    print(f"Error in reference import SSE stream: {e}")
+                    break
+        finally:
+            with reference_import_sse_clients_lock:
+                if client_queue in reference_import_sse_clients:
+                    reference_import_sse_clients.remove(client_queue)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/images/import-reference/cancel")
+async def cancel_reference_import():
+    """Cancel reference import if in progress."""
+    global reference_import_in_progress
+
+    with reference_import_lock:
+        if not reference_import_in_progress:
+            return {"message": "No reference import is currently in progress", "cancelled": False}
+
+    reference_import_cancelled.set()
+
+    return {
+        "message": "Reference import cancellation requested. Processing will stop after current image completes.",
+        "cancelled": True,
+    }
+
+
+@router.get("/images/import-reference/status")
+async def get_reference_import_status():
+    """Get current status of reference import."""
+    global reference_import_in_progress
+
+    progress_state = get_reference_import_progress_state()
+
+    with reference_import_lock:
+        return {
+            "in_progress": reference_import_in_progress,
+            "cancelled": reference_import_cancelled.is_set(),
+            **progress_state,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Image export (export all images to filesystem) routes
+# ---------------------------------------------------------------------------
+
+def _get_extension_for_media_type(media_type: Optional[str]) -> str:
+    """Get file extension from media_type. Returns 'jpg' as fallback."""
+    mt = media_type or "image/jpeg"
+    ext = mimetypes.guess_extension(mt)
+    if ext:
+        return ext.lstrip(".")
+    return "jpg"
+
+
+def export_images_background(target_directory: str):
+    """Background task: export all images to filesystem with subdirs of max 200 files."""
+    global image_export_in_progress
+
+    print(f"[ImageExport] Starting export to: {target_directory}")
+
+    with image_export_lock:
+        image_export_in_progress = True
+        image_export_cancelled.clear()
+
+    update_image_export_progress_state(
+        status="in_progress",
+        status_line="Starting image export...",
+        total=0,
+        processed=0,
+        exported=0,
+        skipped=0,
+        errors=0,
+        error_message=None,
+        error_messages=[],
+    )
+    broadcast_image_export_event_sync("status", {"status_line": "Starting image export..."})
+
+    try:
+        path_str = translate_path_to_container(target_directory)
+        target_dir = Path(path_str).resolve()
+        print(f"[ImageExport] Resolved target dir: {target_dir}")
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        session = db.get_session()
+        try:
+            total = session.query(MediaMetadata).count()
+        finally:
+            session.close()
+
+        print(f"[ImageExport] Found {total} images to export")
+
+        update_image_export_progress_state(total=total)
+        status_line = f"Found {total} images to export"
+        update_image_export_progress_state(status_line=status_line)
+        broadcast_image_export_event_sync("progress", get_image_export_progress_state())
+
+        exported = 0
+        skipped = 0
+        errors = 0
+        error_messages = []
+        last_id = 0
+
+        for i in range(total):
+            if image_export_cancelled.is_set():
+                update_image_export_progress_state(
+                    status="cancelled",
+                    status_line="Export cancelled.",
+                    processed=i,
+                    exported=exported,
+                    skipped=skipped,
+                    errors=errors,
+                    error_messages=error_messages,
+                )
+                broadcast_image_export_event_sync("cancelled", get_image_export_progress_state())
+                break
+
+            sess = db.get_session()
+            try:
+                item = (
+                    sess.query(MediaMetadata)
+                    .options(joinedload(MediaMetadata.media_blob))
+                    .filter(MediaMetadata.id > last_id)
+                    .order_by(MediaMetadata.id)
+                    .limit(1)
+                    .first()
+                )
+                if not item:
+                    break
+                last_id = item.id
+                item_id = item.id
+                media_type = item.media_type
+                is_referenced = item.is_referenced
+                source_reference = item.source_reference
+                image_data = None
+                if item.media_blob and item.media_blob.image_data:
+                    image_data = bytes(item.media_blob.image_data)
+            finally:
+                sess.close()
+
+            if image_data is None:
+                if is_referenced and source_reference:
+                    src_path = Path(translate_path_to_container(source_reference))
+                    if src_path.exists() and src_path.is_file():
+                        try:
+                            image_data = src_path.read_bytes()
+                        except (IOError, OSError) as e:
+                            errors += 1
+                            err_msg = f"Failed to read {source_reference}: {e}"
+                            error_messages.append(err_msg)
+                            update_image_export_progress_state(
+                                processed=i + 1,
+                                errors=errors,
+                                error_messages=error_messages,
+                                status_line=f"Item {i + 1}/{total}: error reading file",
+                            )
+                            broadcast_image_export_event_sync("progress", get_image_export_progress_state())
+                            continue
+                    else:
+                        skipped += 1
+                        err_msg = f"File not found: {source_reference}"
+                        error_messages.append(err_msg)
+                        update_image_export_progress_state(
+                            processed=i + 1,
+                            skipped=skipped,
+                            errors=errors,
+                            error_messages=error_messages,
+                            status_line=f"Item {i + 1}/{total}: skipped (file not found)",
+                        )
+                        broadcast_image_export_event_sync("progress", get_image_export_progress_state())
+                        continue
+                else:
+                    skipped += 1
+                    error_messages.append(f"media_item {item_id}: no image data")
+                    update_image_export_progress_state(
+                        processed=i + 1,
+                        skipped=skipped,
+                        errors=errors,
+                        error_messages=error_messages,
+                        status_line=f"Item {i + 1}/{total}: skipped (no data)",
+                    )
+                    broadcast_image_export_event_sync("progress", get_image_export_progress_state())
+                    continue
+
+            ext = _get_extension_for_media_type(media_type)
+            subdir_index = i // 400
+            subdir_name = f"{subdir_index:03d}"
+            subdir_path = target_dir / subdir_name
+            subdir_path.mkdir(parents=True, exist_ok=True)
+            filename = f"{item_id}.{ext}"
+            file_path = subdir_path / filename
+
+            try:
+                file_path.write_bytes(image_data)
+                exported += 1
+            except (IOError, OSError) as e:
+                errors += 1
+                err_msg = f"Failed to write {file_path}: {e}"
+                error_messages.append(err_msg)
+
+            update_image_export_progress_state(
+                processed=i + 1,
+                exported=exported,
+                skipped=skipped,
+                errors=errors,
+                error_messages=error_messages,
+                status_line=f"Item {i + 1}/{total}: {exported} exported, {skipped} skipped, {errors} errors",
+            )
+            broadcast_image_export_event_sync("progress", get_image_export_progress_state())
+
+        if not image_export_cancelled.is_set():
+            status_msg = f"Completed: {exported} exported, {skipped} skipped, {errors} errors"
+            print(f"[ImageExport] {status_msg}")
+            update_image_export_progress_state(
+                status="completed",
+                status_line=status_msg,
+                processed=total,
+                exported=exported,
+                skipped=skipped,
+                errors=errors,
+                error_message="; ".join(error_messages[:5]) if error_messages else None,
+                error_messages=error_messages,
+            )
+            broadcast_image_export_event_sync("completed", get_image_export_progress_state())
+
+    except Exception as e:
+        import traceback
+        err_msg = str(e)
+        print(f"[ImageExport] Error: {err_msg}")
+        traceback.print_exc()
+        update_image_export_progress_state(
+            status="error",
+            error_message=err_msg,
+            status_line=err_msg,
+        )
+        broadcast_image_export_event_sync("error", get_image_export_progress_state())
+    finally:
+        state = get_image_export_progress_state()
+        result = state.get("status", "error")
+        msg = state.get("error_message") or state.get("status_line")
+        _record_import_control_last_run("image_export", result, msg)
+        with image_export_lock:
+            image_export_in_progress = False
+
+
+@router.post("/images/export")
+async def start_image_export(request: ExportImagesRequest, background_tasks: BackgroundTasks):
+    """Start exporting all images to the specified directory.
+
+    Creates subdirectories (000, 001, 002, ...) so each contains at most 400 files.
+
+    Returns:
+        Response indicating export has started
+    """
+    global image_export_in_progress
+
+    target_directory = request.target_directory.strip()
+    if not target_directory:
+        raise HTTPException(status_code=400, detail="target_directory is required")
+
+    with image_export_lock:
+        if image_export_in_progress:
+            raise HTTPException(
+                status_code=400,
+                detail="Image export is already in progress"
+            )
+
+    background_tasks.add_task(export_images_background, target_directory)
+
+    return {"message": "Image export started", "status": "started"}
+
+
+@router.get("/images/export/stream")
+async def stream_image_export_progress(request: Request):
+    """Stream image export progress via Server-Sent Events."""
+    async def event_generator():
+        client_queue = asyncio.Queue()
+
+        with image_export_sse_clients_lock:
+            image_export_sse_clients.append(client_queue)
+
+        try:
+            initial_state = get_image_export_progress_state()
+            event_data = {"type": "progress", "data": initial_state}
+            yield f"data: {json.dumps(event_data)}\n\n"
+
+            if initial_state.get("status") in ("completed", "cancelled", "error"):
+                final_event = {"type": initial_state["status"], "data": initial_state}
+                yield f"data: {json.dumps(final_event)}\n\n"
+                return
+
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    message = await asyncio.wait_for(client_queue.get(), timeout=1.0)
+                    yield message
+                    progress_state = get_image_export_progress_state()
+                    if progress_state.get("status") in ("completed", "cancelled", "error"):
+                        break
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+                except Exception as e:
+                    print(f"Error in image export SSE stream: {e}")
+                    break
+        finally:
+            with image_export_sse_clients_lock:
+                if client_queue in image_export_sse_clients:
+                    image_export_sse_clients.remove(client_queue)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/images/export/cancel")
+async def cancel_image_export():
+    """Cancel image export if in progress."""
+    global image_export_in_progress
+
+    with image_export_lock:
+        if not image_export_in_progress:
+            return {"message": "No image export is currently in progress", "cancelled": False}
+
+    image_export_cancelled.set()
+
+    return {
+        "message": "Image export cancellation requested. Processing will stop after current image completes.",
+        "cancelled": True,
+    }
+
+
+@router.get("/images/export/status")
+async def get_image_export_status():
+    """Get current status of image export."""
+    global image_export_in_progress
+
+    progress_state = get_image_export_progress_state()
+
+    with image_export_lock:
+        return {
+            "in_progress": image_export_in_progress,
+            "cancelled": image_export_cancelled.is_set(),
+            **progress_state,
         }
 
 

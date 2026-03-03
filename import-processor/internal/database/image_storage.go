@@ -11,11 +11,12 @@ const filesystemSource = "Filesystem"
 
 // BatchImageItem represents a single image for batch save
 type BatchImageItem struct {
-	SourceRef string
-	ImageData []byte
-	MediaType string
-	Title     string
-	Tags      string
+	SourceRef    string
+	ImageData    []byte // nil for referenced images
+	MediaType    string
+	Title        string
+	Tags         string
+	IsReferenced bool
 }
 
 // ImageStorage handles filesystem image storage operations
@@ -31,7 +32,7 @@ func NewImageStorage(db *DB) *ImageStorage {
 // SaveImage saves or updates an image in the database.
 // Deduplication is by source + source_reference.
 // Returns (media_item_id, is_update, error)
-func (s *ImageStorage) SaveImage(ctx context.Context, sourceRef string, imageData []byte, mediaType, title, tags string) (int64, bool, error) {
+func (s *ImageStorage) SaveImage(ctx context.Context, sourceRef string, imageData []byte, mediaType, title, tags string, isReferenced bool) (int64, bool, error) {
 	tx, err := s.db.Pool.Begin(ctx)
 	if err != nil {
 		return 0, false, fmt.Errorf("failed to begin transaction: %w", err)
@@ -44,15 +45,17 @@ func (s *ImageStorage) SaveImage(ctx context.Context, sourceRef string, imageDat
 	err = tx.QueryRow(ctx, checkQuery, filesystemSource, sourceRef).Scan(&existingID, &existingBlobID)
 
 	if err == nil {
-		// Update existing
-		updateBlobQuery := `UPDATE media_blob SET image_data = $1, thumbnail_data = NULL, updated_at = NOW() WHERE id = $2`
-		_, err = tx.Exec(ctx, updateBlobQuery, imageData, existingBlobID)
-		if err != nil {
-			return 0, false, fmt.Errorf("failed to update media blob: %w", err)
+		// Update existing — only overwrite image_data for fully-imported items
+		if !isReferenced {
+			updateBlobQuery := `UPDATE media_blob SET image_data = $1, thumbnail_data = NULL, updated_at = NOW() WHERE id = $2`
+			_, err = tx.Exec(ctx, updateBlobQuery, imageData, existingBlobID)
+			if err != nil {
+				return 0, false, fmt.Errorf("failed to update media blob: %w", err)
+			}
 		}
 
-		updateMetaQuery := `UPDATE media_items SET title = $1, tags = $2, media_type = $3, updated_at = NOW() WHERE id = $4`
-		_, err = tx.Exec(ctx, updateMetaQuery, title, nullIfEmpty(tags), nullIfEmpty(mediaType), existingID)
+		updateMetaQuery := `UPDATE media_items SET title = $1, tags = $2, media_type = $3, is_referenced = $4, updated_at = NOW() WHERE id = $5`
+		_, err = tx.Exec(ctx, updateMetaQuery, title, nullIfEmpty(tags), nullIfEmpty(mediaType), isReferenced, existingID)
 		if err != nil {
 			return 0, false, fmt.Errorf("failed to update media item: %w", err)
 		}
@@ -67,7 +70,7 @@ func (s *ImageStorage) SaveImage(ctx context.Context, sourceRef string, imageDat
 		return 0, false, fmt.Errorf("failed to check for existing image: %w", err)
 	}
 
-	// Insert new
+	// Insert new — imageData may be nil for referenced images
 	var blobID int64
 	insertBlobQuery := `INSERT INTO media_blob (image_data, thumbnail_data) VALUES ($1, $2) RETURNING id`
 	err = tx.QueryRow(ctx, insertBlobQuery, imageData, nil).Scan(&blobID)
@@ -80,8 +83,8 @@ func (s *ImageStorage) SaveImage(ctx context.Context, sourceRef string, imageDat
 		media_blob_id, tags, source, source_reference, title, description,
 		media_type, year, month, latitude, longitude, altitude, has_gps,
 		processed, available_for_task, rating, is_personal, is_business,
-		is_social, is_promotional, is_spam, is_important, created_at, updated_at
-	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, NOW(), NOW())
+		is_social, is_promotional, is_spam, is_important, is_referenced, created_at, updated_at
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW(), NOW())
 	RETURNING id`
 
 	err = tx.QueryRow(ctx, insertMetaQuery,
@@ -92,21 +95,22 @@ func (s *ImageStorage) SaveImage(ctx context.Context, sourceRef string, imageDat
 		nullIfEmpty(title),
 		nil, // description
 		nullIfEmpty(mediaType),
-		nil,   // year
-		nil,   // month
-		nil,   // latitude
-		nil,   // longitude
-		nil,   // altitude
-		false, // has_gps
-		false, // processed
-		false, // available_for_task
-		5,     // rating
-		false, // is_personal
-		false, // is_business
-		false, // is_social
-		false, // is_promotional
-		false, // is_spam
-		false, // is_important
+		nil,          // year
+		nil,          // month
+		nil,          // latitude
+		nil,          // longitude
+		nil,          // altitude
+		false,        // has_gps
+		false,        // processed
+		false,        // available_for_task
+		5,            // rating
+		false,        // is_personal
+		false,        // is_business
+		false,        // is_social
+		false,        // is_promotional
+		false,        // is_spam
+		false,        // is_important
+		isReferenced, // is_referenced
 	).Scan(&mediaItemID)
 	if err != nil {
 		return 0, false, fmt.Errorf("failed to insert media item: %w", err)
@@ -159,13 +163,16 @@ func (s *ImageStorage) SaveImagesBatch(ctx context.Context, items []BatchImageIt
 
 	for _, item := range items {
 		if ex, ok := existing[item.SourceRef]; ok {
-			_, err = tx.Exec(ctx, `UPDATE media_blob SET image_data = $1, thumbnail_data = NULL, updated_at = NOW() WHERE id = $2`,
-				item.ImageData, ex.blobID)
-			if err != nil {
-				return 0, 0, fmt.Errorf("failed to update media blob for %s: %w", item.SourceRef, err)
+			// Only overwrite image_data for fully-imported items
+			if !item.IsReferenced {
+				_, err = tx.Exec(ctx, `UPDATE media_blob SET image_data = $1, thumbnail_data = NULL, updated_at = NOW() WHERE id = $2`,
+					item.ImageData, ex.blobID)
+				if err != nil {
+					return 0, 0, fmt.Errorf("failed to update media blob for %s: %w", item.SourceRef, err)
+				}
 			}
-			_, err = tx.Exec(ctx, `UPDATE media_items SET title = $1, tags = $2, media_type = $3, updated_at = NOW() WHERE id = $4`,
-				nullIfEmpty(item.Title), nullIfEmpty(item.Tags), nullIfEmpty(item.MediaType), ex.id)
+			_, err = tx.Exec(ctx, `UPDATE media_items SET title = $1, tags = $2, media_type = $3, is_referenced = $4, updated_at = NOW() WHERE id = $5`,
+				nullIfEmpty(item.Title), nullIfEmpty(item.Tags), nullIfEmpty(item.MediaType), item.IsReferenced, ex.id)
 			if err != nil {
 				return 0, 0, fmt.Errorf("failed to update media item for %s: %w", item.SourceRef, err)
 			}
@@ -181,8 +188,8 @@ func (s *ImageStorage) SaveImagesBatch(ctx context.Context, items []BatchImageIt
 				media_blob_id, tags, source, source_reference, title, description,
 				media_type, year, month, latitude, longitude, altitude, has_gps,
 				processed, available_for_task, rating, is_personal, is_business,
-				is_social, is_promotional, is_spam, is_important, created_at, updated_at
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, NOW(), NOW())`,
+				is_social, is_promotional, is_spam, is_important, is_referenced, created_at, updated_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW(), NOW())`,
 				blobID,
 				nullIfEmpty(item.Tags),
 				filesystemSource,
@@ -193,6 +200,7 @@ func (s *ImageStorage) SaveImagesBatch(ctx context.Context, items []BatchImageIt
 				nil, nil, nil, nil, nil, // year, month, latitude, longitude, altitude
 				false, false, false, 5, // has_gps, processed, available_for_task, rating
 				false, false, false, false, false, false, false, // is_personal through is_important
+				item.IsReferenced, // is_referenced
 			)
 			if err != nil {
 				return 0, 0, fmt.Errorf("failed to insert media item for %s: %w", item.SourceRef, err)

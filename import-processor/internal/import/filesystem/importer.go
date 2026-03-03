@@ -62,27 +62,29 @@ func shouldExcludeDirectory(dirPath string, dirName string, patterns []string) b
 
 // ImportStats holds statistics about the import process
 type ImportStats struct {
-	TotalFiles     int      `json:"total_files"`
-	FilesProcessed int      `json:"files_processed"`
-	ImagesImported int      `json:"images_imported"`
-	ImagesUpdated  int      `json:"images_updated"`
-	Errors         int      `json:"errors"`
-	ErrorMessages  []string `json:"error_messages"`
-	CurrentFile    string   `json:"current_file,omitempty"`
-	mu             sync.Mutex
+	TotalFiles       int      `json:"total_files"`
+	FilesProcessed   int      `json:"files_processed"`
+	ImagesImported   int      `json:"images_imported"`
+	ImagesUpdated    int      `json:"images_updated"`
+	ImagesReferenced int      `json:"images_referenced"`
+	Errors           int      `json:"errors"`
+	ErrorMessages    []string `json:"error_messages"`
+	CurrentFile      string   `json:"current_file,omitempty"`
+	mu               sync.Mutex
 }
 
 func (s *ImportStats) copyStats() ImportStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return ImportStats{
-		TotalFiles:     s.TotalFiles,
-		FilesProcessed: s.FilesProcessed,
-		ImagesImported: s.ImagesImported,
-		ImagesUpdated:  s.ImagesUpdated,
-		Errors:         s.Errors,
-		ErrorMessages:  append([]string(nil), s.ErrorMessages...),
-		CurrentFile:    s.CurrentFile,
+		TotalFiles:       s.TotalFiles,
+		FilesProcessed:   s.FilesProcessed,
+		ImagesImported:   s.ImagesImported,
+		ImagesUpdated:    s.ImagesUpdated,
+		ImagesReferenced: s.ImagesReferenced,
+		Errors:           s.Errors,
+		ErrorMessages:    append([]string(nil), s.ErrorMessages...),
+		CurrentFile:      s.CurrentFile,
 	}
 }
 
@@ -101,13 +103,16 @@ type imageWork struct {
 	Name     string
 }
 
-// ImportImagesFromDirectories imports images from one or more directory trees using a worker pool
+// ImportImagesFromDirectories imports images from one or more directory trees using a worker pool.
+// When referenceMode is true, image binary data is not read or stored; only metadata and the
+// filesystem path are recorded in the database.
 func ImportImagesFromDirectories(
 	ctx context.Context,
 	db *database.DB,
 	directories []string,
 	excludePatterns []string,
 	maxImages *int,
+	referenceMode bool,
 	progressCallback ProgressCallback,
 	cancelledCheck CancelledCheck,
 ) (*ImportStats, error) {
@@ -200,7 +205,7 @@ func ImportImagesFromDirectories(
 				imp, upd, err := storage.SaveImagesBatch(ctx, batch)
 				if err != nil {
 					for _, item := range batch {
-						_, isUpdate, saveErr := storage.SaveImage(ctx, item.SourceRef, item.ImageData, item.MediaType, item.Title, item.Tags)
+						_, isUpdate, saveErr := storage.SaveImage(ctx, item.SourceRef, item.ImageData, item.MediaType, item.Title, item.Tags, item.IsReferenced)
 						if saveErr != nil {
 							stats.mu.Lock()
 							stats.Errors++
@@ -210,6 +215,8 @@ func ImportImagesFromDirectories(
 							stats.mu.Lock()
 							if isUpdate {
 								stats.ImagesUpdated++
+							} else if item.IsReferenced {
+								stats.ImagesReferenced++
 							} else {
 								stats.ImagesImported++
 							}
@@ -240,29 +247,34 @@ func ImportImagesFromDirectories(
 				stats.CurrentFile = work.Path
 				stats.mu.Unlock()
 
-				imageData, err := os.ReadFile(work.Path)
-				if err != nil {
-					stats.mu.Lock()
-					stats.Errors++
-					stats.ErrorMessages = append(stats.ErrorMessages, fmt.Sprintf("Error reading %s: %v", work.Path, err))
-					stats.mu.Unlock()
-					if progressCallback != nil {
-						progressCallback(stats.copyStats())
-					}
-					continue
-				}
-
 				absPath, _ := filepath.Abs(work.Path)
 				mediaType := utils.DetectMIMEType(work.Name)
 				title := strings.TrimSuffix(work.Name, filepath.Ext(work.Name))
 				tags := generateDirectoryTags(work.Path, work.RootPath)
 
+				var imageData []byte
+				if !referenceMode {
+					var err error
+					imageData, err = os.ReadFile(work.Path)
+					if err != nil {
+						stats.mu.Lock()
+						stats.Errors++
+						stats.ErrorMessages = append(stats.ErrorMessages, fmt.Sprintf("Error reading %s: %v", work.Path, err))
+						stats.mu.Unlock()
+						if progressCallback != nil {
+							progressCallback(stats.copyStats())
+						}
+						continue
+					}
+				}
+
 				batch = append(batch, database.BatchImageItem{
-					SourceRef: absPath,
-					ImageData: imageData,
-					MediaType: mediaType,
-					Title:     title,
-					Tags:      tags,
+					SourceRef:    absPath,
+					ImageData:    imageData,
+					MediaType:    mediaType,
+					Title:        title,
+					Tags:         tags,
+					IsReferenced: referenceMode,
 				})
 
 				if len(batch) >= imageBatchSize {

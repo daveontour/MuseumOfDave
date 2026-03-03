@@ -214,6 +214,7 @@ filesystem_import_progress: Dict[str, Any] = {
     "files_processed": 0,
     "total_files": 0,
     "images_imported": 0,
+    "images_referenced": 0,
     "images_updated": 0,
     "errors": 0,
     "error_messages": []
@@ -245,6 +246,52 @@ thumbnail_processing_progress: Dict[str, Any] = {
 
 thumbnail_processing_sse_clients: List[asyncio.Queue] = []
 thumbnail_processing_sse_clients_lock = threading.Lock()
+
+# ---------------------------------------------------------------------------
+# Reference import (import referenced images into database) state
+# ---------------------------------------------------------------------------
+
+reference_import_lock = threading.Lock()
+reference_import_cancelled = threading.Event()
+reference_import_in_progress = False
+
+reference_import_progress: Dict[str, Any] = {
+    "status": "idle",  # idle, in_progress, completed, cancelled, error
+    "status_line": None,
+    "total": 0,
+    "processed": 0,
+    "imported": 0,
+    "skipped": 0,
+    "errors": 0,
+    "error_message": None,
+    "error_messages": [],
+}
+
+reference_import_sse_clients: List[asyncio.Queue] = []
+reference_import_sse_clients_lock = threading.Lock()
+
+# ---------------------------------------------------------------------------
+# Image export (export all images to filesystem) state
+# ---------------------------------------------------------------------------
+
+image_export_lock = threading.Lock()
+image_export_cancelled = threading.Event()
+image_export_in_progress = False
+
+image_export_progress: Dict[str, Any] = {
+    "status": "idle",  # idle, in_progress, completed, cancelled, error
+    "status_line": None,
+    "total": 0,
+    "processed": 0,
+    "exported": 0,
+    "skipped": 0,
+    "errors": 0,
+    "error_message": None,
+    "error_messages": [],
+}
+
+image_export_sse_clients: List[asyncio.Queue] = []
+image_export_sse_clients_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Contacts extract (import-processor contacts) state
@@ -702,6 +749,100 @@ def broadcast_thumbnail_processing_event_sync(event_type: str, data: Dict[str, A
         for client in disconnected_clients:
             if client in thumbnail_processing_sse_clients:
                 thumbnail_processing_sse_clients.remove(client)
+
+
+# ---------------------------------------------------------------------------
+# Reference import state functions
+# ---------------------------------------------------------------------------
+
+def update_reference_import_progress_state(**kwargs):
+    """Thread-safe function to update reference import progress state."""
+    global reference_import_progress
+    with reference_import_lock:
+        for key, value in kwargs.items():
+            if key in reference_import_progress:
+                if key == "error_messages" and isinstance(value, list):
+                    reference_import_progress[key] = value.copy()
+                else:
+                    reference_import_progress[key] = value
+
+
+def get_reference_import_progress_state() -> Dict[str, Any]:
+    """Thread-safe function to get current reference import progress state."""
+    global reference_import_progress
+    with reference_import_lock:
+        return reference_import_progress.copy()
+
+
+def broadcast_reference_import_event_sync(event_type: str, data: Dict[str, Any]):
+    """Thread-safe function to queue reference import progress event for SSE clients."""
+    global reference_import_sse_clients
+    event_data = {
+        "type": event_type,
+        "data": data
+    }
+    message = f"data: {json.dumps(event_data)}\n\n"
+
+    with reference_import_sse_clients_lock:
+        disconnected_clients = []
+        for client_queue in reference_import_sse_clients:
+            try:
+                client_queue.put_nowait(message)
+            except asyncio.QueueFull:
+                pass
+            except Exception:
+                disconnected_clients.append(client_queue)
+
+        for client in disconnected_clients:
+            if client in reference_import_sse_clients:
+                reference_import_sse_clients.remove(client)
+
+
+# ---------------------------------------------------------------------------
+# Image export state functions
+# ---------------------------------------------------------------------------
+
+def update_image_export_progress_state(**kwargs):
+    """Thread-safe function to update image export progress state."""
+    global image_export_progress
+    with image_export_lock:
+        for key, value in kwargs.items():
+            if key in image_export_progress:
+                if key == "error_messages" and isinstance(value, list):
+                    image_export_progress[key] = value.copy()
+                else:
+                    image_export_progress[key] = value
+
+
+def get_image_export_progress_state() -> Dict[str, Any]:
+    """Thread-safe function to get current image export progress state."""
+    global image_export_progress
+    with image_export_lock:
+        return image_export_progress.copy()
+
+
+def broadcast_image_export_event_sync(event_type: str, data: Dict[str, Any]):
+    """Thread-safe function to queue image export progress event for SSE clients."""
+    global image_export_sse_clients
+    event_data = {
+        "type": event_type,
+        "data": data
+    }
+    message = f"data: {json.dumps(event_data)}\n\n"
+
+    with image_export_sse_clients_lock:
+        disconnected_clients = []
+        for client_queue in image_export_sse_clients:
+            try:
+                client_queue.put_nowait(message)
+            except asyncio.QueueFull:
+                pass
+            except Exception:
+                disconnected_clients.append(client_queue)
+
+        for client in disconnected_clients:
+            if client in image_export_sse_clients:
+                image_export_sse_clients.remove(client)
 
 
 # ---------------------------------------------------------------------------

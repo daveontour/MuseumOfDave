@@ -48,6 +48,7 @@ type MediaMetadata struct {
 	Altitude        *float64   `db:"altitude"`
 	HasGPS          *bool      `db:"has_gps"`
 	Processed       bool       `db:"processed"`
+	IsReferenced    bool       `db:"is_referenced"`
 	CreatedAt       *time.Time `db:"created_at"`
 	UpdatedAt       *time.Time `db:"updated_at"`
 }
