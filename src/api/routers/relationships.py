@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy import text, func, or_
 
-from ...database.models import Contacts, IMessage
+from ...database.models import Contacts, IMessage, EmailMatches, EmailClassifications
 from ..deps import db
 from .. import state as import_state
 
@@ -82,6 +82,48 @@ class ContactNameId(BaseModel):
     """Minimal contact model: id and name only."""
     id: int
     name: str
+
+
+class EmailMatchResponse(BaseModel):
+    """Response model for an email match."""
+    id: int
+    primary_name: str
+    email: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class EmailMatchCreate(BaseModel):
+    """Request model for creating an email match."""
+    primary_name: str
+    email: str
+
+
+class EmailMatchUpdate(BaseModel):
+    """Request model for updating an email match."""
+    primary_name: Optional[str] = None
+    email: Optional[str] = None
+
+
+class EmailClassificationResponse(BaseModel):
+    """Response model for an email classification row."""
+    id: int
+    name: str
+    classification: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class EmailClassificationCreate(BaseModel):
+    """Request model for creating an email classification."""
+    name: str
+    classification: str
+
+
+class EmailClassificationUpdate(BaseModel):
+    """Request model for updating an email classification."""
+    name: Optional[str] = None
+    classification: Optional[str] = None
 
 
 class ContactsNamesListResponse(BaseModel):
@@ -251,7 +293,6 @@ def _get_relationship_graph_from_db(types: Optional[List[str]] = None, sources: 
         LIMIT {max(1, min(max_nodes, 1000))}
     """
 
-    print(sql)
 
     session = db.get_session()
     try:
@@ -591,6 +632,328 @@ async def delete_contact(contact_id: int):
         session.close()
 
 
+# ---------------------------------------------------------------------------
+# Email matches (primary_name + email pairs for contact merging)
+# ---------------------------------------------------------------------------
+
+@router.get("/email-matches", response_model=List[EmailMatchResponse])
+async def get_email_matches(
+    primary_name: Optional[str] = Query(None, description="Filter by primary name (partial match, case-insensitive)"),
+):
+    """List all email matches from the email_matches table."""
+    session = db.get_session()
+    try:
+        q = session.query(EmailMatches).order_by(EmailMatches.primary_name, EmailMatches.email)
+        if primary_name and primary_name.strip():
+            term = f"%{primary_name.strip()}%"
+            q = q.filter(EmailMatches.primary_name.ilike(term))
+        rows = q.all()
+        return [
+            EmailMatchResponse(
+                id=r.id,
+                primary_name=r.primary_name or "",
+                email=r.email or "",
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in rows
+        ]
+    finally:
+        session.close()
+
+
+@router.get("/email-matches/{match_id}", response_model=EmailMatchResponse)
+async def get_email_match(match_id: int):
+    """Get a single email match by ID."""
+    session = db.get_session()
+    try:
+        row = session.query(EmailMatches).filter(EmailMatches.id == match_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Email match not found: id={match_id}")
+        return EmailMatchResponse(
+            id=row.id,
+            primary_name=row.primary_name or "",
+            email=row.email or "",
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+    finally:
+        session.close()
+
+
+@router.post("/email-matches", response_model=EmailMatchResponse)
+async def create_email_match(req: EmailMatchCreate):
+    """Create a new email match."""
+    pn = (req.primary_name or "").strip()
+    em = (req.email or "").strip()
+    if not pn:
+        raise HTTPException(status_code=400, detail="primary_name is required")
+    if not em:
+        raise HTTPException(status_code=400, detail="email is required")
+    session = db.get_session()
+    try:
+        existing = session.query(EmailMatches).filter(
+            EmailMatches.primary_name == pn,
+            EmailMatches.email == em,
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail=f"Email match already exists: {pn} / {em}")
+        row = EmailMatches(primary_name=pn, email=em)
+        session.add(row)
+        session.commit()
+        session.refresh(row)  # Populate id, created_at, updated_at from DB
+        return EmailMatchResponse(
+            id=row.id,
+            primary_name=row.primary_name,
+            email=row.email,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        session.close()
+
+
+@router.put("/email-matches/{match_id}", response_model=EmailMatchResponse)
+async def update_email_match(match_id: int, req: EmailMatchUpdate):
+    """Update an existing email match."""
+    session = db.get_session()
+    try:
+        row = session.query(EmailMatches).filter(EmailMatches.id == match_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Email match not found: id={match_id}")
+        if req.primary_name is not None:
+            pn = req.primary_name.strip()
+            if not pn:
+                raise HTTPException(status_code=400, detail="primary_name cannot be empty")
+            row.primary_name = pn
+        if req.email is not None:
+            em = req.email.strip()
+            if not em:
+                raise HTTPException(status_code=400, detail="email cannot be empty")
+            row.email = em
+        session.commit()
+        session.refresh(row)
+        return EmailMatchResponse(
+            id=row.id,
+            primary_name=row.primary_name,
+            email=row.email,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        session.close()
+
+
+@router.delete("/email-matches/{match_id}")
+async def delete_email_match(match_id: int):
+    """Delete an email match by ID."""
+    session = db.get_session()
+    try:
+        row = session.query(EmailMatches).filter(EmailMatches.id == match_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Email match not found: id={match_id}")
+        session.delete(row)
+        session.commit()
+        return {"message": "Email match deleted", "id": match_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        session.close()
+
+
+# ---------------------------------------------------------------------------
+# Email classifications (name + classification for contact rel_type) used by import-processor
+# ---------------------------------------------------------------------------
+
+
+def _apply_classification_to_contacts(session, name: str, classification: str) -> None:
+    """Update contacts matching name (or alternative_names) to the given rel_type. Skips subject (id=0)."""
+    nm_lower = (name or "").strip().lower()
+    if not nm_lower:
+        return
+    contacts = session.query(Contacts).filter(Contacts.id != 0).all()
+    for c in contacts:
+        names_to_check = []
+        if c.name:
+            names_to_check.append(c.name.strip().lower())
+        if c.alternative_names:
+            for alt in c.alternative_names.split(","):
+                alt = alt.strip().lower()
+                if alt:
+                    names_to_check.append(alt)
+        if nm_lower in names_to_check:
+            c.rel_type = classification
+
+
+@router.get("/email-classifications/options")
+async def get_email_classification_options():
+    """Return list of valid classification values for the dropdown."""
+    return {"classifications": list(REL_TYPE_KEYS)}
+
+
+@router.get("/email-classifications", response_model=List[EmailClassificationResponse])
+async def get_email_classifications(
+    name: Optional[str] = Query(None, description="Filter by name (partial match, case-insensitive)"),
+    classification: Optional[str] = Query(None, description="Filter by classification"),
+):
+    """List all email classifications from the email_classifications table."""
+    session = db.get_session()
+    try:
+        q = session.query(EmailClassifications).order_by(EmailClassifications.classification, EmailClassifications.name)
+        if name and name.strip():
+            term = f"%{name.strip()}%"
+            q = q.filter(EmailClassifications.name.ilike(term))
+        if classification and classification.strip() and classification.strip() in VALID_REL_TYPES:
+            q = q.filter(EmailClassifications.classification == classification.strip())
+        rows = q.all()
+        return [
+            EmailClassificationResponse(
+                id=r.id,
+                name=r.name or "",
+                classification=r.classification or "",
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in rows
+        ]
+    finally:
+        session.close()
+
+
+@router.get("/email-classifications/{class_id}", response_model=EmailClassificationResponse)
+async def get_email_classification(class_id: int):
+    """Get a single email classification by ID."""
+    session = db.get_session()
+    try:
+        row = session.query(EmailClassifications).filter(EmailClassifications.id == class_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Email classification not found: id={class_id}")
+        return EmailClassificationResponse(
+            id=row.id,
+            name=row.name or "",
+            classification=row.classification or "",
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+    finally:
+        session.close()
+
+
+@router.post("/email-classifications", response_model=EmailClassificationResponse)
+async def create_email_classification(req: EmailClassificationCreate):
+    """Create a new email classification."""
+    nm = (req.name or "").strip()
+    cl = (req.classification or "").strip().lower()
+    if not nm:
+        raise HTTPException(status_code=400, detail="name is required")
+    if not cl or cl not in VALID_REL_TYPES:
+        raise HTTPException(status_code=400, detail=f"classification must be one of: {', '.join(REL_TYPE_KEYS)}")
+    session = db.get_session()
+    try:
+        existing = session.query(EmailClassifications).filter(
+            EmailClassifications.name == nm,
+            EmailClassifications.classification == cl,
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail=f"Classification already exists: {nm} / {cl}")
+        row = EmailClassifications(name=nm, classification=cl)
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        _apply_classification_to_contacts(session, nm, cl)
+        session.commit()
+        return EmailClassificationResponse(
+            id=row.id,
+            name=row.name,
+            classification=row.classification,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        session.close()
+
+
+@router.put("/email-classifications/{class_id}", response_model=EmailClassificationResponse)
+async def update_email_classification(class_id: int, req: EmailClassificationUpdate):
+    """Update an existing email classification."""
+    session = db.get_session()
+    try:
+        row = session.query(EmailClassifications).filter(EmailClassifications.id == class_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Email classification not found: id={class_id}")
+        if req.name is not None:
+            nm = req.name.strip()
+            if not nm:
+                raise HTTPException(status_code=400, detail="name cannot be empty")
+            row.name = nm
+        if req.classification is not None:
+            cl = req.classification.strip().lower()
+            if not cl or cl not in VALID_REL_TYPES:
+                raise HTTPException(status_code=400, detail=f"classification must be one of: {', '.join(REL_TYPE_KEYS)}")
+            row.classification = cl
+        session.commit()
+        session.refresh(row)
+        _apply_classification_to_contacts(session, row.name, row.classification)
+        session.commit()
+        return EmailClassificationResponse(
+            id=row.id,
+            name=row.name,
+            classification=row.classification,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        session.close()
+
+
+@router.delete("/email-classifications/{class_id}")
+async def delete_email_classification(class_id: int):
+    """Delete an email classification by ID."""
+    session = db.get_session()
+    try:
+        row = session.query(EmailClassifications).filter(EmailClassifications.id == class_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Email classification not found: id={class_id}")
+        session.delete(row)
+        session.commit()
+        return {"message": "Email classification deleted", "id": class_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        session.close()
+
+# ---------------------------------------------------------------------------
+# Email classifications used by the relationships graph
+# ---------------------------------------------------------------------------
+
+
+
 @router.patch("/contacts/update-classification")
 async def update_contact_classification(req: UpdateClassificationRequest):
     """Update a contact's classification in the database and email_classifications.json."""
@@ -610,6 +973,20 @@ async def update_contact_classification(req: UpdateClassificationRequest):
             raise HTTPException(status_code=400, detail="Cannot change classification of the subject (contact id=0)")
 
         contact.rel_type = classification
+
+        # Update or create email_classifications table entry
+        nm = req.name.strip()
+        existing = session.query(EmailClassifications).filter(
+            func.lower(EmailClassifications.name) == nm.lower()
+        ).first()
+        if classification == "unknown":
+            if existing:
+                session.delete(existing)
+        elif existing:
+            existing.classification = classification
+        else:
+            session.add(EmailClassifications(name=nm, classification=classification))
+
         session.commit()
     except HTTPException:
         raise
@@ -619,25 +996,25 @@ async def update_contact_classification(req: UpdateClassificationRequest):
     finally:
         session.close()
 
-    # Update email_classifications.json (new format: keys = rel_type values)
-    classifications_path = _get_email_classifications_path()
-    try:
-        data = {}
-        if classifications_path.exists():
-            with open(classifications_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            data = _migrate_classifications_to_rel_type(data)
-        else:
-            data = {k: [] for k in REL_TYPE_KEYS}
-        for key in REL_TYPE_KEYS:
-            data[key] = [n for n in data[key] if n.strip().lower() != req.name.strip().lower()]
-        if classification != "unknown":
-            if req.name not in data[classification]:
-                data[classification].append(req.name)
-        with open(classifications_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update email_classifications.json: {str(e)}")
+    # # Update email_classifications.json (new format: keys = rel_type values)
+    # classifications_path = _get_email_classifications_path()
+    # try:
+    #     data = {}
+    #     if classifications_path.exists():
+    #         with open(classifications_path, "r", encoding="utf-8") as f:
+    #             data = json.load(f)
+    #         data = _migrate_classifications_to_rel_type(data)
+    #     else:
+    #         data = {k: [] for k in REL_TYPE_KEYS}
+    #     for key in REL_TYPE_KEYS:
+    #         data[key] = [n for n in data[key] if n.strip().lower() != req.name.strip().lower()]
+    #     if classification != "unknown":
+    #         if req.name not in data[classification]:
+    #             data[classification].append(req.name)
+    #     with open(classifications_path, "w", encoding="utf-8") as f:
+    #         json.dump(data, f, indent=2)
+    # except Exception as e:
+    #     raise HTTPException(status_code=500, detail=f"Failed to update email_classifications.json: {str(e)}")
 
     return {"message": "Classification updated", "name": req.name, "classification": classification}
 

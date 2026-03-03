@@ -1830,6 +1830,8 @@ Modals.initAll = () => {
         Modals.SensitiveData.init();
         Modals.ManageKeys.init();
         Modals.Profiles.init();
+        if (Modals.EmailMatches && Modals.EmailMatches.init) Modals.EmailMatches.init();
+        if (Modals.EmailClassifications && Modals.EmailClassifications.init) Modals.EmailClassifications.init();
 };
 
 Modals.closeAll = () => {
@@ -1922,4 +1924,469 @@ Modals.closeAll = () => {
             });
         } catch (e) { console.debug('Error closing modals via DOM query:', e); }
     };
+
+
+// --- Email Matches (Manage Contacts) ---
+Modals.EmailMatches = (() => {
+    let editingId = null;
+
+    function getEl(id) {
+        return document.getElementById(id);
+    }
+
+    async function loadEmailMatches() {
+        const tbody = getEl('email-matches-tbody');
+        const loading = getEl('email-matches-loading');
+        const tableContainer = getEl('email-matches-table-container');
+        const emptyMsg = getEl('email-matches-empty-msg');
+        const filterInput = getEl('email-matches-filter');
+        if (!tbody || !loading) return;
+
+        loading.style.display = 'block';
+        if (tableContainer) tableContainer.style.display = 'none';
+        if (emptyMsg) emptyMsg.style.display = 'none';
+
+        try {
+            const params = new URLSearchParams();
+            if (filterInput && filterInput.value.trim()) {
+                params.append('primary_name', filterInput.value.trim());
+            }
+            const response = await fetch(`/email-matches?${params.toString()}`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+
+            loading.style.display = 'none';
+            if (tableContainer) tableContainer.style.display = 'block';
+
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '';
+                if (emptyMsg) emptyMsg.style.display = 'block';
+                return;
+            }
+            if (emptyMsg) emptyMsg.style.display = 'none';
+
+            tbody.innerHTML = data.map(row => `
+                <tr style="border-bottom: 1px solid #e9ecef;">
+                    <td style="padding: 8px;">${escapeHtml(row.primary_name)}</td>
+                    <td style="padding: 8px;">${escapeHtml(row.email)}</td>
+                    <td style="padding: 8px; text-align: center;">
+                        <button type="button" class="email-match-edit-btn modal-btn modal-btn-secondary" data-id="${row.id}" style="padding: 4px 8px; font-size: 0.85em;">
+                            <i class="fas fa-edit"></i> Edit
+                        </button>
+                        <button type="button" class="email-match-delete-btn modal-btn" data-id="${row.id}" style="padding: 4px 8px; font-size: 0.85em; background: #dc3545; color: white; margin-left: 4px;">
+                            <i class="fas fa-trash-alt"></i> Delete
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+
+            tbody.querySelectorAll('.email-match-edit-btn').forEach(btn => {
+                btn.addEventListener('click', () => openEditModal(parseInt(btn.dataset.id, 10)));
+            });
+            tbody.querySelectorAll('.email-match-delete-btn').forEach(btn => {
+                btn.addEventListener('click', () => deleteMatch(parseInt(btn.dataset.id, 10)));
+            });
+        } catch (err) {
+            loading.style.display = 'none';
+            if (tableContainer) tableContainer.style.display = 'block';
+            tbody.innerHTML = `<tr><td colspan="3" style="padding: 1em; color: #c00;">Failed to load: ${escapeHtml(err.message)}</td></tr>`;
+        }
+    }
+
+    function escapeHtml(s) {
+        if (s == null) return '';
+        const div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+    }
+
+    function openCreateModal() {
+        editingId = null;
+        const modal = getEl('email-match-modal');
+        const title = getEl('email-match-modal-title');
+        const primaryName = getEl('email-match-primary-name');
+        const email = getEl('email-match-email');
+        const errEl = getEl('email-match-modal-error');
+        if (!modal || !title || !primaryName || !email) return;
+        title.textContent = 'Add Email Match';
+        primaryName.value = '';
+        email.value = '';
+        if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+        modal.style.display = 'flex';
+    }
+
+    async function openEditModal(id) {
+        editingId = id;
+        const modal = getEl('email-match-modal');
+        const title = getEl('email-match-modal-title');
+        const primaryName = getEl('email-match-primary-name');
+        const email = getEl('email-match-email');
+        const errEl = getEl('email-match-modal-error');
+        if (!modal || !title || !primaryName || !email) return;
+
+        try {
+            const res = await fetch(`/email-matches/${id}`);
+            if (!res.ok) throw new Error(res.statusText);
+            const row = await res.json();
+            title.textContent = 'Edit Email Match';
+            primaryName.value = row.primary_name;
+            email.value = row.email;
+            if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+            modal.style.display = 'flex';
+        } catch (err) {
+            if (errEl) { errEl.textContent = 'Failed to load: ' + err.message; errEl.style.display = 'block'; }
+        }
+    }
+
+    function closeModal() {
+        const modal = getEl('email-match-modal');
+        if (modal) modal.style.display = 'none';
+        editingId = null;
+    }
+
+    async function saveMatch() {
+        const primaryName = getEl('email-match-primary-name');
+        const email = getEl('email-match-email');
+        const errEl = getEl('email-match-modal-error');
+        if (!primaryName || !email) return;
+
+        const pn = primaryName.value.trim();
+        const em = email.value.trim();
+        if (!pn) {
+            if (errEl) { errEl.textContent = 'Primary name is required'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (!em) {
+            if (errEl) { errEl.textContent = 'Email is required'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (errEl) errEl.style.display = 'none';
+
+        try {
+            if (editingId !== null) {
+                const res = await fetch(`/email-matches/${editingId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ primary_name: pn, email: em })
+                });
+                if (!res.ok) {
+                    const d = await res.json().catch(() => ({}));
+                    const msg = typeof d.detail === 'string' ? d.detail : (Array.isArray(d.detail) && d.detail[0]?.msg ? d.detail[0].msg : JSON.stringify(d.detail || res.statusText));
+                    throw new Error(msg);
+                }
+            } else {
+                const res = await fetch('/email-matches', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ primary_name: pn, email: em })
+                });
+                if (!res.ok) {
+                    const d = await res.json().catch(() => ({}));
+                    const msg = typeof d.detail === 'string' ? d.detail : (Array.isArray(d.detail) && d.detail[0]?.msg ? d.detail[0].msg : JSON.stringify(d.detail || res.statusText));
+                    throw new Error(msg);
+                }
+            }
+            closeModal();
+            loadEmailMatches();
+        } catch (err) {
+            if (errEl) { errEl.textContent = err.message; errEl.style.display = 'block'; }
+        }
+    }
+
+    async function deleteMatch(id) {
+        const msg = 'Are you sure you want to delete this email match?';
+        if (!confirm(msg)) return;
+        try {
+            const res = await fetch(`/email-matches/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(res.statusText);
+            loadEmailMatches();
+        } catch (err) {
+            alert('Failed to delete: ' + err.message);
+        }
+    }
+
+    function init() {
+        const createBtn = getEl('email-matches-create-btn');
+        const refreshBtn = getEl('email-matches-refresh-btn');
+        const filterInput = getEl('email-matches-filter');
+        const closeBtn = getEl('close-email-match-modal');
+        const cancelBtn = getEl('email-match-modal-cancel');
+        const saveBtn = getEl('email-match-modal-save');
+
+        if (createBtn) createBtn.addEventListener('click', openCreateModal);
+        if (refreshBtn) refreshBtn.addEventListener('click', () => loadEmailMatches());
+        if (filterInput) {
+            filterInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') loadEmailMatches(); });
+        }
+        if (closeBtn) closeBtn.addEventListener('click', closeModal);
+        if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+        if (saveBtn) saveBtn.addEventListener('click', saveMatch);
+
+        const modal = getEl('email-match-modal');
+        if (modal) {
+            modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+        }
+    }
+
+    return {
+        load: loadEmailMatches,
+        init: init
+    };
+})();
+
+
+// --- Email Classifications (Manage Contacts) ---
+Modals.EmailClassifications = (() => {
+    let editingId = null;
+    let classificationOptions = [];
+
+    function getEl(id) {
+        return document.getElementById(id);
+    }
+
+    function escapeHtml(s) {
+        if (s == null) return '';
+        const div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+    }
+
+    async function loadClassificationOptions() {
+        try {
+            const res = await fetch('/email-classifications/options');
+            if (!res.ok) return;
+            const data = await res.json();
+            classificationOptions = data.classifications || [];
+        } catch (e) {
+            console.error('Failed to load classification options:', e);
+        }
+    }
+
+    function populateTypeFilter() {
+        const sel = getEl('email-classifications-type-filter');
+        if (!sel) return;
+        const currentVal = sel.value;
+        sel.innerHTML = '<option value="">All types</option>';
+        classificationOptions.forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt;
+            o.textContent = opt.charAt(0).toUpperCase() + opt.slice(1);
+            sel.appendChild(o);
+        });
+        if (currentVal) sel.value = currentVal;
+    }
+
+    function populateModalDropdown() {
+        const sel = getEl('email-classification-type');
+        if (!sel) return;
+        const currentVal = sel.value;
+        sel.innerHTML = '<option value="">Select classification...</option>';
+        classificationOptions.forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt;
+            o.textContent = opt.charAt(0).toUpperCase() + opt.slice(1);
+            sel.appendChild(o);
+        });
+        if (currentVal) sel.value = currentVal;
+    }
+
+    async function loadEmailClassifications() {
+        const tbody = getEl('email-classifications-tbody');
+        const loading = getEl('email-classifications-loading');
+        const tableContainer = getEl('email-classifications-table-container');
+        const emptyMsg = getEl('email-classifications-empty-msg');
+        const filterInput = getEl('email-classifications-filter');
+        const typeFilter = getEl('email-classifications-type-filter');
+        if (!tbody || !loading) return;
+
+        if (classificationOptions.length === 0) {
+            await loadClassificationOptions();
+            populateTypeFilter();
+        }
+        loading.style.display = 'block';
+        if (tableContainer) tableContainer.style.display = 'none';
+        if (emptyMsg) emptyMsg.style.display = 'none';
+
+        try {
+            const params = new URLSearchParams();
+            if (filterInput && filterInput.value.trim()) params.append('name', filterInput.value.trim());
+            if (typeFilter && typeFilter.value) params.append('classification', typeFilter.value);
+            const response = await fetch(`/email-classifications?${params.toString()}`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+
+            loading.style.display = 'none';
+            if (tableContainer) tableContainer.style.display = 'block';
+
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '';
+                if (emptyMsg) emptyMsg.style.display = 'block';
+                return;
+            }
+            if (emptyMsg) emptyMsg.style.display = 'none';
+
+            tbody.innerHTML = data.map(row => `
+                <tr style="border-bottom: 1px solid #e9ecef;">
+                    <td style="padding: 8px;">${escapeHtml(row.name)}</td>
+                    <td style="padding: 8px;">${escapeHtml(row.classification)}</td>
+                    <td style="padding: 8px; text-align: center;">
+                        <button type="button" class="email-classification-edit-btn modal-btn modal-btn-secondary" data-id="${row.id}" style="padding: 4px 8px; font-size: 0.85em;">
+                            <i class="fas fa-edit"></i> Edit
+                        </button>
+                        <button type="button" class="email-classification-delete-btn modal-btn" data-id="${row.id}" style="padding: 4px 8px; font-size: 0.85em; background: #dc3545; color: white; margin-left: 4px;">
+                            <i class="fas fa-trash-alt"></i> Delete
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+
+            tbody.querySelectorAll('.email-classification-edit-btn').forEach(btn => {
+                btn.addEventListener('click', () => openEditModal(parseInt(btn.dataset.id, 10)));
+            });
+            tbody.querySelectorAll('.email-classification-delete-btn').forEach(btn => {
+                btn.addEventListener('click', () => deleteClassification(parseInt(btn.dataset.id, 10)));
+            });
+        } catch (err) {
+            loading.style.display = 'none';
+            if (tableContainer) tableContainer.style.display = 'block';
+            tbody.innerHTML = `<tr><td colspan="3" style="padding: 1em; color: #c00;">Failed to load: ${escapeHtml(err.message)}</td></tr>`;
+        }
+    }
+
+    async function openCreateModal() {
+        editingId = null;
+        await loadClassificationOptions();
+        populateModalDropdown();
+        const modal = getEl('email-classification-modal');
+        const title = getEl('email-classification-modal-title');
+        const nameInput = getEl('email-classification-name');
+        const typeSel = getEl('email-classification-type');
+        const errEl = getEl('email-classification-modal-error');
+        if (!modal || !title || !nameInput || !typeSel) return;
+        title.textContent = 'Add Classification';
+        nameInput.value = '';
+        typeSel.value = '';
+        if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+        modal.style.display = 'flex';
+    }
+
+    async function openEditModal(id) {
+        editingId = id;
+        await loadClassificationOptions();
+        populateModalDropdown();
+        const modal = getEl('email-classification-modal');
+        const title = getEl('email-classification-modal-title');
+        const nameInput = getEl('email-classification-name');
+        const typeSel = getEl('email-classification-type');
+        const errEl = getEl('email-classification-modal-error');
+        if (!modal || !title || !nameInput || !typeSel) return;
+
+        try {
+            const res = await fetch(`/email-classifications/${id}`);
+            if (!res.ok) throw new Error(res.statusText);
+            const row = await res.json();
+            title.textContent = 'Edit Classification';
+            nameInput.value = row.name;
+            typeSel.value = row.classification;
+            if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+            modal.style.display = 'flex';
+        } catch (err) {
+            if (errEl) { errEl.textContent = 'Failed to load: ' + err.message; errEl.style.display = 'block'; }
+        }
+    }
+
+    function closeModal() {
+        const modal = getEl('email-classification-modal');
+        if (modal) modal.style.display = 'none';
+        editingId = null;
+    }
+
+    async function saveClassification() {
+        const nameInput = getEl('email-classification-name');
+        const typeSel = getEl('email-classification-type');
+        const errEl = getEl('email-classification-modal-error');
+        if (!nameInput || !typeSel) return;
+
+        const nm = nameInput.value.trim();
+        const cl = typeSel.value ? typeSel.value.trim().toLowerCase() : '';
+        if (!nm) {
+            if (errEl) { errEl.textContent = 'Name is required'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (!cl) {
+            if (errEl) { errEl.textContent = 'Please select a classification'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (errEl) errEl.style.display = 'none';
+
+        try {
+            if (editingId !== null) {
+                const res = await fetch(`/email-classifications/${editingId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: nm, classification: cl })
+                });
+                if (!res.ok) {
+                    const d = await res.json().catch(() => ({}));
+                    const msg = typeof d.detail === 'string' ? d.detail : (Array.isArray(d.detail) && d.detail[0]?.msg ? d.detail[0].msg : JSON.stringify(d.detail || res.statusText));
+                    throw new Error(msg);
+                }
+            } else {
+                const res = await fetch('/email-classifications', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: nm, classification: cl })
+                });
+                if (!res.ok) {
+                    const d = await res.json().catch(() => ({}));
+                    const msg = typeof d.detail === 'string' ? d.detail : (Array.isArray(d.detail) && d.detail[0]?.msg ? d.detail[0].msg : JSON.stringify(d.detail || res.statusText));
+                    throw new Error(msg);
+                }
+            }
+            closeModal();
+            loadEmailClassifications();
+        } catch (err) {
+            if (errEl) { errEl.textContent = err.message; errEl.style.display = 'block'; }
+        }
+    }
+
+    async function deleteClassification(id) {
+        if (!confirm('Are you sure you want to delete this classification?')) return;
+        try {
+            const res = await fetch(`/email-classifications/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(res.statusText);
+            loadEmailClassifications();
+        } catch (err) {
+            alert('Failed to delete: ' + err.message);
+        }
+    }
+
+    function init() {
+        const createBtn = getEl('email-classifications-create-btn');
+        const refreshBtn = getEl('email-classifications-refresh-btn');
+        const filterInput = getEl('email-classifications-filter');
+        const typeFilter = getEl('email-classifications-type-filter');
+        const closeBtn = getEl('close-email-classification-modal');
+        const cancelBtn = getEl('email-classification-modal-cancel');
+        const saveBtn = getEl('email-classification-modal-save');
+
+        if (createBtn) createBtn.addEventListener('click', () => openCreateModal());
+        if (refreshBtn) refreshBtn.addEventListener('click', () => loadEmailClassifications());
+        if (filterInput) filterInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') loadEmailClassifications(); });
+        if (typeFilter) typeFilter.addEventListener('change', () => loadEmailClassifications());
+        if (closeBtn) closeBtn.addEventListener('click', closeModal);
+        if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+        if (saveBtn) saveBtn.addEventListener('click', saveClassification);
+
+        const modal = getEl('email-classification-modal');
+        if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    }
+
+    return {
+        load: loadEmailClassifications,
+        init: init,
+        loadOptions: loadClassificationOptions,
+        populateTypeFilter: populateTypeFilter
+    };
+})();
 

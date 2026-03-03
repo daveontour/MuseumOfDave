@@ -20,9 +20,9 @@ func RunContactsNormalise(ctx context.Context, opts RunOptions) error {
 
 	var emailMatchMap map[string]string
 	var emailPrimaryNameMap map[string]string
-	if opts.EmailMatchesFile != "" {
+	if opts.ContactsDB != nil {
 		var err error
-		emailMatchMap, emailPrimaryNameMap, err = LoadEmailMatchSets(opts.EmailMatchesFile)
+		emailMatchMap, emailPrimaryNameMap, err = LoadEmailMatchSets(ctx, opts.ContactsDB)
 		if err != nil {
 			return fmt.Errorf("load email matches: %w", err)
 		}
@@ -147,8 +147,8 @@ func writeContactsAndClassifications(ctx context.Context, db *database.DB, class
 	if err := WriteContactsToDatabase(ctx, db, formattedOutput); err != nil {
 		return err
 	}
-	if cf := strings.TrimSpace(classificationsFile); cf != "" {
-		classifications, err := LoadEmailClassifications(cf)
+	if db != nil {
+		classifications, err := LoadEmailClassifications(ctx, db)
 		if err != nil {
 			return fmt.Errorf("load classifications: %w", err)
 		}

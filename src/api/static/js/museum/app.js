@@ -421,6 +421,11 @@ const App = (() => {
                 if (controlTabs.includes(targetTab)) {
                     loadImportControlLastRun();
                 }
+                // Load email matches and classifications when Manage Contacts tab is opened
+                if (targetTab === 'manage-contacts') {
+                    if (Modals.EmailMatches && Modals.EmailMatches.load) Modals.EmailMatches.load();
+                    if (Modals.EmailClassifications && Modals.EmailClassifications.load) Modals.EmailClassifications.load();
+                }
             });
         });
 

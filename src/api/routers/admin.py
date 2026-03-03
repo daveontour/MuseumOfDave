@@ -94,9 +94,17 @@ async def root(request: Request):
     page_title = os.getenv("PAGE_TITLE", "Digital Museum of SUBJECT_NAME")
     page_title = page_title.replace("SUBJECT_NAME", subject_context["owner"])
 
+    subject_configuration = subject_config_service.get_configuration()
+    is_dave_burton = (
+        subject_configuration is not None
+        and subject_configuration.subject_name == "Dave"
+        and subject_configuration.family_name == "Burton"
+    )
+    template_name = "museum_of_dave_burton.html" if is_dave_burton else "museum_of_dave.html"
+
     print(f"Page title: {page_title}")
     return templates.TemplateResponse(
-        "museum_of_dave.html",
+        template_name,
         {"request": request, "page_title": page_title, **subject_context}
     )
 

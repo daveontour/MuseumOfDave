@@ -551,3 +551,37 @@ class MasterKey(Base):
     public_key = Column(Text, nullable=False)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+class EmailClassifications (Base):
+    """Classification of emails"""
+
+    __tablename__ = "email_classifications"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(500), nullable=False)
+    classification = Column(String(20), nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+class EmailMatches (Base):
+    """Classification of emails"""
+
+    __tablename__ = "email_matches"
+
+    id = Column(Integer, primary_key=True)
+    primary_name = Column(String(500), nullable=False)
+    email = Column(String(300), nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+class EmailExclusions (Base):
+    """Exclusions of emails"""
+
+    __tablename__ = "email_exclusions"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String(300), nullable=False)
+    name = Column(String(500), nullable=False)
+    name_email = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

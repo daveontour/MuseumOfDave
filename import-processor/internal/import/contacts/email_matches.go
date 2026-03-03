@@ -1,9 +1,10 @@
 package contacts
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"os"
+
+	"import-processor/internal/database"
 )
 
 // EmailMatchSet represents a set of emails that are the same person
@@ -68,16 +69,32 @@ func buildTransitiveClosure(emailSets []EmailMatchSet) (map[string]string, map[s
 	return result, canonicalToPrimaryName
 }
 
-// LoadEmailMatchSets loads email match sets from a JSON file
-func LoadEmailMatchSets(filename string) (map[string]string, map[string]string, error) {
-	raw, err := os.ReadFile(filename)
+// LoadEmailMatchSets loads email match sets from the email_exclusions table,
+// grouping by name to build sets of emails that belong to the same person.
+func LoadEmailMatchSets(ctx context.Context, db *database.DB) (map[string]string, map[string]string, error) {
+	rows, err := db.Pool.Query(ctx, "SELECT primary_name, email FROM email_matches ORDER BY primary_name")
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read email matches file: %w", err)
+		return nil, nil, fmt.Errorf("failed to query email_matches table: %w", err)
 	}
-	var emailSets []EmailMatchSet
-	if err := json.Unmarshal(raw, &emailSets); err != nil {
-		return nil, nil, fmt.Errorf("failed to parse email matches JSON: %w", err)
+	defer rows.Close()
+
+	groupMap := make(map[string][]string)
+	for rows.Next() {
+		var name, email string
+		if err := rows.Scan(&name, &email); err != nil {
+			return nil, nil, fmt.Errorf("failed to scan email_matches row: %w", err)
+		}
+		groupMap[name] = append(groupMap[name], email)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, fmt.Errorf("error iterating email_matches rows: %w", err)
+	}
+
+	emailSets := make([]EmailMatchSet, 0, len(groupMap))
+	for name, emails := range groupMap {
+		emailSets = append(emailSets, EmailMatchSet{PrimaryName: name, Emails: emails})
+	}
+
 	canonicalMap, primaryNameMap := buildTransitiveClosure(emailSets)
 	return canonicalMap, primaryNameMap, nil
 }

@@ -2,9 +2,7 @@ package contacts
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"import-processor/internal/database"
@@ -18,25 +16,27 @@ var relTypeKeys = []string{
 	"business", "social", "promotional", "spam", "important",
 }
 
-// LoadEmailClassifications loads classifications from a JSON file.
+// LoadEmailClassifications loads classifications from the email_classifications table.
 // Keys are rel_type values (friend, family, colleague, etc.).
-func LoadEmailClassifications(filename string) (EmailClassifications, error) {
-	raw, err := os.ReadFile(filename)
+func LoadEmailClassifications(ctx context.Context, db *database.DB) (EmailClassifications, error) {
+	rows, err := db.Pool.Query(ctx, "SELECT classification, name FROM email_classifications ORDER BY classification")
 	if err != nil {
-		return nil, fmt.Errorf("read classifications file: %w", err)
+		return nil, fmt.Errorf("query email_classifications: %w", err)
 	}
-	var m map[string][]string
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return nil, fmt.Errorf("parse classifications JSON: %w", err)
-	}
+	defer rows.Close()
+
 	result := make(EmailClassifications)
-	for k, names := range m {
-		if names == nil {
-			result[k] = nil
-		} else {
-			result[k] = names
+	for rows.Next() {
+		var classification, name string
+		if err := rows.Scan(&classification, &name); err != nil {
+			return nil, fmt.Errorf("scan email_classifications row: %w", err)
 		}
+		result[classification] = append(result[classification], name)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate email_classifications rows: %w", err)
+	}
+
 	for _, key := range relTypeKeys {
 		if _, ok := result[key]; !ok {
 			result[key] = nil
