@@ -1602,8 +1602,8 @@
                     <div id="contacts-loading" style="padding: 2em; text-align: center; color: #666;">
                         <i class="fas fa-spinner fa-spin"></i> Loading contacts...
                     </div>
-                    <div id="contacts-table-container" style="display: none;">
-                        <div id="contacts-pagination-top" class="contacts-pagination-row" style="margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                    <div id="contacts-table-container" class="contacts-table-container" style="display: none;">
+                        <div id="contacts-pagination-top" class="contacts-pagination-row contacts-controls-top">
                             <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                                 <label style="display: flex; align-items: center; gap: 6px; font-size: 0.9em; color: #666;">
                                     Search: <input type="text" id="contacts-search" placeholder="Name or email (Enter to search)" style="width: 200px; padding: 4px 8px;">
@@ -1631,6 +1631,7 @@
                                 <button type="button" id="contacts-next-btn-top" class="modal-btn modal-btn-secondary" disabled><i class="fas fa-chevron-right"></i> Next</button>
                             </div>
                         </div>
+                        <div class="contacts-table-scroll-wrapper">
                         <table class="contacts-table" style="width: 100%; border-collapse: collapse;">
                             <thead>
                                 <tr style="background: #f0f4f8; border-bottom: 2px solid #bfc9da;">
@@ -1649,6 +1650,7 @@
                             <tbody id="contacts-table-body">
                             </tbody>
                         </table>
+                        </div>
                         <div id="contacts-pagination-bottom" class="contacts-pagination-row" style="margin-top: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
                             <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                                 <label style="display: flex; align-items: center; gap: 6px; font-size: 0.9em; color: #666;">

@@ -188,7 +188,7 @@ Modals.Contacts = (() => {
                 updateSortIndicators();
 
                 DOM.contactsLoading.style.display = 'none';
-                DOM.contactsTableContainer.style.display = 'block';
+                DOM.contactsTableContainer.style.display = 'flex';
             } catch (err) {
                 console.error('Error loading contacts:', err);
                 DOM.contactsLoading.innerHTML = `<span style="color: #c00;">Error: ${err.message}</span>`;
