@@ -99,7 +99,7 @@ const DOM = {
     infoBoxModal: document.getElementById('info-box-modal'),
     infoBoxCloseBtn: document.getElementById('info-box-close-btn'),
     hamburgerMenu: document.getElementById('hamburger-menu'),
-    configPage: document.querySelector('.config-page'),
+    configPage: document.getElementById('config-modal-overlay'),
     closeConfigBtn: document.getElementById('close-config'),
     chatMain: document.querySelector('.chat-main'),
     messageFontSize: document.getElementById('message-font-size'),

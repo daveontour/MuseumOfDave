@@ -5,11 +5,28 @@ import platform
 from datetime import datetime
 from pathlib import Path
 
+from sqlalchemy import func, extract
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
-from ...database.models import ImportControlLastRun, IMessage, MessageAttachment, MediaMetadata, MediaBlob, Attachment, AlbumMedia, FacebookAlbum
+from ...database.models import (
+    ImportControlLastRun,
+    IMessage,
+    MessageAttachment,
+    MediaMetadata,
+    MediaBlob,
+    Attachment,
+    AlbumMedia,
+    FacebookAlbum,
+    Contacts,
+    Email,
+    Artefact,
+    ReferenceDocument,
+    Places,
+    Locations,
+    CompleteProfile,
+)
 from ...config import get_config
 from ..deps import db, templates, subject_config_service
 
@@ -229,6 +246,163 @@ async def health_check():
 #         media_type="application/json",
 #         headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
 #     )
+
+@router.get("/api/dashboard")
+async def get_dashboard():
+    """Return aggregate stats for the Dashboard tab.
+
+    Includes: message counts by service, contacts, images (imported/reference),
+    Facebook albums, locations, places, thumbnail coverage, and other counts.
+    """
+    session = db.get_session()
+    try:
+        # Messages by service
+        msg_by_service = (
+            session.query(IMessage.service, func.count(IMessage.id))
+            .group_by(IMessage.service)
+            .all()
+        )
+        message_counts = {s or "unknown": c for s, c in msg_by_service}
+        total_messages = sum(message_counts.values())
+
+        # Messages by year (exclude null message_date)
+        year_col = extract("year", IMessage.message_date)
+        msg_by_year = (
+            session.query(year_col.label("yr"), func.count(IMessage.id))
+            .filter(IMessage.message_date.isnot(None))
+            .group_by(year_col)
+            .order_by(year_col)
+            .all()
+        )
+        messages_by_year = {int(yr): c for yr, c in msg_by_year if yr is not None}
+
+        # Emails by year (exclude null date)
+        email_year_col = extract("year", Email.date)
+        email_by_year = (
+            session.query(email_year_col.label("yr"), func.count(Email.id))
+            .filter(Email.date.isnot(None))
+            .group_by(email_year_col)
+            .order_by(email_year_col)
+            .all()
+        )
+        emails_by_year = {int(yr): c for yr, c in email_by_year if yr is not None}
+
+        # Top 20 messages by contact (sender), excluding subject
+        subject_names_lower = set()
+        config = subject_config_service.get_configuration()
+        if config:
+            if config.subject_name:
+                subject_names_lower.add(config.subject_name.strip().lower())
+            if config.family_name:
+                full = f"{config.subject_name or ''} {config.family_name}".strip()
+                if full:
+                    subject_names_lower.add(full.lower())
+        subject_contacts = session.query(Contacts.name).filter(Contacts.is_subject == True).all()  # noqa: E712
+        for (name,) in subject_contacts:
+            if name and name.strip():
+                subject_names_lower.add(name.strip().lower())
+        contact_0 = session.query(Contacts.name).filter(Contacts.id == 0).first()
+        if contact_0 and contact_0[0] and contact_0[0].strip():
+            subject_names_lower.add(contact_0[0].strip().lower())
+        msg_by_sender = (
+            session.query(IMessage.sender_name, func.count(IMessage.id))
+            .filter(IMessage.sender_name.isnot(None))
+            .filter(IMessage.sender_name != "")
+            .group_by(IMessage.sender_name)
+            .order_by(func.count(IMessage.id).desc())
+            .limit(100)
+            .all()
+        )
+        messages_by_contact = []
+        for name, count in msg_by_sender:
+            if name and name.strip().lower() not in subject_names_lower:
+                messages_by_contact.append({"name": name.strip(), "count": count})
+                if len(messages_by_contact) >= 20:
+                    break
+
+        # Contacts
+        contacts_count = session.query(func.count(Contacts.id)).scalar() or 0
+
+        # Contacts by category (rel_type); treat null/empty as "unknown"
+        cat_col = func.coalesce(Contacts.rel_type, "unknown")
+        contacts_by_cat = (
+            session.query(cat_col, func.count(Contacts.id))
+            .group_by(cat_col)
+            .all()
+        )
+        contacts_by_category = {(c or "unknown").strip() or "unknown": n for c, n in contacts_by_cat}
+
+        # Media: total, imported (is_referenced=False), referenced (is_referenced=True)
+        total_images = session.query(func.count(MediaMetadata.id)).scalar() or 0
+        imported_images = (
+            session.query(func.count(MediaMetadata.id))
+            .filter(MediaMetadata.is_referenced == False)  # noqa: E712
+            .scalar()
+        ) or 0
+        reference_images = (
+            session.query(func.count(MediaMetadata.id))
+            .filter(MediaMetadata.is_referenced == True)  # noqa: E712
+            .scalar()
+        ) or 0
+
+        # Thumbnail coverage: media_items with media_blob.thumbnail_data IS NOT NULL
+        with_thumb = (
+            session.query(func.count(MediaMetadata.id))
+            .join(MediaBlob, MediaMetadata.media_blob_id == MediaBlob.id)
+            .filter(MediaBlob.thumbnail_data.isnot(None))
+            .scalar()
+        ) or 0
+        thumbnail_pct = round(100.0 * with_thumb / total_images, 1) if total_images else 0
+
+        # Facebook albums
+        facebook_albums_count = session.query(func.count(FacebookAlbum.id)).scalar() or 0
+
+        # Locations & Places
+        locations_count = session.query(func.count(Locations.id)).scalar() or 0
+        places_count = session.query(func.count(Places.id)).scalar() or 0
+
+        # Optional extras
+        emails_count = session.query(func.count(Email.id)).scalar() or 0
+        artefacts_count = session.query(func.count(Artefact.id)).scalar() or 0
+        reference_docs_count = (
+            session.query(func.count(ReferenceDocument.id)).scalar() or 0
+        )
+        reference_docs_enabled = (
+            session.query(func.count(ReferenceDocument.id))
+            .filter(ReferenceDocument.available_for_task == True)  # noqa: E712
+            .scalar()
+        ) or 0
+        reference_docs_disabled = reference_docs_count - reference_docs_enabled
+        complete_profiles_count = (
+            session.query(func.count(CompleteProfile.id)).scalar() or 0
+        )
+
+        return {
+            "message_counts": message_counts,
+            "total_messages": total_messages,
+            "messages_by_year": messages_by_year,
+            "emails_by_year": emails_by_year,
+            "messages_by_contact": messages_by_contact,
+            "contacts_count": contacts_count,
+            "contacts_by_category": contacts_by_category,
+            "total_images": total_images,
+            "imported_images": imported_images,
+            "reference_images": reference_images,
+            "thumbnail_count": with_thumb,
+            "thumbnail_percentage": thumbnail_pct,
+            "facebook_albums_count": facebook_albums_count,
+            "locations_count": locations_count,
+            "places_count": places_count,
+            "emails_count": emails_count,
+            "artefacts_count": artefacts_count,
+            "reference_docs_count": reference_docs_count,
+            "reference_docs_enabled": reference_docs_enabled,
+            "reference_docs_disabled": reference_docs_disabled,
+            "complete_profiles_count": complete_profiles_count,
+        }
+    finally:
+        session.close()
+
 
 @router.get("/api/import-control-last-run")
 async def get_import_control_last_run():

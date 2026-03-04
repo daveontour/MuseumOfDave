@@ -114,14 +114,18 @@ const App = (() => {
 
         // Hamburger menu for config page
         DOM.hamburgerMenu.addEventListener('click', () => {
-            DOM.configPage.style.display = 'block';
-            DOM.chatMain.style.display = 'none';
+            DOM.configPage.style.display = 'flex';
             loadControlDefaults();
+            loadDashboard();
         });
         DOM.closeConfigBtn.addEventListener('click', () => {
             DOM.configPage.style.display = 'none';
-            DOM.chatMain.style.display = 'flex';
         });
+        if (DOM.configPage) {
+            DOM.configPage.addEventListener('click', (e) => {
+                if (e.target === DOM.configPage) DOM.configPage.style.display = 'none';
+            });
+        }
 
         // Load control defaults from API
         let controlDefaults = {};
@@ -426,8 +430,198 @@ const App = (() => {
                     if (Modals.EmailMatches && Modals.EmailMatches.load) Modals.EmailMatches.load();
                     if (Modals.EmailClassifications && Modals.EmailClassifications.load) Modals.EmailClassifications.load();
                 }
+                // Load dashboard when Dashboard tab is opened
+                if (targetTab === 'dashboard') {
+                    loadDashboard();
+                }
             });
         });
+
+        // Dashboard: load stats and render
+        async function loadDashboard() {
+            const container = document.getElementById('dashboard-stats');
+            const loadingEl = document.getElementById('dashboard-loading');
+            const errorEl = document.getElementById('dashboard-load-error');
+            if (!container) return;
+            if (loadingEl) loadingEl.style.display = 'inline';
+            if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+            try {
+                const response = await fetch('/api/dashboard');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                if (loadingEl) loadingEl.style.display = 'none';
+                renderDashboardStats(container, data);
+                renderDashboardMessagesByYearChart(data);
+                renderDashboardEmailsByYearChart(data);
+                renderDashboardContactsByCategoryChart(data);
+                renderDashboardMessagesByContactChart(data);
+            } catch (err) {
+                if (loadingEl) loadingEl.style.display = 'none';
+                if (errorEl) {
+                    errorEl.style.display = 'block';
+                    errorEl.textContent = err.message || 'Failed to load dashboard';
+                }
+                container.innerHTML = '';
+                const yearChart = document.getElementById('dashboard-messages-by-year-chart');
+                const emailsYearChart = document.getElementById('dashboard-emails-by-year-chart');
+                const contactsCatChart = document.getElementById('dashboard-contacts-by-category-chart');
+                const contactChart = document.getElementById('dashboard-messages-by-contact-chart');
+                if (yearChart) yearChart.innerHTML = '';
+                if (emailsYearChart) emailsYearChart.innerHTML = '';
+                if (contactsCatChart) contactsCatChart.innerHTML = '';
+                if (contactChart) contactChart.innerHTML = '';
+            }
+        }
+
+        function renderDashboardMessagesByYearChart(data) {
+            const chartEl = document.getElementById('dashboard-messages-by-year-chart');
+            if (!chartEl) return;
+            const byYear = data.messages_by_year || {};
+            const years = Object.keys(byYear).map(Number).sort((a, b) => a - b);
+            if (years.length === 0) {
+                chartEl.innerHTML = '<h4 style="margin:0 0 8px 0; font-size:14px; color:#64748b;">Messages by Year</h4><p style="color:#94a3b8; font-size:13px;">No message data by year</p>';
+                return;
+            }
+            const maxCount = Math.max(...years.map(y => byYear[y]), 1);
+            const barHeight = 28;
+            const bars = years.map(y => {
+                const count = byYear[y];
+                const pct = Math.round((count / maxCount) * 100);
+                return `<div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                    <span style="width:48px; font-weight:600; color:#334155;">${y}</span>
+                    <div style="flex:1; height:${barHeight}px; background:#e2e8f0; border-radius:4px; overflow:hidden; position:relative;">
+                        <div style="height:100%; width:${pct}%; background:#3b82f6; border-radius:4px; transition:width 0.3s;"></div>
+                    </div>
+                    <span style="width:72px; text-align:right; font-size:13px; color:#64748b;">${count.toLocaleString()}</span>
+                </div>`;
+            }).join('');
+            chartEl.innerHTML = '<h4 style="margin:0 0 12px 0; font-size:14px; color:#64748b;">Messages by Year</h4>' + bars;
+        }
+
+        function renderDashboardEmailsByYearChart(data) {
+            const chartEl = document.getElementById('dashboard-emails-by-year-chart');
+            if (!chartEl) return;
+            const byYear = data.emails_by_year || {};
+            const years = Object.keys(byYear).map(Number).sort((a, b) => a - b);
+            if (years.length === 0) {
+                chartEl.innerHTML = '<h4 style="margin:0 0 8px 0; font-size:14px; color:#64748b;">Emails by Year</h4><p style="color:#94a3b8; font-size:13px;">No email data by year</p>';
+                return;
+            }
+            const maxCount = Math.max(...years.map(y => byYear[y]), 1);
+            const barHeight = 28;
+            const barColor = '#60a5fa';
+            const bars = years.map(y => {
+                const count = byYear[y];
+                const pct = Math.round((count / maxCount) * 100);
+                return `<div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                    <span style="width:48px; font-weight:600; color:#334155;">${y}</span>
+                    <div style="flex:1; height:${barHeight}px; background:#e2e8f0; border-radius:4px; overflow:hidden; position:relative;">
+                        <div style="height:100%; width:${pct}%; background:${barColor}; border-radius:4px; transition:width 0.3s;"></div>
+                    </div>
+                    <span style="width:72px; text-align:right; font-size:13px; color:#64748b;">${count.toLocaleString()}</span>
+                </div>`;
+            }).join('');
+            chartEl.innerHTML = '<h4 style="margin:0 0 12px 0; font-size:14px; color:#64748b;">Emails by Year</h4>' + bars;
+        }
+
+        function renderDashboardMessagesByContactChart(data) {
+            const chartEl = document.getElementById('dashboard-messages-by-contact-chart');
+            if (!chartEl) return;
+            const items = data.messages_by_contact || [];
+            if (items.length === 0) {
+                chartEl.innerHTML = '<h4 style="margin:0 0 8px 0; font-size:14px; color:#64748b;">Messages by Contact (Top 20)</h4><p style="color:#94a3b8; font-size:13px;">No message data by contact</p>';
+                return;
+            }
+            const maxCount = Math.max(...items.map(i => i.count), 1);
+            const barHeight = 28;
+            const barColor = '#22c55e';
+            const bars = items.map(i => {
+                const pct = Math.round((i.count / maxCount) * 100);
+                const name = (i.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                return `<div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                    <span style="min-width:0; flex:1; max-width:200px; font-weight:600; color:#334155; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${name}">${name}</span>
+                    <div style="flex:1; min-width:80px; height:${barHeight}px; background:#e2e8f0; border-radius:4px; overflow:hidden; position:relative;">
+                        <div style="height:100%; width:${pct}%; background:${barColor}; border-radius:4px; transition:width 0.3s;"></div>
+                    </div>
+                    <span style="width:72px; text-align:right; font-size:13px; color:#64748b;">${i.count.toLocaleString()}</span>
+                </div>`;
+            }).join('');
+            chartEl.innerHTML = '<h4 style="margin:0 0 12px 0; font-size:14px; color:#64748b;">Messages by Contact (Top 20)</h4>' + bars;
+        }
+
+        function renderDashboardContactsByCategoryChart(data) {
+            const chartEl = document.getElementById('dashboard-contacts-by-category-chart');
+            if (!chartEl) return;
+            const byCat = data.contacts_by_category || {};
+            const unknownCount = byCat['unknown'] ?? byCat['Unknown'] ?? 0;
+            const categories = Object.entries(byCat)
+                .filter(([k]) => (k || '').toLowerCase() !== 'unknown')
+                .sort((a, b) => b[1] - a[1]);
+            const barColor = '#8b5cf6';
+            let html = '<h4 style="margin:0 0 12px 0; font-size:14px; color:#64748b;">Contacts by Category</h4>';
+            if (categories.length === 0 && unknownCount === 0) {
+                html += '<p style="color:#94a3b8; font-size:13px;">No contact data by category</p>';
+            } else {
+                const maxCount = categories.length ? Math.max(...categories.map(([, n]) => n), 1) : 1;
+                const barHeight = 28;
+                const bars = categories.map(([name, count]) => {
+                    const pct = Math.round((count / maxCount) * 100);
+                    const safeName = (name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    return `<div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                        <span style="min-width:0; flex:1; max-width:180px; font-weight:600; color:#334155; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${safeName}">${safeName}</span>
+                        <div style="flex:1; min-width:80px; height:${barHeight}px; background:#e2e8f0; border-radius:4px; overflow:hidden; position:relative;">
+                            <div style="height:100%; width:${pct}%; background:${barColor}; border-radius:4px; transition:width 0.3s;"></div>
+                        </div>
+                        <span style="width:72px; text-align:right; font-size:13px; color:#64748b;">${count.toLocaleString()}</span>
+                    </div>`;
+                }).join('');
+                html += bars;
+                if (unknownCount > 0) {
+                    html += `<p style="margin:12px 0 0 0; font-size:13px; color:#64748b;">Unknown: ${unknownCount.toLocaleString()} contacts</p>`;
+                }
+            }
+            chartEl.innerHTML = html;
+        }
+
+        function renderDashboardStats(container, data) {
+            const cards = [];
+            const add = (label, value, num) => cards.push({ label, value: value ?? 0, num: num ?? (typeof value === 'number' ? value : null) });
+            add('Total Messages', data.total_messages);
+            add('Total Emails', data.emails_count);
+            const counts = data.message_counts || {};
+            Object.entries(counts).sort((a,b)=>b[1]-a[1]).forEach(([service, n]) => {
+                add(`Messages (${service})`, n);
+            });
+            add('Contacts', data.contacts_count);
+            add('Images (total)', data.total_images);
+            add('Images (imported)', data.imported_images);
+            add('Images (reference)', data.reference_images);
+            const thumbVal = `${data.thumbnail_count || 0} (${data.thumbnail_percentage ?? 0}%)`;
+            const thumbPct = data.thumbnail_percentage ?? 0;
+            const thumbBorder = thumbPct < 80 ? '#dc3545' : (thumbPct < 95 ? '#eab308' : null);
+            cards.push({ label: 'Images with thumbnails', value: thumbVal, num: data.thumbnail_count ?? 0, borderColor: thumbBorder });
+            add('Facebook albums', data.facebook_albums_count);
+            add('Locations', data.locations_count);
+            add('Places', data.places_count);
+            add('Artefacts', data.artefacts_count);
+            add('Reference docs (enabled)', data.reference_docs_enabled);
+            add('Reference docs (disabled)', data.reference_docs_disabled);
+            add('Complete profiles', data.complete_profiles_count);
+            container.innerHTML = cards.map(c => {
+                let borderColor = c.borderColor;
+                if (borderColor == null) borderColor = (c.num !== null && c.num === 0) ? '#dc3545' : '#3b82f6';
+                const displayVal = typeof c.value === 'number' ? c.value.toLocaleString() : c.value;
+                return `<div style="padding:12px; background:#f5f7fa; border-radius:8px; border-left:4px solid ${borderColor};">
+                    <div style="font-size:12px; color:#64748b; text-transform:uppercase;">${c.label}</div>
+                    <div style="font-size:18px; font-weight:600; color:#1e293b; margin-top:4px;">${displayVal}</div>
+                </div>`;
+            }).join('');
+        }
+
+        const dashboardRefreshBtn = document.getElementById('dashboard-refresh-btn');
+        if (dashboardRefreshBtn) {
+            dashboardRefreshBtn.addEventListener('click', loadDashboard);
+        }
 
         // Format date/time in local timezone, 24-hour format (dd/mm/yyyy HH:mm)
         function formatImportLastRunLocal(isoString) {

@@ -1948,7 +1948,7 @@ Modals.EmailEditor = (() => {
         function open() {
             // Show config page and switch to email editor tab
             if (DOM.configPage) {
-                DOM.configPage.style.display = 'block';
+                DOM.configPage.style.display = 'flex';
                 if (DOM.chatMain) DOM.chatMain.style.display = 'none';
             }
             const tabBtn = document.querySelector('.config-tab-button[data-tab="email-editor"]');
