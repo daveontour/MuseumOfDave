@@ -437,11 +437,12 @@ const App = (() => {
             });
         });
 
-        // Dashboard: load stats and render
-        async function loadDashboard() {
-            const container = document.getElementById('dashboard-stats');
-            const loadingEl = document.getElementById('dashboard-loading');
-            const errorEl = document.getElementById('dashboard-load-error');
+        // Dashboard: load stats and render. prefix: '' for config modal, 'stats-' for Statistics modal
+        async function loadDashboard(prefix) {
+            prefix = prefix || '';
+            const container = document.getElementById(prefix + 'dashboard-stats');
+            const loadingEl = document.getElementById(prefix + 'dashboard-loading');
+            const errorEl = document.getElementById(prefix + 'dashboard-load-error');
             if (!container) return;
             if (loadingEl) loadingEl.style.display = 'inline';
             if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
@@ -451,10 +452,11 @@ const App = (() => {
                 const data = await response.json();
                 if (loadingEl) loadingEl.style.display = 'none';
                 renderDashboardStats(container, data);
-                renderDashboardMessagesByYearChart(data);
-                renderDashboardEmailsByYearChart(data);
-                renderDashboardContactsByCategoryChart(data);
-                renderDashboardMessagesByContactChart(data);
+                renderDashboardMessagesByYearChart(data, prefix);
+                renderDashboardEmailsByYearChart(data, prefix);
+                renderDashboardContactsByCategoryChart(data, prefix);
+                renderDashboardImagesByRegionChart(data, prefix);
+                renderDashboardMessagesByContactChart(data, prefix);
             } catch (err) {
                 if (loadingEl) loadingEl.style.display = 'none';
                 if (errorEl) {
@@ -462,19 +464,22 @@ const App = (() => {
                     errorEl.textContent = err.message || 'Failed to load dashboard';
                 }
                 container.innerHTML = '';
-                const yearChart = document.getElementById('dashboard-messages-by-year-chart');
-                const emailsYearChart = document.getElementById('dashboard-emails-by-year-chart');
-                const contactsCatChart = document.getElementById('dashboard-contacts-by-category-chart');
-                const contactChart = document.getElementById('dashboard-messages-by-contact-chart');
+                const yearChart = document.getElementById(prefix + 'dashboard-messages-by-year-chart');
+                const emailsYearChart = document.getElementById(prefix + 'dashboard-emails-by-year-chart');
+                const contactsCatChart = document.getElementById(prefix + 'dashboard-contacts-by-category-chart');
+                const imagesRegionChart = document.getElementById(prefix + 'dashboard-images-by-region-chart');
+                const contactChart = document.getElementById(prefix + 'dashboard-messages-by-contact-chart');
                 if (yearChart) yearChart.innerHTML = '';
                 if (emailsYearChart) emailsYearChart.innerHTML = '';
                 if (contactsCatChart) contactsCatChart.innerHTML = '';
+                if (imagesRegionChart) imagesRegionChart.innerHTML = '';
                 if (contactChart) contactChart.innerHTML = '';
             }
         }
 
-        function renderDashboardMessagesByYearChart(data) {
-            const chartEl = document.getElementById('dashboard-messages-by-year-chart');
+        function renderDashboardMessagesByYearChart(data, prefix) {
+            prefix = prefix || '';
+            const chartEl = document.getElementById(prefix + 'dashboard-messages-by-year-chart');
             if (!chartEl) return;
             const byYear = data.messages_by_year || {};
             const years = Object.keys(byYear).map(Number).sort((a, b) => a - b);
@@ -498,8 +503,9 @@ const App = (() => {
             chartEl.innerHTML = '<h4 style="margin:0 0 12px 0; font-size:14px; color:#64748b;">Messages by Year</h4>' + bars;
         }
 
-        function renderDashboardEmailsByYearChart(data) {
-            const chartEl = document.getElementById('dashboard-emails-by-year-chart');
+        function renderDashboardEmailsByYearChart(data, prefix) {
+            prefix = prefix || '';
+            const chartEl = document.getElementById(prefix + 'dashboard-emails-by-year-chart');
             if (!chartEl) return;
             const byYear = data.emails_by_year || {};
             const years = Object.keys(byYear).map(Number).sort((a, b) => a - b);
@@ -524,8 +530,9 @@ const App = (() => {
             chartEl.innerHTML = '<h4 style="margin:0 0 12px 0; font-size:14px; color:#64748b;">Emails by Year</h4>' + bars;
         }
 
-        function renderDashboardMessagesByContactChart(data) {
-            const chartEl = document.getElementById('dashboard-messages-by-contact-chart');
+        function renderDashboardMessagesByContactChart(data, prefix) {
+            prefix = prefix || '';
+            const chartEl = document.getElementById(prefix + 'dashboard-messages-by-contact-chart');
             if (!chartEl) return;
             const items = data.messages_by_contact || [];
             if (items.length === 0) {
@@ -549,8 +556,9 @@ const App = (() => {
             chartEl.innerHTML = '<h4 style="margin:0 0 12px 0; font-size:14px; color:#64748b;">Messages by Contact (Top 20)</h4>' + bars;
         }
 
-        function renderDashboardContactsByCategoryChart(data) {
-            const chartEl = document.getElementById('dashboard-contacts-by-category-chart');
+        function renderDashboardContactsByCategoryChart(data, prefix) {
+            prefix = prefix || '';
+            const chartEl = document.getElementById(prefix + 'dashboard-contacts-by-category-chart');
             if (!chartEl) return;
             const byCat = data.contacts_by_category || {};
             const unknownCount = byCat['unknown'] ?? byCat['Unknown'] ?? 0;
@@ -583,6 +591,53 @@ const App = (() => {
             chartEl.innerHTML = html;
         }
 
+        const REGION_NAME_MAP = {
+            eur: 'Europe', dxb: 'Dubai', af: 'Africa', me: 'Middle East',
+            aus: 'Australia', asia: 'Asia', usa: 'USA', south_america: 'South America',
+            oth: 'Other', carribean: 'Caribbean', nz: 'New Zealand'
+        };
+        function regionDisplayName(key) {
+            if (key == null || key === '') return 'Unknown';
+            const k = String(key).toLowerCase().trim();
+            return REGION_NAME_MAP[k] ?? key;
+        }
+
+        function renderDashboardImagesByRegionChart(data, prefix) {
+            prefix = prefix || '';
+            const chartEl = document.getElementById(prefix + 'dashboard-images-by-region-chart');
+            if (!chartEl) return;
+            const byRegion = data.images_by_region || {};
+            const unknownCount = byRegion['Unknown'] ?? byRegion['unknown'] ?? 0;
+            const regions = Object.entries(byRegion)
+                .filter(([k]) => (k || '').toLowerCase() !== 'unknown')
+                .sort((a, b) => b[1] - a[1]);
+            const barColor = '#0ea5e9';
+            let html = '<h4 style="margin:0 0 12px 0; font-size:14px; color:#64748b;">Images by Region</h4>';
+            if (regions.length === 0 && unknownCount === 0) {
+                html += '<p style="color:#94a3b8; font-size:13px;">No image data by region</p>';
+            } else {
+                const maxCount = regions.length ? Math.max(...regions.map(([, n]) => n), 1) : 1;
+                const barHeight = 28;
+                const bars = regions.map(([name, count]) => {
+                    const pct = Math.round((count / maxCount) * 100);
+                    const displayName = regionDisplayName(name);
+                    const safeName = displayName.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    return `<div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                        <span style="min-width:0; flex:1; max-width:180px; font-weight:600; color:#334155; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${safeName}">${safeName}</span>
+                        <div style="flex:1; min-width:80px; height:${barHeight}px; background:#e2e8f0; border-radius:4px; overflow:hidden; position:relative;">
+                            <div style="height:100%; width:${pct}%; background:${barColor}; border-radius:4px; transition:width 0.3s;"></div>
+                        </div>
+                        <span style="width:72px; text-align:right; font-size:13px; color:#64748b;">${count.toLocaleString()}</span>
+                    </div>`;
+                }).join('');
+                html += bars;
+                if (unknownCount > 0) {
+                    html += `<p style="margin:12px 0 0 0; font-size:13px; color:#64748b;">Unknown: ${unknownCount.toLocaleString()} images</p>`;
+                }
+            }
+            chartEl.innerHTML = html;
+        }
+
         function renderDashboardStats(container, data) {
             const cards = [];
             const add = (label, value, num) => cards.push({ label, value: value ?? 0, num: num ?? (typeof value === 'number' ? value : null) });
@@ -598,7 +653,7 @@ const App = (() => {
             add('Images (reference)', data.reference_images);
             const thumbVal = `${data.thumbnail_count || 0} (${data.thumbnail_percentage ?? 0}%)`;
             const thumbPct = data.thumbnail_percentage ?? 0;
-            const thumbBorder = thumbPct < 80 ? '#dc3545' : (thumbPct < 95 ? '#eab308' : null);
+            const thumbBorder = thumbPct >= 100 ? '#22c55e' : (thumbPct < 80 ? '#dc3545' : (thumbPct < 95 ? '#eab308' : null));
             cards.push({ label: 'Images with thumbnails', value: thumbVal, num: data.thumbnail_count ?? 0, borderColor: thumbBorder });
             add('Facebook albums', data.facebook_albums_count);
             add('Locations', data.locations_count);
@@ -607,6 +662,14 @@ const App = (() => {
             add('Reference docs (enabled)', data.reference_docs_enabled);
             add('Reference docs (disabled)', data.reference_docs_disabled);
             add('Complete profiles', data.complete_profiles_count);
+            const subjName = data.subject_full_name || 'Subject';
+            const subjHasProfile = data.subject_has_complete_profile === true;
+            cards.push({
+                label: subjName,
+                value: subjHasProfile ? 'Complete profile: Yes' : 'Complete profile: No',
+                num: null,
+                borderColor: subjHasProfile ? '#22c55e' : '#dc3545'
+            });
             container.innerHTML = cards.map(c => {
                 let borderColor = c.borderColor;
                 if (borderColor == null) borderColor = (c.num !== null && c.num === 0) ? '#dc3545' : '#3b82f6';
@@ -1500,6 +1563,29 @@ const App = (() => {
             DOM.suggestionsSidebarBtn.addEventListener('click', () => {
                 Modals.Suggestions.open();
             });
+        }
+
+        if (DOM.statisticsSidebarBtn) {
+            DOM.statisticsSidebarBtn.addEventListener('click', () => {
+                if (DOM.statisticsModal) {
+                    DOM.statisticsModal.style.display = 'flex';
+                    loadDashboard('stats-');
+                }
+            });
+        }
+        if (DOM.closeStatisticsModalBtn) {
+            DOM.closeStatisticsModalBtn.addEventListener('click', () => {
+                if (DOM.statisticsModal) DOM.statisticsModal.style.display = 'none';
+            });
+        }
+        if (DOM.statisticsModal) {
+            DOM.statisticsModal.addEventListener('click', (e) => {
+                if (e.target === DOM.statisticsModal) DOM.statisticsModal.style.display = 'none';
+            });
+        }
+        const statsRefreshBtn = document.getElementById('stats-dashboard-refresh-btn');
+        if (statsRefreshBtn) {
+            statsRefreshBtn.addEventListener('click', () => loadDashboard('stats-'));
         }
 
         // if (DOM.haveYourSaySidebarBtn) {

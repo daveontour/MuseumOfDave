@@ -593,6 +593,11 @@ def process_thumbnails_background_subprocess(reprocess: bool = False):
     )
     broadcast_thumbnail_processing_event_sync("status", {"status_line": "Starting import-processor..."})
 
+    session = db.get_session()
+    session.execute(func.update_location_regions())
+    session.execute(func.update_image_location_regions())
+    session.commit()
+
     try:
         binary = _get_import_processor_path()
         cwd = binary.parent
@@ -667,6 +672,13 @@ def process_thumbnails_background_subprocess(reprocess: bool = False):
         update_thumbnail_processing_progress_state(status="error", error_message=err_msg, status_line=err_msg)
         broadcast_thumbnail_processing_event_sync("error", get_thumbnail_processing_progress_state())
     finally:
+
+        #Update the region information for the locations
+        session = db.get_session()
+        session.execute(func.update_location_regions())
+        session.execute(func.update_image_location_regions())
+        session.commit()
+
         state = get_thumbnail_processing_progress_state()
         result = state.get("status", "error")
         msg = state.get("error_message") or state.get("status_line")

@@ -112,12 +112,12 @@ async def root(request: Request):
     page_title = page_title.replace("SUBJECT_NAME", subject_context["owner"])
 
     subject_configuration = subject_config_service.get_configuration()
-    is_dave_burton = (
-        subject_configuration is not None
-        and subject_configuration.subject_name == "Dave"
-        and subject_configuration.family_name == "Burton"
+    is_subject_not_init = (
+        subject_configuration is not None  
+        and subject_configuration.subject_name == "-"
+        and subject_configuration.family_name == "-"
     )
-    template_name = "museum_of_dave_burton.html" if is_dave_burton else "museum_of_dave.html"
+    template_name = "non_user_init.template.html" if is_subject_not_init else "index.template.html"
 
     print(f"Page title: {page_title}")
     return templates.TemplateResponse(
@@ -332,27 +332,44 @@ async def get_dashboard():
         )
         contacts_by_category = {(c or "unknown").strip() or "unknown": n for c, n in contacts_by_cat}
 
-        # Media: total, imported (is_referenced=False), referenced (is_referenced=True)
-        total_images = session.query(func.count(MediaMetadata.id)).scalar() or 0
+        # Media: total, imported, reference - image types only (media_type like 'image/%')
+        image_filter = MediaMetadata.media_type.like("image/%")
+        total_images = (
+            session.query(func.count(MediaMetadata.id)).filter(image_filter).scalar()
+        ) or 0
         imported_images = (
             session.query(func.count(MediaMetadata.id))
+            .filter(image_filter)
             .filter(MediaMetadata.is_referenced == False)  # noqa: E712
             .scalar()
         ) or 0
         reference_images = (
             session.query(func.count(MediaMetadata.id))
+            .filter(image_filter)
             .filter(MediaMetadata.is_referenced == True)  # noqa: E712
             .scalar()
         ) or 0
 
-        # Thumbnail coverage: media_items with media_blob.thumbnail_data IS NOT NULL
+        # Thumbnail coverage: image media_items with media_blob.thumbnail_data IS NOT NULL
         with_thumb = (
             session.query(func.count(MediaMetadata.id))
             .join(MediaBlob, MediaMetadata.media_blob_id == MediaBlob.id)
+            .filter(image_filter)
             .filter(MediaBlob.thumbnail_data.isnot(None))
             .scalar()
         ) or 0
         thumbnail_pct = round(100.0 * with_thumb / total_images, 1) if total_images else 0
+
+        # Images by region (image types only)
+        region_col = func.coalesce(MediaMetadata.region, "Unknown")
+        images_by_region_rows = (
+            session.query(region_col, func.count(MediaMetadata.id))
+            .filter(image_filter)
+            .group_by(region_col)
+            .order_by(func.count(MediaMetadata.id).desc())
+            .all()
+        )
+        images_by_region = {(r or "Unknown").strip() or "Unknown": n for r, n in images_by_region_rows}
 
         # Facebook albums
         facebook_albums_count = session.query(func.count(FacebookAlbum.id)).scalar() or 0
@@ -377,6 +394,25 @@ async def get_dashboard():
             session.query(func.count(CompleteProfile.id)).scalar() or 0
         )
 
+        # Subject complete profile: subject full name and whether they have one
+        subject_full_name = None
+        subject_has_complete_profile = False
+        config = subject_config_service.get_configuration()
+        if config:
+            subject_full_name = f"{config.subject_name or ''} {config.family_name or ''}".strip()
+            if not subject_full_name:
+                subject_full_name = config.subject_name or "Subject"
+            contact_0 = session.query(Contacts.name).filter(Contacts.id == 0).first()
+            subject_names = {subject_full_name.lower(), (config.subject_name or "").lower()}
+            if contact_0 and contact_0[0]:
+                subject_names.add(contact_0[0].strip().lower())
+            subject_names.discard("")
+            if subject_names:
+                cp = session.query(CompleteProfile).filter(
+                    func.lower(CompleteProfile.name).in_(subject_names)
+                ).first()
+                subject_has_complete_profile = cp is not None and cp.profile is not None and len((cp.profile or "").strip()) > 0
+
         return {
             "message_counts": message_counts,
             "total_messages": total_messages,
@@ -388,6 +424,7 @@ async def get_dashboard():
             "total_images": total_images,
             "imported_images": imported_images,
             "reference_images": reference_images,
+            "images_by_region": images_by_region,
             "thumbnail_count": with_thumb,
             "thumbnail_percentage": thumbnail_pct,
             "facebook_albums_count": facebook_albums_count,
@@ -399,6 +436,8 @@ async def get_dashboard():
             "reference_docs_enabled": reference_docs_enabled,
             "reference_docs_disabled": reference_docs_disabled,
             "complete_profiles_count": complete_profiles_count,
+            "subject_full_name": subject_full_name or "Subject",
+            "subject_has_complete_profile": subject_has_complete_profile,
         }
     finally:
         session.close()

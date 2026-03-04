@@ -48,7 +48,7 @@ func RunContactsNormalise(ctx context.Context, opts RunOptions) error {
 	fmt.Fprintf(os.Stderr, "Merging contacts\n")
 	groups := runMerge(records, emailMatchMap, emailPrimaryNameMap, opts.Workers)
 	fmt.Fprintf(os.Stderr, "Found %d groups\n", len(groups))
-	formattedOutput := formatOutput(groups)
+	formattedOutput := formatOutput(ctx, opts.ContactsDB, groups)
 
 	//var socialMediaRecords []SocialMediaRecord
 	if opts.ContactsDB != nil {
@@ -147,20 +147,18 @@ func writeContactsAndClassifications(ctx context.Context, db *database.DB, class
 	if err := WriteContactsToDatabase(ctx, db, formattedOutput); err != nil {
 		return err
 	}
-	if db != nil {
-		classifications, err := LoadEmailClassifications(ctx, db)
-		if err != nil {
-			return fmt.Errorf("load classifications: %w", err)
-		}
-		if err := ApplyClassificationsToContacts(ctx, db, classifications); err != nil {
-			return fmt.Errorf("apply classifications: %w", err)
-		}
+	classifications, err := LoadEmailClassifications(ctx, db)
+	if err != nil {
+		return fmt.Errorf("load classifications: %w", err)
+	}
+	if err := ApplyClassificationsToContacts(ctx, db, classifications); err != nil {
+		return fmt.Errorf("apply classifications: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "Records written to database\n")
 	return nil
 }
 
-func TruncateContactsTable(ctx context.Context, dB *database.DB) any {
+func TruncateContactsTable(ctx context.Context, dB *database.DB) error {
 	//Truncate the contacts table cascade
 	_, err := dB.Pool.Exec(ctx, "TRUNCATE contacts CASCADE")
 	if err != nil {
@@ -428,10 +426,26 @@ func runMerge(records []InputRecord, emailMatchMap, emailPrimaryNameMap map[stri
 	return groups
 }
 
-func formatOutput(groups []Group) []FormattedOutputRecord {
+func formatOutput(ctx context.Context, db *database.DB, groups []Group) []FormattedOutputRecord {
 	var formattedOutput []FormattedOutputRecord
 	index := 1
 	assignedZero := false
+
+	var subjectName string
+	var familyNamePtr *string
+	err := db.Pool.QueryRow(ctx, "SELECT subject_name, family_name FROM subject_configuration LIMIT 1").Scan(&subjectName, &familyNamePtr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error getting subject configuration: %v\n", err)
+		return formattedOutput
+	}
+	if subjectName == "" {
+		subjectName = "Unknown"
+	}
+	familyName := "Unknown"
+	if familyNamePtr != nil && *familyNamePtr != "" {
+		familyName = *familyNamePtr
+	}
+
 	for _, g := range groups {
 		primary := choosePrimaryName(g.NameFrequency)
 		var emails []string
@@ -445,9 +459,10 @@ func formatOutput(groups []Group) []FormattedOutputRecord {
 				altNames = append(altNames, n)
 			}
 		}
+
 		sort.Strings(altNames)
 		id := index
-		if (primary == "Dave Burton" || primary == "David Burton") && !assignedZero {
+		if (primary == subjectName+" "+familyName) && !assignedZero {
 			id = 0
 			assignedZero = true
 		} else {

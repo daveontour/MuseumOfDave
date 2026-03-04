@@ -122,6 +122,9 @@
                         <i class="fas fa-map-marker-alt"></i> Locations
                     </button>
 
+                    <button type="button" class="more-options-btn" id="statistics-sidebar-btn">
+                        <i class="fas fa-chart-bar"></i> Statistics
+                    </button>
                     <button type="button" class="more-options-btn" id="suggestions-sidebar-btn">
                         <i class="fas fa-lightbulb"></i> Suggestions
                     </button>
@@ -450,6 +453,9 @@
                             </div>
                             <div id="dashboard-messages-by-contact-chart" style="margin-top: 24px;">
                                 <!-- Bar graph: messages by contact (top 20) -->
+                            </div>
+                            <div id="dashboard-images-by-region-chart" style="margin-top: 24px;">
+                                <!-- Bar graph: images by region -->
                             </div>
                         </div>
                     </section>
@@ -873,7 +879,37 @@
             </div>
         </div>
 
-
+        <!-- Statistics Modal (same content as Dashboard tab) -->
+        <div id="statistics-modal" class="modal" style="display: none; position: fixed; z-index: 4000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center;">
+            <div class="modal-content" style="max-width: 90vw; width: 90vw; max-height: 90vh; padding: 0; display: flex; flex-direction: column; overflow: hidden;" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h2>Statistics</h2>
+                    <button class="modal-close-btn" id="close-statistics-modal">&times;</button>
+                </div>
+                <div style="padding: 20px; overflow-y: auto; flex: 1;">
+                    <section class="config-section">
+                        <h3>Dashboard</h3>
+                        <div class="setting-group">
+                            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px;">
+                                <button type="button" id="stats-dashboard-refresh-btn" class="modal-btn modal-btn-secondary">
+                                    <i class="fas fa-sync-alt"></i> Refresh
+                                </button>
+                                <span id="stats-dashboard-loading" style="color: #666; display: none;">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading...
+                                </span>
+                            </div>
+                            <div id="stats-dashboard-load-error" style="display: none; padding: 10px; background: #fee; color: #c00; border-radius: 4px; margin-bottom: 12px;"></div>
+                            <div id="stats-dashboard-stats" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;"></div>
+                            <div id="stats-dashboard-messages-by-year-chart" style="margin-top: 24px;"></div>
+                            <div id="stats-dashboard-emails-by-year-chart" style="margin-top: 24px;"></div>
+                            <div id="stats-dashboard-contacts-by-category-chart" style="margin-top: 24px;"></div>
+                            <div id="stats-dashboard-messages-by-contact-chart" style="margin-top: 24px;"></div>
+                            <div id="stats-dashboard-images-by-region-chart" style="margin-top: 24px;"></div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
 
         <!-- Facebook Choose Albums Modal  -->
         <div id="fb-albums-modal" class="modal">

@@ -91,7 +91,8 @@ class SubjectConfigurationService:
         if not subject_name or not subject_name.strip():
             raise ValidationError("Subject name is required")
         if not system_instructions or not system_instructions.strip():
-            raise ValidationError("System instructions are required")
+            system_instructions = self._load_chat_instructions_from_file()
+
         
         # Default gender to "Male" if not provided
         if gender is None:
@@ -190,7 +191,7 @@ class SubjectConfigurationService:
             contact_name = f"{subject_name} {family_name}".strip()
         
         # Find existing contact with is_subject=True
-        subject_contact = session.query(Contacts).filter(Contacts.is_subject == True).first()
+        subject_contact = session.query(Contacts).filter(Contacts.id == 0).first()
         
         if subject_contact:
             # Update existing contact

@@ -61,3 +61,5 @@ history.json
 
 .claude/
 .git/
+
+*.code-workspace
