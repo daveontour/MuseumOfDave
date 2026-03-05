@@ -63,3 +63,4 @@ history.json
 .git/
 
 *.code-workspace
+*.json.bak

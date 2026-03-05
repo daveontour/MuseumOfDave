@@ -1189,6 +1189,7 @@ const App = (() => {
         let currentEventSource = null;
         const cancelEndpoints = {
             email_processing: '/emails/process/cancel',
+            imap_processing: '/imap/process/cancel',
             whatsapp: '/whatsapp/import/cancel',
             facebook: '/facebook/import/cancel',
             instagram: '/instagram/import/cancel',
@@ -1238,6 +1239,8 @@ const App = (() => {
             switch (importType) {
                 case 'email_processing':
                     return `Label: ${data.current_label || '-'} | ${data.current_label_index || 0}/${data.total_labels || 0} | ${data.emails_processed || 0} emails processed`;
+                case 'imap_processing':
+                    return `Folder: ${data.current_folder || '-'} | ${data.current_folder_index || 0}/${data.total_folders || 0} | ${data.emails_processed || 0} emails processed`;
                 case 'whatsapp':
                 case 'facebook':
                 case 'instagram':
@@ -1293,7 +1296,7 @@ const App = (() => {
             image_export: { needsInput: true, title: 'Export Images to Filesystem', fields: [{ id: 'target_directory', key: 'image_export_directory', label: 'Target Directory', placeholder: 'e.g., C:\\Users\\Dave\\Exports\\images', required: true }], run: async (vals) => { const r = await fetch('/images/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_directory: vals.target_directory }) }); return r; }, stream: '/images/export/stream' },
             thumbnails: { needsInput: false, title: 'Image Processing', run: async () => { const r = await fetch('/images/process-thumbnails', { method: 'POST' }); return r; }, stream: '/images/process-thumbnails/stream' },
             contacts: { needsInput: false, title: 'Contacts Merge', run: async () => { const r = await fetch('/contacts/extract', { method: 'POST' }); return r; }, stream: '/contacts/extract/stream' },
-            imap_processing: { needsInput: true, title: 'IMAP Import', fields: [{ id: 'host', key: 'imap_host', label: 'IMAP Host', placeholder: 'e.g., imap.outlook.com', required: true }, { id: 'port', key: 'imap_port', label: 'Port', placeholder: '993', required: true, type: 'number' }, { id: 'username', key: 'imap_username', label: 'Username', placeholder: 'your@email.com', required: true }, { id: 'password', key: 'imap_password', label: 'Password', placeholder: '', required: true, type: 'password' }, { id: 'use_ssl', key: 'imap_use_ssl', label: 'Use SSL/TLS', required: false, type: 'checkbox' }, { id: 'all_folders', key: 'imap_all_folders', label: 'Process all folders', required: false, type: 'checkbox' }, { id: 'folders', key: 'imap_folders', label: 'Folders (comma-separated, leave empty for INBOX)', placeholder: 'INBOX, Sent', required: false }, { id: 'new_only', key: 'imap_new_only', label: 'New only (skip already imported)', required: false, type: 'checkbox' }], run: async () => {}, stream: null }
+            imap_processing: { needsInput: true, title: 'IMAP Import', fields: [{ id: 'host', key: 'imap_host', label: 'IMAP Host', placeholder: 'e.g., imap.outlook.com', required: true }, { id: 'port', key: 'imap_port', label: 'Port', placeholder: '993', required: true, type: 'number' }, { id: 'username', key: 'imap_username', label: 'Username', placeholder: 'your@email.com', required: true }, { id: 'password', key: 'imap_password', label: 'Password', placeholder: '', required: true, type: 'password' }, { id: 'use_ssl', key: 'imap_use_ssl', label: 'Use SSL/TLS', required: false, type: 'checkbox' }, { id: 'all_folders', key: 'imap_all_folders', label: 'Process all folders', required: false, type: 'checkbox' }, { id: 'folders', key: 'imap_folders', label: 'Folders (comma-separated, leave empty for INBOX)', placeholder: 'INBOX, Sent', required: false }, { id: 'new_only', key: 'imap_new_only', label: 'New only (skip already imported)', required: false, type: 'checkbox' }], run: async (vals) => { const rawFolders = vals.all_folders ? [] : (vals.folders ? vals.folders.split(',').map(f => f.trim()).filter(Boolean) : []); const body = { host: vals.host, port: parseInt(vals.port, 10), username: vals.username, password: vals.password, use_ssl: vals.use_ssl !== false, all_folders: vals.all_folders || false, folders: rawFolders.length ? rawFolders : (vals.all_folders ? [] : ['INBOX']), new_only: vals.new_only || false }; return await fetch('/imap/process', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }, stream: '/imap/process/stream' }
         };
 
         async function showEmailProcessingModal(onSubmit) {
@@ -1476,8 +1479,6 @@ const App = (() => {
                 if (importInProgress) return;
                 if (importType === 'email_processing') {
                     showEmailProcessingModal((vals) => runImport(importType, vals));
-                } else if (importType === 'imap_processing') {
-                    showImportModal(importType, () => {});
                 } else {
                     showImportModal(importType, (vals) => runImport(importType, vals));
                 }
@@ -1490,8 +1491,6 @@ const App = (() => {
                 if (importInProgress) return;
                 if (importType === 'email_processing') {
                     showEmailProcessingModal((vals) => runImport(importType, vals));
-                } else if (importType === 'imap_processing') {
-                    showImportModal(importType, () => {});
                 } else {
                     showImportModal(importType, (vals) => runImport(importType, vals));
                 }
@@ -1530,8 +1529,8 @@ const App = (() => {
         });
 
         async function checkInitialImportStatus() {
-            const types = ['email_processing','imessage','whatsapp','facebook','instagram','facebook_albums','facebook_places','filesystem','reference_import','image_export','thumbnails','contacts'];
-            const statusEndpoints = { email_processing: '/emails/process/status', imessage: '/imessages/import/status', whatsapp: '/whatsapp/import/status', facebook: '/facebook/import/status', instagram: '/instagram/import/status', facebook_albums: '/facebook/albums/import/status', facebook_places: '/facebook/import-places/status', filesystem: '/images/import/status', reference_import: '/images/import-reference/status', image_export: '/images/export/status', thumbnails: '/images/process-thumbnails/status', contacts: '/contacts/extract/status' };
+            const types = ['email_processing','imap_processing','imessage','whatsapp','facebook','instagram','facebook_albums','facebook_places','filesystem','reference_import','image_export','thumbnails','contacts'];
+            const statusEndpoints = { email_processing: '/emails/process/status', imap_processing: '/imap/process/status', imessage: '/imessages/import/status', whatsapp: '/whatsapp/import/status', facebook: '/facebook/import/status', instagram: '/instagram/import/status', facebook_albums: '/facebook/albums/import/status', facebook_places: '/facebook/import-places/status', filesystem: '/images/import/status', reference_import: '/images/import-reference/status', image_export: '/images/export/status', thumbnails: '/images/process-thumbnails/status', contacts: '/contacts/extract/status' };
             for (const t of types) {
                 try {
                     const r = await fetch(statusEndpoints[t]);

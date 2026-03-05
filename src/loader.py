@@ -33,6 +33,12 @@ class EmailDatabaseLoader:
         """Initialize the Gmail client."""
         self.client = GmailClient()
         self.client.authenticate()
+
+    def init_imap_client(self, host: str, port: int, username: str, password: str, use_ssl: bool = True):
+        """Initialize the IMAP client with connection parameters."""
+        from .email_client.imap_client import IMAPClient
+        self.client = IMAPClient(host, port, username, password, use_ssl)
+        self.client.connect()
     
     def _is_image(self, mime_type: Optional[str]) -> bool:
         """Check if a MIME type represents an image.
@@ -367,31 +373,34 @@ class EmailDatabaseLoader:
         finally:
             session.close()
     
-    def load_emails(self, label: str, new_only: bool = False) -> int:
+    def load_emails(self, label: str, new_only: bool = False, progress_callback=None) -> int:
         """Load emails from a specific label into the database.
-        
+
         Args:
             label: The Gmail label to process (e.g., "INBOX")
             new_only: If True, only load new emails (uses database check callback)
-            
+            progress_callback: Optional callable(count) called after each email is saved
+
         Returns:
             Number of emails processed
         """
         if not hasattr(self, 'client') or self.client is None:
             self.init_client()
-        
+
         count = 0
         # Use database check callback when new_only is True
         check_callback = self.check_email_exists_callback if new_only else None
         email_generator = self.client.fetch_and_process_messages(
-            [label], 
-            self.process_email, 
+            [label],
+            self.process_email,
             new_only=new_only,
             check_history_callback=check_callback
         )
         for email in email_generator:
             count += 1
-        
+            if progress_callback:
+                progress_callback(count)
+
         return count
 
         

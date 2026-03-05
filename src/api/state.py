@@ -30,6 +30,27 @@ sse_clients: List[asyncio.Queue] = []
 sse_clients_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
+# IMAP email processing state
+# ---------------------------------------------------------------------------
+
+imap_processing_lock = threading.Lock()
+imap_processing_cancelled = threading.Event()
+imap_processing_in_progress = False
+
+imap_processing_progress: Dict[str, Any] = {
+    "current_folder": None,
+    "current_folder_index": 0,
+    "total_folders": 0,
+    "emails_processed": 0,
+    "status": "idle",  # idle, in_progress, completed, cancelled, error
+    "error_message": None,
+    "folders": []
+}
+
+imap_sse_clients: List[asyncio.Queue] = []
+imap_sse_clients_lock = threading.Lock()
+
+# ---------------------------------------------------------------------------
 # iMessage import state
 # ---------------------------------------------------------------------------
 
@@ -938,3 +959,47 @@ def broadcast_instagram_progress_event_sync(event_type: str = "progress", data: 
         for client in disconnected_clients:
             if client in instagram_sse_clients:
                 instagram_sse_clients.remove(client)
+
+
+# ---------------------------------------------------------------------------
+# IMAP email processing state functions
+# ---------------------------------------------------------------------------
+
+def update_imap_progress_state(**kwargs):
+    """Thread-safe function to update IMAP processing progress state."""
+    global imap_processing_progress
+    with imap_processing_lock:
+        for key, value in kwargs.items():
+            if key in imap_processing_progress:
+                imap_processing_progress[key] = value
+
+
+def get_imap_progress_state() -> Dict[str, Any]:
+    """Thread-safe function to get current IMAP processing progress state."""
+    global imap_processing_progress
+    with imap_processing_lock:
+        return imap_processing_progress.copy()
+
+
+def broadcast_imap_progress_event_sync(event_type: str, data: Dict[str, Any]):
+    """Thread-safe function to queue IMAP processing progress event for SSE clients."""
+    global imap_sse_clients
+    event_data = {
+        "type": event_type,
+        "data": data
+    }
+    message = f"data: {json.dumps(event_data)}\n\n"
+
+    with imap_sse_clients_lock:
+        disconnected_clients = []
+        for client_queue in imap_sse_clients:
+            try:
+                client_queue.put_nowait(message)
+            except asyncio.QueueFull:
+                pass
+            except Exception:
+                disconnected_clients.append(client_queue)
+
+        for client in disconnected_clients:
+            if client in imap_sse_clients:
+                imap_sse_clients.remove(client)

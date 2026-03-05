@@ -171,6 +171,13 @@ class Config:
 
             # Image Export
             "image_export_directory": os.getenv("DEFAULT_IMAGE_EXPORT_DIRECTORY", ""),
+
+            # IMAP Import
+            "imap_host": os.getenv("DEFAULT_IMAP_HOST", ""),
+            "imap_port": os.getenv("DEFAULT_IMAP_PORT", "993"),
+            "imap_username": os.getenv("DEFAULT_IMAP_USERNAME", ""),
+            "imap_use_ssl": True,
+            "imap_new_only": True,
         }
     
     def get_filesystem_exclude_patterns(self) -> list:
