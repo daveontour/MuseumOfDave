@@ -799,60 +799,101 @@
                 <div class="config-tab-content" id="import-messages-controls-tab">
                     <section class="config-section" style="display: flex; flex-direction: column; height: 100%;">
                         <div style="flex: 1; overflow: auto;">
-                            <table class="import-controls-table" style="width: 100%; border-collapse: collapse;">
-                                <thead>
-                                    <tr>
-                                        <th style="text-align: left; padding: 10px; border-bottom: 1px solid #dee2e6;">Import</th>
-                                        <th style="text-align: left; padding: 10px; border-bottom: 1px solid #dee2e6;">Last Run</th>
-                                        <th style="text-align: center; padding: 10px; border-bottom: 1px solid #dee2e6;">Execute</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr data-import="email_processing"><td style="padding: 10px; border-bottom: 1px solid #eee;">Email Processing</td><td id="import-last-run-email_processing" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="email_processing"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="whatsapp"><td style="padding: 10px; border-bottom: 1px solid #eee;">WhatsApp Import</td><td id="import-last-run-whatsapp" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="whatsapp"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="facebook"><td style="padding: 10px; border-bottom: 1px solid #eee;">Facebook Messenger Import</td><td id="import-last-run-facebook" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="facebook"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="instagram"><td style="padding: 10px; border-bottom: 1px solid #eee;">Instagram Import</td><td id="import-last-run-instagram" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="instagram"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="imessage"><td style="padding: 10px; border-bottom: 1px solid #eee;">iMessage Import</td><td id="import-last-run-imessage" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="imessage"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="facebook_albums"><td style="padding: 10px; border-bottom: 1px solid #eee;">Facebook Albums Import</td><td id="import-last-run-facebook_albums" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="facebook_albums"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="facebook_places"><td style="padding: 10px; border-bottom: 1px solid #eee;">Facebook Places Import</td><td id="import-last-run-facebook_places" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="facebook_places"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="contacts"><td style="padding: 10px; border-bottom: 1px solid #eee;">Contacts Import</td><td id="import-last-run-contacts" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="contacts"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                </tbody>
-                            </table>
+                            <div class="import-messages-tiles" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
+                                <div class="import-control-tile" data-import="email_processing" title="Click to run">
+                                    <div class="import-tile-title">Import Emails from GMail</div>
+                                    <div id="import-last-run-email_processing" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import emails from <strong></strong>Gmail</strong>. Choose folders or process all, and optionally import only new messages.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="imap_processing" title="Click to run">
+                                    <div class="import-tile-title">Import Emails from other IMAP sources</div>
+                                    <div id="import-last-run-email_processing" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import emails from other IMAP sources. Choose folders or process all, and optionally import only new messages.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="whatsapp" title="Click to run">
+                                    <div class="import-tile-title">WhatsApp Import</div>
+                                    <div id="import-last-run-whatsapp" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import messages from a WhatsApp export directory (e.g. from iMazing or Android backup).</div>
+                                </div>
+                                <div class="import-control-tile" data-import="facebook" title="Click to run">
+                                    <div class="import-tile-title">Facebook Messenger Import</div>
+                                    <div id="import-last-run-facebook" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import Facebook Messenger conversations from a Meta data export directory.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="instagram" title="Click to run">
+                                    <div class="import-tile-title">Instagram Import</div>
+                                    <div id="import-last-run-instagram" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import Instagram direct messages from a Meta data export directory.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="imessage" title="Click to run">
+                                    <div class="import-tile-title">iMessage and SMS Import</div>
+                                    <div id="import-last-run-imessage" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import iMessage and SMS conversations from a directory containing conversation subdirectories created by iMazing or Android backup.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="facebook_albums" title="Click to run">
+                                    <div class="import-tile-title">Facebook Albums Import</div>
+                                    <div id="import-last-run-facebook_albums" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import photos from Facebook albums in a Meta data export (posts folder).</div>
+                                </div>
+                                <div class="import-control-tile" data-import="facebook_places" title="Click to run">
+                                    <div class="import-tile-title">Facebook Places Import</div>
+                                    <div id="import-last-run-facebook_places" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import check-ins and place data from a Facebook posts JSON file.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="contacts" title="Click to run">
+                                    <div class="import-tile-title">Contacts Merge</div>
+                                    <div id="import-last-run-contacts" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Merge and normalise contacts from the database using the import-processor.</div>
+                                </div>
+                            </div>
                         </div>
-                        <div style="margin-top: 15px; display: flex; align-items: flex-start; gap: 10px;">
+                        <div style="margin-top: 15px; display: flex; align-items: stretch; gap: 10px;">
                             <div class="import-controls-status-box" style="flex: 1; padding: 12px 15px; background-color: #2d3748; border-radius: 6px; border: 1px solid #4a5568; font-size: 0.95em; line-height: 1.5; height: 4.5em; overflow-y: auto; color: #fff;">
                                 <span class="import-controls-status-text" style="color: #fff;">Idle</span>
                             </div>
-                            <button type="button" class="import-controls-reset-btn modal-btn modal-btn-secondary" style="flex-shrink: 0;" title="Reset Import Controls to initial state"><i class="fas fa-undo"></i> Reset</button>
-                            <button type="button" class="import-controls-cancel-btn modal-btn modal-btn-secondary" style="display: none; flex-shrink: 0;"><i class="fas fa-stop"></i> Cancel</button>
+                            <div style="display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;">
+                                <button type="button" class="import-controls-reset-btn modal-btn modal-btn-secondary" title="Reset Import Controls to initial state"><i class="fas fa-undo"></i> Reset</button>
+                                <button type="button" class="import-controls-cancel-btn modal-btn modal-btn-secondary" disabled title="Cancel running import"><i class="fas fa-stop"></i> Cancel</button>
+                            </div>
                         </div>
                     </section>
                 </div>
                 <div class="config-tab-content" id="import-images-controls-tab">
                     <section class="config-section" style="display: flex; flex-direction: column; height: 100%;">
                         <div style="flex: 1; overflow: auto;">
-                            <table class="import-controls-table" style="width: 100%; border-collapse: collapse;">
-                                <thead>
-                                    <tr>
-                                        <th style="text-align: left; padding: 10px; border-bottom: 1px solid #dee2e6;">Import</th>
-                                        <th style="text-align: left; padding: 10px; border-bottom: 1px solid #dee2e6;">Last Run</th>
-                                        <th style="text-align: center; padding: 10px; border-bottom: 1px solid #dee2e6;">Execute</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr data-import="filesystem"><td style="padding: 10px; border-bottom: 1px solid #eee;">Filesystem Image Import</td><td id="import-last-run-filesystem" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="filesystem"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="reference_import"><td style="padding: 10px; border-bottom: 1px solid #eee;">Import Reference Images to Database</td><td id="import-last-run-reference_import" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="reference_import"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="image_export"><td style="padding: 10px; border-bottom: 1px solid #eee;">Export Images to Filesystem</td><td id="import-last-run-image_export" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="image_export"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                    <tr data-import="thumbnails"><td style="padding: 10px; border-bottom: 1px solid #eee;">Image Processing (Thumbnails and Location Extraction)</td><td id="import-last-run-thumbnails" style="padding: 10px; border-bottom: 1px solid #eee; color: #666; font-size: 0.9em;"></td><td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><button type="button" class="import-execute-btn modal-btn modal-btn-primary" style="width: 160px;" data-import="thumbnails"><i class="fas fa-play"></i> Execute</button></td></tr>
-                                </tbody>
-                            </table>
+                            <div class="import-images-tiles" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
+                                <div class="import-control-tile" data-import="filesystem" title="Click to run">
+                                    <div class="import-tile-title">Filesystem Image Import</div>
+                                    <div id="import-last-run-filesystem" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Scan directories for images and add them to the media library. Choose reference-only to leave files on disk, or full import to copy into the database.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="thumbnails" title="Click to run">
+                                    <div class="import-tile-title">Image Processing (Thumbnails and Location)</div>
+                                    <div id="import-last-run-thumbnails" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Generate thumbnails and extract location metadata from images.</div>
+                                </div>
+                                <div style="grid-column: 1 / -1; height: 15px;"></div>
+                                <div class="import-control-tile" data-import="reference_import" title="Click to run">
+                                    <div class="import-tile-title">Import referenced images to Database</div>
+                                    <div id="import-last-run-reference_import" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Copy referenced image files into the database so they can be displayed without the original files on disk.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="image_export" title="Click to run">
+                                    <div class="import-tile-title">Export Images to Filesystem</div>
+                                    <div id="import-last-run-image_export" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Export images from the database to a target directory on disk.</div>
+                                </div>
+
+                            </div>
                         </div>
-                        <div style="margin-top: 15px; display: flex; align-items: flex-start; gap: 10px;">
+                        <div style="margin-top: 15px; display: flex; align-items: stretch; gap: 10px;">
                             <div class="import-controls-status-box" style="flex: 1; padding: 12px 15px; background-color: #2d3748; border-radius: 6px; border: 1px solid #4a5568; font-size: 0.95em; line-height: 1.5; height: 4.5em; overflow-y: auto; color: #fff;">
                                 <span class="import-controls-status-text" style="color: #fff;">Idle</span>
                             </div>
-                            <button type="button" class="import-controls-reset-btn modal-btn modal-btn-secondary" style="flex-shrink: 0;" title="Reset Import Controls to initial state"><i class="fas fa-undo"></i> Reset</button>
-                            <button type="button" class="import-controls-cancel-btn modal-btn modal-btn-secondary" style="display: none; flex-shrink: 0;"><i class="fas fa-stop"></i> Cancel</button>
+                            <div style="display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;">
+                                <button type="button" class="import-controls-reset-btn modal-btn modal-btn-secondary" title="Reset Import Controls to initial state"><i class="fas fa-undo"></i> Reset</button>
+                                <button type="button" class="import-controls-cancel-btn modal-btn modal-btn-secondary" disabled title="Cancel running import"><i class="fas fa-stop"></i> Cancel</button>
+                            </div>
                         </div>
                     </section>
                 </div>

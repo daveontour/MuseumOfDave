@@ -544,6 +544,51 @@ body {
     color: #666;
 }
 
+/* Response action buttons row (Images, Locations, Emails, Messages) - above JSON dropdown */
+.response-action-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    margin-bottom: 6px;
+}
+
+.response-action-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.response-action-btn i {
+    font-size: 24px;
+    color: white;
+}
+
+.response-action-btn:hover {
+    transform: scale(1.08);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.response-action-btn--images {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.response-action-btn--locations {
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+}
+
+.response-action-btn--emails {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.response-action-btn--messages {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
 
 /* Audio tag visibility (JS toggles 'hide-audio-tags' class on body) */
 .hide-audio-tags .message-content audio,
@@ -1432,7 +1477,7 @@ body {
 
 
 .config-section {
-    margin-bottom: 30px;
+    margin-bottom: 0px;
     padding: 20px;
     background: #f8f9fa;
     border-radius: 8px;
@@ -1462,6 +1507,81 @@ body {
 }
 .import-controls-table tbody tr:hover {
     background-color: #e9ecef;
+}
+
+/* Import control tiles (Messages and Images tabs) */
+.import-control-tile {
+    padding: 18px;
+    border: 1px solid #ced4da;
+    border-left: 4px solid #3b82f6;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s, background-color 0.2s;
+    position: relative;
+}
+.import-control-tile::after {
+    content: '\f04b';
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    font-size: 0.9rem;
+    color: #94a3b8;
+    opacity: 0.7;
+}
+.import-control-tile:hover {
+    background-color: #f8fafc;
+    border-color: #3b82f6;
+    border-left-color: #2563eb;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+    transform: translateY(-2px);
+}
+.import-control-tile:hover::after {
+    color: #3b82f6;
+    opacity: 1;
+}
+.import-control-tile.import-executing {
+    background-color: #fffbeb;
+    border-color: #f59e0b;
+    border-left-color: #f59e0b;
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
+}
+.import-control-tile.import-executing::after {
+    content: '\f021';
+    color: #f59e0b;
+    opacity: 1;
+    animation: import-tile-spin 1s linear infinite;
+}
+@keyframes import-tile-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.import-tile-title {
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: #1e293b;
+    margin-bottom: 6px;
+    padding-right: 24px;
+}
+.import-tile-last-run {
+    font-size: 0.85em;
+    color: #64748b;
+    margin-bottom: 10px;
+}
+.import-tile-explanation {
+    font-size: 0.9em;
+    color: #475569;
+    line-height: 1.45;
+}
+
+.import-controls-cancel-btn:disabled {
+    opacity: 0.5;
+    background-color: #e2e8f0 !important;
+    color: #94a3b8 !important;
+    cursor: not-allowed;
 }
 
 .setting-group {

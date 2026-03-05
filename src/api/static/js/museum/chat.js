@@ -133,6 +133,27 @@ const Chat = (() => {
         }
     }
 
+    function _addResponseActionButtons(messageElement, role) {
+        if (!['assistant', 'model'].includes(role)) return;
+        const row = document.createElement('div');
+        row.className = 'response-action-buttons';
+        const buttons = [
+            { icon: 'fa-image', alert: 'Showing Images', modifier: 'images' },
+            { icon: 'fa-map-marker-alt', alert: 'Showing Locations', modifier: 'locations' },
+            { icon: 'fa-envelope', alert: 'Showing Emails', modifier: 'emails' },
+            { icon: 'fa-comments', alert: 'Showing messages', modifier: 'messages' }
+        ];
+        buttons.forEach(({ icon, alert: msg, modifier }) => {
+            const btn = document.createElement('button');
+            btn.className = `response-action-btn response-action-btn--${modifier}`;
+            btn.innerHTML = `<i class="fas ${icon}"></i>`;
+            btn.title = msg;
+            btn.addEventListener('click', () => alert(msg));
+            row.appendChild(btn);
+        });
+        messageElement.appendChild(row);
+    }
+
     function _addSpeakButton(contentElement, role) {
         if (['assistant', 'model'].includes(role) && DOM.showAudioTags.checked) {
             const speakButton = document.createElement('button');
@@ -193,6 +214,7 @@ const Chat = (() => {
         messageElement.appendChild(contentElement);
 
         _addImagePreviews(messageElement, embeddedJson);
+        _addResponseActionButtons(messageElement, role);
         _addJsonViewer(messageElement, embeddedJson);
         _addSpeakButton(contentElement, role); // Pass contentElement as it appends to it
 

@@ -1223,7 +1223,12 @@ const App = (() => {
                     btn.classList.remove('import-executing');
                 }
             });
-            importCancelBtns().forEach(btn => { btn.style.display = executing ? 'inline-block' : 'none'; });
+            const tiles = document.querySelectorAll('.import-control-tile');
+            tiles.forEach(tile => {
+                const type = tile.getAttribute('data-import');
+                tile.classList.toggle('import-executing', type === importType && executing);
+            });
+            importCancelBtns().forEach(btn => { btn.disabled = !executing; });
         }
 
         function formatProgressLine(importType, data) {
@@ -1287,7 +1292,8 @@ const App = (() => {
             reference_import: { needsInput: false, title: 'Import Reference Images to Database', run: async () => { const r = await fetch('/images/import-reference', { method: 'POST' }); return r; }, stream: '/images/import-reference/stream' },
             image_export: { needsInput: true, title: 'Export Images to Filesystem', fields: [{ id: 'target_directory', key: 'image_export_directory', label: 'Target Directory', placeholder: 'e.g., C:\\Users\\Dave\\Exports\\images', required: true }], run: async (vals) => { const r = await fetch('/images/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_directory: vals.target_directory }) }); return r; }, stream: '/images/export/stream' },
             thumbnails: { needsInput: false, title: 'Image Processing', run: async () => { const r = await fetch('/images/process-thumbnails', { method: 'POST' }); return r; }, stream: '/images/process-thumbnails/stream' },
-            contacts: { needsInput: false, title: 'Contacts Merge', run: async () => { const r = await fetch('/contacts/extract', { method: 'POST' }); return r; }, stream: '/contacts/extract/stream' }
+            contacts: { needsInput: false, title: 'Contacts Merge', run: async () => { const r = await fetch('/contacts/extract', { method: 'POST' }); return r; }, stream: '/contacts/extract/stream' },
+            imap_processing: { needsInput: true, title: 'IMAP Import', fields: [{ id: 'host', key: 'imap_host', label: 'IMAP Host', placeholder: 'e.g., imap.outlook.com', required: true }, { id: 'port', key: 'imap_port', label: 'Port', placeholder: '993', required: true, type: 'number' }, { id: 'username', key: 'imap_username', label: 'Username', placeholder: 'your@email.com', required: true }, { id: 'password', key: 'imap_password', label: 'Password', placeholder: '', required: true, type: 'password' }, { id: 'use_ssl', key: 'imap_use_ssl', label: 'Use SSL/TLS', required: false, type: 'checkbox' }, { id: 'all_folders', key: 'imap_all_folders', label: 'Process all folders', required: false, type: 'checkbox' }, { id: 'folders', key: 'imap_folders', label: 'Folders (comma-separated, leave empty for INBOX)', placeholder: 'INBOX, Sent', required: false }, { id: 'new_only', key: 'imap_new_only', label: 'New only (skip already imported)', required: false, type: 'checkbox' }], run: async () => {}, stream: null }
         };
 
         async function showEmailProcessingModal(onSubmit) {
@@ -1470,6 +1476,22 @@ const App = (() => {
                 if (importInProgress) return;
                 if (importType === 'email_processing') {
                     showEmailProcessingModal((vals) => runImport(importType, vals));
+                } else if (importType === 'imap_processing') {
+                    showImportModal(importType, () => {});
+                } else {
+                    showImportModal(importType, (vals) => runImport(importType, vals));
+                }
+            });
+        });
+
+        document.querySelectorAll('.import-control-tile').forEach(tile => {
+            tile.addEventListener('click', () => {
+                const importType = tile.getAttribute('data-import');
+                if (importInProgress) return;
+                if (importType === 'email_processing') {
+                    showEmailProcessingModal((vals) => runImport(importType, vals));
+                } else if (importType === 'imap_processing') {
+                    showImportModal(importType, () => {});
                 } else {
                     showImportModal(importType, (vals) => runImport(importType, vals));
                 }
@@ -1492,13 +1514,14 @@ const App = (() => {
             importInProgress = false;
             currentImportType = null;
             setImportStatus('Idle');
-            importCancelBtns().forEach(btn => { btn.style.display = 'none'; });
+            importCancelBtns().forEach(btn => { btn.disabled = true; });
             document.querySelectorAll('.import-execute-btn').forEach(btn => {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-play"></i> Execute';
                 btn.style.backgroundColor = '';
                 btn.classList.remove('import-executing');
             });
+            document.querySelectorAll('.import-control-tile').forEach(tile => tile.classList.remove('import-executing'));
             if (typeof loadImportControlLastRun === 'function') loadImportControlLastRun();
         }
 
