@@ -15,7 +15,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from ...database.models import (
-    IMessage, MediaMetadata, MediaBlob, MessageAttachment
+    Message, MediaMetadata, MediaBlob, MessageAttachment
 )
 from ...services import MessageService
 from ...services.gemini_service import GeminiService
@@ -774,12 +774,12 @@ async def get_conversation_messages(chat_session: str):
 
     session = db.get_session()
     try:
-        messages = session.query(IMessage).options(
-            joinedload(IMessage.media_attachments).joinedload(MessageAttachment.media_item)
+        messages = session.query(Message).options(
+            joinedload(Message.media_attachments).joinedload(MessageAttachment.media_item)
         ).filter(
-            IMessage.chat_session == decoded_session
+            Message.chat_session == decoded_session
         ).order_by(
-            IMessage.message_date.asc()
+            Message.message_date.asc()
         ).all()
 
         messages_data = []
@@ -825,7 +825,7 @@ async def get_message_metadata(message_id: int):
     """Get message metadata by ID."""
     session = db.get_session()
     try:
-        message = session.query(IMessage).filter(IMessage.id == message_id).first()
+        message = session.query(Message).filter(Message.id == message_id).first()
 
         if not message:
             raise HTTPException(status_code=404, detail=f"Message with ID {message_id} not found")
@@ -934,12 +934,12 @@ async def delete_conversation_messages(chat_session: str):
 
     session = db.get_session()
     try:
-        message_count = session.query(IMessage).filter(IMessage.chat_session == decoded_session).count()
+        message_count = session.query(Message).filter(Message.chat_session == decoded_session).count()
 
         if message_count == 0:
             raise HTTPException(status_code=404, detail=f"Chat session '{decoded_session}' not found")
 
-        deleted_count = session.query(IMessage).filter(IMessage.chat_session == decoded_session).delete()
+        deleted_count = session.query(Message).filter(Message.chat_session == decoded_session).delete()
         session.commit()
 
         return {
@@ -962,7 +962,7 @@ async def get_imessage_attachment(message_id: int, preview: bool = False):
     """Get attachment content for a message."""
     session = db.get_session()
     try:
-        message = session.query(IMessage).filter(IMessage.id == message_id).first()
+        message = session.query(Message).filter(Message.id == message_id).first()
         if not message:
             raise HTTPException(status_code=404, detail=f"Message with ID {message_id} not found")
 
@@ -1250,15 +1250,15 @@ async def summarize_writing_style_endpoint():
 
     session = db.get_session()
     try:
-        total_available = session.query(IMessage).filter(IMessage.sender_name == subject_name).count()
+        total_available = session.query(Message).filter(Message.sender_name == subject_name).count()
 
         if total_available == 0:
             raise HTTPException(status_code=404, detail=f"No messages found for sender '{subject_name}'")
 
-        selected_messages = session.query(IMessage).options(
-            joinedload(IMessage.media_attachments)
+        selected_messages = session.query(Message).options(
+            joinedload(Message.media_attachments)
         ).filter(
-            IMessage.sender_name == subject_name
+            Message.sender_name == subject_name
         ).order_by(func.random()).limit(5000).all()
 
         sample_size = len(selected_messages)
@@ -1318,15 +1318,15 @@ async def summarize_psychological_profile_endpoint():
 
     session = db.get_session()
     try:
-        total_available = session.query(IMessage).filter(IMessage.sender_name == subject_name).count()
+        total_available = session.query(Message).filter(Message.sender_name == subject_name).count()
 
         if total_available == 0:
             raise HTTPException(status_code=404, detail=f"No messages found for sender '{subject_name}'")
 
-        selected_messages = session.query(IMessage).options(
-            joinedload(IMessage.media_attachments)
+        selected_messages = session.query(Message).options(
+            joinedload(Message.media_attachments)
         ).filter(
-            IMessage.sender_name == subject_name
+            Message.sender_name == subject_name
         ).order_by(func.random()).limit(5000).all()
 
         sample_size = len(selected_messages)

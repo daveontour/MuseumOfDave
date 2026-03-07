@@ -137,63 +137,62 @@ class Config:
             min_size=min_size,
         )
 
-    def get_control_defaults(self) -> dict:
-        """Get default values for control tab inputs from environment variables."""
+    def get_control_defaults(self, config_service=None) -> dict:
+        """Get default values for control tab inputs, preferring the database over .env."""
+        _get = config_service.get if config_service else os.getenv
         return {
             # Email Controls
-            "process_all_folders": os.getenv("DEFAULT_PROCESS_ALL_FOLDERS", "false").lower() == "true",
-            "new_only_option": os.getenv("DEFAULT_NEW_ONLY_OPTION", "true").lower() == "true",
-            
+            "process_all_folders": (_get("DEFAULT_PROCESS_ALL_FOLDERS", "false") or "false").lower() == "true",
+            "new_only_option": (_get("DEFAULT_NEW_ONLY_OPTION", "true") or "true").lower() == "true",
+
             # WhatsApp Import
-            "whatsapp_import_directory": os.getenv("DEFAULT_WHATSAPP_IMPORT_DIRECTORY", ""),
-            
+            "whatsapp_import_directory": _get("DEFAULT_WHATSAPP_IMPORT_DIRECTORY", "") or "",
+
             # Facebook Messenger Import
-            "facebook_import_directory": os.getenv("DEFAULT_FACEBOOK_IMPORT_DIRECTORY", ""),
-            "facebook_export_root": os.getenv("DEFAULT_FACEBOOK_EXPORT_ROOT", ""),
-            "facebook_user_name": os.getenv("DEFAULT_FACEBOOK_USER_NAME", ""),
-            
+            "facebook_import_directory": _get("DEFAULT_FACEBOOK_IMPORT_DIRECTORY", "") or "",
+            "facebook_export_root": _get("DEFAULT_FACEBOOK_EXPORT_ROOT", "") or "",
+            "facebook_user_name": _get("DEFAULT_FACEBOOK_USER_NAME", "") or "",
+
             # Instagram Import
-            "instagram_import_directory": os.getenv("DEFAULT_INSTAGRAM_IMPORT_DIRECTORY", ""),
-            "instagram_export_root": os.getenv("DEFAULT_INSTAGRAM_EXPORT_ROOT", ""),
-            "instagram_user_name": os.getenv("DEFAULT_INSTAGRAM_USER_NAME", ""),
-            
+            "instagram_import_directory": _get("DEFAULT_INSTAGRAM_IMPORT_DIRECTORY", "") or "",
+            "instagram_export_root": _get("DEFAULT_INSTAGRAM_EXPORT_ROOT", "") or "",
+            "instagram_user_name": _get("DEFAULT_INSTAGRAM_USER_NAME", "") or "",
+
             # iMessage Import
-            "imessage_directory_path": os.getenv("DEFAULT_IMESSAGE_DIRECTORY_PATH", ""),
-            
+            "imessage_directory_path": _get("DEFAULT_IMESSAGE_DIRECTORY_PATH", "") or "",
+
             # Facebook Albums Import
-            "facebook_albums_import_directory": os.getenv("DEFAULT_FACEBOOK_ALBUMS_IMPORT_DIRECTORY", ""),
-            "facebook_albums_export_root": os.getenv("DEFAULT_FACEBOOK_ALBUMS_EXPORT_ROOT", ""),
-            
+            "facebook_albums_import_directory": _get("DEFAULT_FACEBOOK_ALBUMS_IMPORT_DIRECTORY", "") or "",
+            "facebook_albums_export_root": _get("DEFAULT_FACEBOOK_ALBUMS_EXPORT_ROOT", "") or "",
+
             # Filesystem Image Import
-            "filesystem_import_directory": os.getenv("DEFAULT_FILESYSTEM_IMPORT_DIRECTORY", ""),
-            "filesystem_import_max_images": os.getenv("DEFAULT_FILESYSTEM_IMPORT_MAX_IMAGES", ""),
-            "filesystem_import_create_thumbnail": os.getenv("DEFAULT_FILESYSTEM_IMPORT_CREATE_THUMBNAIL", "false").lower() == "true",
+            "filesystem_import_directory": _get("DEFAULT_FILESYSTEM_IMPORT_DIRECTORY", "") or "",
+            "filesystem_import_max_images": _get("DEFAULT_FILESYSTEM_IMPORT_MAX_IMAGES", "") or "",
+            "filesystem_import_create_thumbnail": (_get("DEFAULT_FILESYSTEM_IMPORT_CREATE_THUMBNAIL", "false") or "false").lower() == "true",
 
             # Image Export
-            "image_export_directory": os.getenv("DEFAULT_IMAGE_EXPORT_DIRECTORY", ""),
+            "image_export_directory": _get("DEFAULT_IMAGE_EXPORT_DIRECTORY", "") or "",
 
             # IMAP Import
-            "imap_host": os.getenv("DEFAULT_IMAP_HOST", ""),
-            "imap_port": os.getenv("DEFAULT_IMAP_PORT", "993"),
-            "imap_username": os.getenv("DEFAULT_IMAP_USERNAME", ""),
+            "imap_host": _get("DEFAULT_IMAP_HOST", "") or "",
+            "imap_port": _get("DEFAULT_IMAP_PORT", "993") or "993",
+            "imap_username": _get("DEFAULT_IMAP_USERNAME", "") or "",
             "imap_use_ssl": True,
             "imap_new_only": True,
         }
-    
-    def get_filesystem_exclude_patterns(self) -> list:
-        """Get directory exclude patterns for filesystem image import from environment variables.
-        
+
+    def get_filesystem_exclude_patterns(self, config_service=None) -> list:
+        """Get directory exclude patterns for filesystem image import.
+
         Returns:
             List of patterns (strings) to exclude. Patterns can contain wildcards (*, ?).
             Empty list if not configured.
         """
-        exclude_patterns_str = os.getenv("FILESYSTEM_IMPORT_EXCLUDE_PATTERNS", "").strip()
+        _get = config_service.get if config_service else os.getenv
+        exclude_patterns_str = (_get("FILESYSTEM_IMPORT_EXCLUDE_PATTERNS", "") or "").strip()
         if not exclude_patterns_str:
             return []
-        
-        # Split by comma and strip whitespace
-        patterns = [p.strip() for p in exclude_patterns_str.split(",") if p.strip()]
-        return patterns
+        return [p.strip() for p in exclude_patterns_str.split(",") if p.strip()]
 
 
 def get_config() -> Config:

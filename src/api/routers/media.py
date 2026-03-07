@@ -24,7 +24,7 @@ from ...services.exceptions import ServiceException, ValidationError, NotFoundEr
 from ...services.dto import ImageSearchFilters, MediaMetadataUpdate
 from ...config import get_config
 from ...utils.docker_utils import translate_path_to_container
-from ..deps import db
+from ..deps import db, config_service
 from ..state import (
     facebook_albums_import_lock,
     facebook_albums_import_cancelled,
@@ -959,7 +959,7 @@ async def import_filesystem_images(
         )
 
     config = get_config()
-    exclude_patterns = config.get_filesystem_exclude_patterns()
+    exclude_patterns = config.get_filesystem_exclude_patterns(config_service=config_service)
 
     # Start background import task
     background_tasks.add_task(

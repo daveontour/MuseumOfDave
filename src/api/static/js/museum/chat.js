@@ -133,25 +133,67 @@ const Chat = (() => {
         }
     }
 
-    function _addResponseActionButtons(messageElement, role) {
+    function _addResponseActionButtons(messageElement, role, embeddedJson) {
         if (!['assistant', 'model'].includes(role)) return;
+        if (!embeddedJson) return;
+
+        const buttons = [
+            {
+                key: 'showImages',
+                icon: 'fa-image',
+                modifier: 'images',
+                title: (v) => `Show images tagged ${v}`,
+                action: (v) => Modals.NewImageGallery?.openTaggedImages?.(v)
+            },
+            {
+                key: 'showLocation',
+                icon: 'fa-map-marker-alt',
+                modifier: 'locations',
+                title: (v) => `Show locations`,
+                action: () => Modals.Locations?.openMapView?.()
+            },
+            {
+                key: 'showEmails',
+                icon: 'fa-envelope',
+                modifier: 'emails',
+                title: (v) => `Show emails for ${v}`,
+                action: (v) => Modals.EmailGallery?.openContact?.(v)
+            },
+            {
+                key: 'showMessages',
+                icon: 'fa-comments',
+                modifier: 'messages',
+                title: (v) => `Show messages for ${v}`,
+                action: (v) => Modals.SMSMessages?.openWithFilter?.(v)
+            },
+            {
+                key: 'showFacebookAlbum',
+                icon: 'fa-images',
+                modifier: 'facebook-album',
+                title: () => `Open Facebook album`,
+                action: (v) => Modals.FBAlbums?.openAndSelectAlbum?.(Number(v))
+            }
+        ];
+
         const row = document.createElement('div');
         row.className = 'response-action-buttons';
-        const buttons = [
-            { icon: 'fa-image', alert: 'Showing Images', modifier: 'images' },
-            { icon: 'fa-map-marker-alt', alert: 'Showing Locations', modifier: 'locations' },
-            { icon: 'fa-envelope', alert: 'Showing Emails', modifier: 'emails' },
-            { icon: 'fa-comments', alert: 'Showing messages', modifier: 'messages' }
-        ];
-        buttons.forEach(({ icon, alert: msg, modifier }) => {
+
+        buttons.forEach(({ key, icon, modifier, title, action }) => {
+            debugger;
+            const value = embeddedJson[key];
+            if (value === undefined || value === null || (typeof value !== 'string' && typeof value !== 'number')) return;
+
             const btn = document.createElement('button');
             btn.className = `response-action-btn response-action-btn--${modifier}`;
             btn.innerHTML = `<i class="fas ${icon}"></i>`;
-            btn.title = msg;
-            btn.addEventListener('click', () => alert(msg));
+            btn.title = title(value);
+            btn.addEventListener('click', () => action(value));
             row.appendChild(btn);
         });
-        messageElement.appendChild(row);
+
+        if (row.children.length > 0) {
+            messageElement.appendChild(row);
+        }
     }
 
     function _addSpeakButton(contentElement, role) {
@@ -214,7 +256,7 @@ const Chat = (() => {
         messageElement.appendChild(contentElement);
 
         _addImagePreviews(messageElement, embeddedJson);
-        _addResponseActionButtons(messageElement, role);
+        _addResponseActionButtons(messageElement, role, embeddedJson);  //Add the buttons for the actions that the AI wants to perform
         _addJsonViewer(messageElement, embeddedJson);
         _addSpeakButton(contentElement, role); // Pass contentElement as it appends to it
 
@@ -240,54 +282,56 @@ const Chat = (() => {
         //The browser_action object has an args property that is an array of arguments for the function.
         // The AI may include a browser_action object in the embeddedJson to tell the browser to perform an action.
         // The AI is told about the available browser actions in the system_instructions_chat.txt file.
-        if (role === 'assistant') {
-            console.log('embeddedJson', embeddedJson);
-            if (embeddedJson && embeddedJson.browser_action) {
-                _processBrowserActions(embeddedJson.browser_action);
-            }
-        }
+        // if (role === 'assistant') {
+        //     console.log('embeddedJson', embeddedJson);
+        //     if (embeddedJson && embeddedJson.browser_action) {
+        //         _processBrowserActions(embeddedJson.browser_action);
+        //     }
+        // }
+
+        // The above now all done by flags in the JSON structure
         
         return messageElement;
     }
 
     // The browser_action is a json object that is included in the embeddedJson. It is used to tell the browser to perform an action.
-    function _processBrowserActions(browser_action) {
-        if (browser_action) {
-            console.log('browser_action', browser_action);
-        } else {
-            console.log('no browser_actions');
-            return;
-        }
-        switch (browser_action.functionName) {
-            case 'showAlert':
-                alert(browser_action.args[0]);
-                break;
-            case 'changeBackgroundColor':
-                document.body.style.backgroundColor = browser_action.args[0];
-                break;
-            case 'showContactEmailGallery':
-                Modals.EmailGallery.openContact(browser_action.args[0]);
-                break;
-            case 'showFacebookAlbums':
-                Modals.FBAlbums.open();
-                break;
-            case 'showImageGallery':
-                Modals.NewImageGallery.open();
-                break;
-            case 'showTaggedImages':
-                Modals.NewImageGallery.openTaggedImages(browser_action.args[0]);
-                break;
-            case 'showImagesFromDate':
-                Modals.NewImageGallery.openImagesFromDate(browser_action.args[0], browser_action.args[1]);
-                break;
-            case 'showLocationInfo':
-                Modals.Locations.openMapView();
-                break;
-            default:
-                console.log('unknown browser_action', browser_action);
-                break;
-        }
-    }
+    // function _processBrowserActions(browser_action) {
+    //     if (browser_action) {
+    //         console.log('browser_action', browser_action);
+    //     } else {
+    //         console.log('no browser_actions');
+    //         return;
+    //     }
+    //     switch (browser_action.functionName) {
+    //         case 'showAlert':
+    //             alert(browser_action.args[0]);
+    //             break;
+    //         case 'changeBackgroundColor':
+    //             document.body.style.backgroundColor = browser_action.args[0];
+    //             break;
+    //         case 'showContactEmailGallery':
+    //             Modals.EmailGallery.openContact(browser_action.args[0]);
+    //             break;
+    //         case 'showFacebookAlbums':
+    //             Modals.FBAlbums.open();
+    //             break;
+    //         case 'showImageGallery':
+    //             Modals.NewImageGallery.open();
+    //             break;
+    //         case 'showTaggedImages':
+    //             Modals.NewImageGallery.openTaggedImages(browser_action.args[0]);
+    //             break;
+    //         case 'showImagesFromDate':
+    //             Modals.NewImageGallery.openImagesFromDate(browser_action.args[0], browser_action.args[1]);
+    //             break;
+    //         case 'showLocationInfo':
+    //             Modals.Locations.openMapView();
+    //             break;
+    //         default:
+    //             console.log('unknown browser_action', browser_action);
+    //             break;
+    //     }
+    // }
 
     function addEmail(email, messageId = null, embeddedJson = null) {
         const messageElement = _createMessageElement('email', messageId);
@@ -604,21 +648,11 @@ const ApiService = (() => {
     }
 
     async function fetchChat(payload) {
-
-        if(payload.interviewMode) {
-            return _fetch(CONSTANTS.API_PATHS.INTERVIEW, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-        } 
-        else {
-            return _fetch(CONSTANTS.API_PATHS.CHAT, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            }); // Returns the raw response for streaming/json handling by caller
-        }
+        return _fetch(CONSTANTS.API_PATHS.CHAT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
     }
 
     async function fetchNewChat(payload) {
@@ -629,64 +663,6 @@ const ApiService = (() => {
                 body: JSON.stringify(payload)
             }); // Returns the raw response for streaming/json handling by caller
         
-    }
-
-    async function startInterview() {
-        return _fetch(CONSTANTS.API_PATHS.NEW_INTERVIEW, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
-
-    async function checkInterviewData() {
-        return _fetch(CONSTANTS.API_PATHS.CHECK_INTERVIEW_DATA, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
-
-    async function pauseInterview() {
-        return _fetch(CONSTANTS.API_PATHS.PAUSE_INTERVIEW, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
-
-    async function resumeInterview() {
-        return _fetch(CONSTANTS.API_PATHS.RESUME_INTERVIEW, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
-
-    async function finishInterview() {
-        return _fetch(CONSTANTS.API_PATHS.FINISH_INTERVIEW, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
-
-    async function writeInterimBio() {
-
-        return _fetch(CONSTANTS.API_PATHS.WRITE_INTERIM_BIO, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
-
-    async function writeFinalBio() {
-
-        return _fetch(CONSTANTS.API_PATHS.WRITE_FINAL_BIO, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
-
-    async function resetInterview() {
-        return _fetch('/interviewer/resetinterview', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
     }
 
     async function fetchVoice(payload) {
@@ -737,8 +713,7 @@ const ApiService = (() => {
 
     return {
         fetchChat, fetchNewChat, fetchVoice, fetchSuggestionsConfig,
-        fetchFacebookChatters, fetchContacts, fetchMessagesByContact, fetchAlbums, fetchMessagesByContactV2,
-        startInterview, checkInterviewData, pauseInterview, resumeInterview, finishInterview, writeInterimBio, writeFinalBio, resetInterview
+        fetchFacebookChatters, fetchContacts, fetchMessagesByContact, fetchAlbums, fetchMessagesByContactV2
     };
 })();
 

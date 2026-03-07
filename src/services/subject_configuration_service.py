@@ -14,13 +14,15 @@ from .exceptions import NotFoundError, ValidationError
 class SubjectConfigurationService:
     """Service for subject configuration-related business logic."""
 
-    def __init__(self, db: Database):
+    def __init__(self, db: Database, config_service=None):
         """Initialize the service with a database instance.
-        
+
         Args:
             db: Database instance
+            config_service: Optional ConfigurationService for DB-first env-var lookups
         """
         self.db = db
+        self._config_service = config_service
     
     def _normalize_phone_numbers(self, phone_numbers: Optional[str]) -> Optional[str]:
         """Normalize phone numbers by removing spaces, leading zeros, and '+' signs.
@@ -438,9 +440,10 @@ class SubjectConfigurationService:
             configuration = session.query(SubjectConfiguration).first()
             
             if configuration:
-                # Update core instructions (always overwrite)
-                configuration.core_system_instructions = core_instructions
-                
+                # Only update core_system_instructions if it's empty/null in the database
+                if not configuration.core_system_instructions or not configuration.core_system_instructions.strip():
+                    configuration.core_system_instructions = core_instructions
+
                 # Only update system_instructions if it's empty/null
                 if not configuration.system_instructions or not configuration.system_instructions.strip():
                     chat_instructions = self._load_chat_instructions_from_file()
@@ -452,10 +455,11 @@ class SubjectConfigurationService:
                 # Create new configuration with both instructions from files
                 chat_instructions = self._load_chat_instructions_from_file()
 
-                #get the default subject name and family name from the environment variables
-                default_subject_name = os.getenv("DEFAULT_SUBJECT_NAME")
-                default_subject_family_name = os.getenv("DEFAULT_SUBJECT_FAMILY_NAME")
-                default_gender = os.getenv("DEFAULT_SUBJECT_GENDER")
+                #get the default subject name and family name from config (DB-first, env-fallback)
+                _get = self._config_service.get if self._config_service else os.getenv
+                default_subject_name = _get("DEFAULT_SUBJECT_NAME")
+                default_subject_family_name = _get("DEFAULT_SUBJECT_FAMILY_NAME")
+                default_gender = _get("DEFAULT_SUBJECT_GENDER")
 
                 configuration = SubjectConfiguration(
                     subject_name=default_subject_name,  # Default subject name

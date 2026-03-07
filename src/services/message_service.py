@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 from sqlalchemy import func, case, text
 
 from ..database import Database
-from ..database.models import IMessage, MessageAttachment
+from ..database.models import Message, MessageAttachment
 from .exceptions import NotFoundError
 from .dto import ChatSessionsResult, ChatSessionInfo
 
@@ -28,25 +28,25 @@ class MessageService:
             # Query distinct chat_session values with message counts, attachment counts, and service types
             try:
                 results = session.query(
-                    IMessage.chat_session,
-                    func.count(func.distinct(IMessage.id)).label('message_count'),
+                    Message.chat_session,
+                    func.count(func.distinct(Message.id)).label('message_count'),
                     func.count(func.distinct(MessageAttachment.id)).label('attachment_count'),
-                    func.max(IMessage.service).label('primary_service'),
-                    func.max(IMessage.message_date).label('last_message_date'),
-                    func.count(func.distinct(case((IMessage.service.ilike('%iMessage%'), IMessage.id), else_=None))).label('imessage_count'),
-                    func.count(func.distinct(case((IMessage.service.ilike('%SMS%'), IMessage.id), else_=None))).label('sms_count'),
-                    func.count(func.distinct(case((IMessage.service == 'WhatsApp', IMessage.id), else_=None))).label('whatsapp_count'),
-                    func.count(func.distinct(case((IMessage.service == 'Facebook Messenger', IMessage.id), else_=None))).label('facebook_count'),
-                    func.count(func.distinct(case((IMessage.service == 'Instagram', IMessage.id), else_=None))).label('instagram_count'),
-                    func.count(case((IMessage.is_group_chat == True, 1), else_=None)).label('group_chat_count')
+                    func.max(Message.service).label('primary_service'),
+                    func.max(Message.message_date).label('last_message_date'),
+                    func.count(func.distinct(case((Message.service.ilike('%iMessage%'), Message.id), else_=None))).label('imessage_count'),
+                    func.count(func.distinct(case((Message.service.ilike('%SMS%'), Message.id), else_=None))).label('sms_count'),
+                    func.count(func.distinct(case((Message.service == 'WhatsApp', Message.id), else_=None))).label('whatsapp_count'),
+                    func.count(func.distinct(case((Message.service == 'Facebook Messenger', Message.id), else_=None))).label('facebook_count'),
+                    func.count(func.distinct(case((Message.service == 'Instagram', Message.id), else_=None))).label('instagram_count'),
+                    func.count(case((Message.is_group_chat == True, 1), else_=None)).label('group_chat_count')
                 ).outerjoin(
-                    MessageAttachment, MessageAttachment.message_id == IMessage.id
+                    MessageAttachment, MessageAttachment.message_id == Message.id
                 ).filter(
-                    IMessage.chat_session.isnot(None)
+                    Message.chat_session.isnot(None)
                 ).group_by(
-                    IMessage.chat_session
+                    Message.chat_session
                 ).order_by(
-                    func.max(IMessage.message_date).desc()
+                    func.max(Message.message_date).desc()
                 ).all()
             except Exception as table_error:
                 # If table doesn't exist or has wrong name, try querying the old table name directly
@@ -162,20 +162,20 @@ class MessageService:
         finally:
             session.close()
 
-    def get_conversation_messages(self, chat_session: str) -> List[IMessage]:
+    def get_conversation_messages(self, chat_session: str) -> List[Message]:
         """Get messages for a specific chat session.
         
         Args:
             chat_session: Name of the chat session
             
         Returns:
-            List of IMessage instances ordered by date
+            List of Message instances ordered by date
         """
         session = self.db.get_session()
         try:
-            messages = session.query(IMessage).filter(
-                IMessage.chat_session == chat_session
-            ).order_by(IMessage.message_date.asc()).all()
+            messages = session.query(Message).filter(
+                Message.chat_session == chat_session
+            ).order_by(Message.message_date.asc()).all()
             
             return messages
         finally:
@@ -199,10 +199,10 @@ class MessageService:
         
         session = db.get_session()
         try:
-            messages = session.query(IMessage).filter(
-                IMessage.chat_session == chat_session
+            messages = session.query(Message).filter(
+                Message.chat_session == chat_session
             ).order_by(
-                IMessage.message_date.asc()
+                Message.message_date.asc()
             ).all()
             
             if not messages:

@@ -12,7 +12,7 @@ from collections import defaultdict, Counter
 from pathlib import Path
 
 from ..database import Database
-from ..database.models import Relationship, Contacts, IMessage, Email
+from ..database.models import Relationship, Contacts, Message, Email, EmailExclusions
 from .exceptions import NotFoundError, ValidationError
 
 
@@ -683,42 +683,40 @@ class RelationshipService:
         #sort the all_addresses list by the name
         all_addresses.sort(key=lambda x: x[0])
 
-        # Define exclusion patterns for email addresses and names
-        email_exclusions = {
-            "no-reply", "noreply", "no-response", "noresponse",
-            "no-reply@", "noreply@", "no-response@", "noresponse@",
-            "/O=", "satyam", "thales", "marketing", "info@","news@","mail@",
-            "help@","contact@","customer-service@",
-            "customer-support@","billing@","accounts@","hello@","undisclosed@",
-            "customer-service@", "notification@", "contact@", "ticket@", "tickets@","ticketing@","ticketing-system@","ticketing-system-email@","ticketing-system-email-address@"
-        }
-        
-        name_exclusions = {
-            "news@", "mail@", "help@", "contact@", "customer-service@",
-            "customer-support@", "billing@", "accounts@", "info@", "hello@",
-            "undisclosed", "/O=", "satyam", "thales", "marketing"
-        }
-        
+        # Load exclusion patterns from database
+        exclusion_session = self.db.get_session()
+        try:
+            exclusion_rows = exclusion_session.query(EmailExclusions).all()
+            email_exclusions = {r.email for r in exclusion_rows if not r.name_email and r.email}
+            name_exclusions = {r.name for r in exclusion_rows if not r.name_email and r.name}
+            name_email_pairs = {(r.name.lower(), r.email.lower()) for r in exclusion_rows if r.name_email}
+        finally:
+            exclusion_session.close()
+
         def should_exclude_address(address: Tuple[str, str]) -> bool:
             """Check if an address should be excluded based on filtering rules."""
             name, email = address[0].lower(), address[1].lower()
-            
+
             # Exclude if email is just a number
             if address[1].isdigit():
                 return True
-            
+
             # Exclude if email doesn't contain @ (not a valid email format)
             if "@" not in address[1]:
                 return True
-            
+
             # Exclude based on email patterns
             if any(pattern in email for pattern in email_exclusions):
                 return True
-            
+
             # Exclude based on name patterns
             if any(pattern in name for pattern in name_exclusions):
                 return True
-            
+
+            # Exclude based on specific name+email pair
+            if (name, email) in name_email_pairs:
+                return True
+
             return False
         
         # Apply all email-specific filters

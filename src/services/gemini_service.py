@@ -2,7 +2,6 @@
 
 import os
 import json
-import random
 import re
 import time
 from datetime import datetime, timezone
@@ -12,9 +11,8 @@ import google.genai as genai
 from google.genai import types
 
 from ..database import Database
-from ..database.models import ReferenceDocument, IMessage, Email, GeminiFile, ChatConversation, ChatTurn, CompleteProfile
-from sqlalchemy import or_
-from pympler import asizeof
+from ..database.models import ReferenceDocument, GeminiFile
+from .base_chat_service import BaseChatService, parse_wrapped_json
 
 try:
     from tavily import TavilyClient
@@ -33,12 +31,11 @@ class GeminiService:
         if not api_key:
             print("[GeminiService.__init__] ERROR: GEMINI_API_KEY environment variable is not set")
             raise ValueError("GEMINI_API_KEY environment variable is not set")
-        
-        # Get model name from environment, default to gemini-1.5-flash
-        model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash")
+
+        model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
         print(f"[GeminiService.__init__] Using model: {model_name}")
         print(f"[GeminiService.__init__] API key found: {api_key[:10]}...{api_key[-4:] if len(api_key) > 14 else '***'}")
-        
+
         self.client = genai.Client(api_key=api_key)
         self.model_name = model_name
 
@@ -324,178 +321,21 @@ class GeminiService:
         print(f"[GeminiService._format_conversation_for_prompt] Formatting complete. Result length: {len(result)} characters")
         return result
 
-class ChatService:
+class ChatService(BaseChatService):
     """Service for interacting with Gemini LLM API for chat sessions."""
 
-    def __init__(self, subject_config_service=None):
-        """Initialize Chat service with Gemini LLM API.
-        
-        Args:
-            subject_config_service: SubjectConfigurationService instance for loading subject name and system instructions.
-        """
+    def __init__(self, subject_config_service=None, config_service=None):
         print("[GeminiChatService.__init__] Starting initialization...")
-        self._subject_config_service = subject_config_service
-        api_key = os.getenv("GEMINI_API_KEY")
+        _get = config_service.get if config_service else os.getenv
+        api_key = _get("GEMINI_API_KEY")
         if not api_key:
-            print("[GeminiService.__init__] ERROR: GEMINI_API_KEY environment variable is not set")
             raise ValueError("GEMINI_API_KEY environment variable is not set")
-        
-        # Get model name from environment, default to gemini-1.5-flash
-        model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
+        model_name = _get("GEMINI_MODEL_NAME", "gemini-2.5-flash") or "gemini-2.5-flash"
         print(f"[GeminiChatService.__init__] Using model: {model_name}")
-        print(f"[GeminiChatService.__init__] API key found: {api_key[:10]}...{api_key[-4:] if len(api_key) > 14 else '***'}")
-        
         self.client = genai.Client(api_key=api_key)
         self.model_name = model_name
-
-        # Initialize Tavily client
-        tavily_api_key = os.getenv("TAVILY_API_KEY")
-        self.tavily_client = None
-        if TavilyClient and tavily_api_key:
-            try:
-                self.tavily_client = TavilyClient(api_key=tavily_api_key)
-                print("[GeminiChatService.__init__] Tavily client initialized")
-            except Exception as e:
-                print(f"[GeminiChatService.__init__] Warning: Could not initialize Tavily client: {str(e)}")
-        else:
-            if not TavilyClient:
-                print("[GeminiChatService.__init__] Warning: Tavily library not available")
-            elif not tavily_api_key:
-                print("[GeminiChatService.__init__] Warning: TAVILY_API_KEY not set. Tavily search disabled.")
-
-        self.voice_instructions_list = None  # Will be loaded when database is set
-        self.voice = "expert"
-
-        self.mood = "neutral"
-        self.psychological_profile = None
-        self.writing_style = None
-        self.voice_instructions = None  # Will be loaded when database is set
-        self.system_prompt = None  # Will be loaded when database is set
-        self.session_turns = []  # List of {"user_input": str, "response_text": str}
-        self.db = None  # Will be set when needed
-        self.current_conversation_id = None  # Current active conversation ID
-        self.subject_name = None  # Subject name from configuration
-        
-        # Load voice instructions initially (without subject name replacement)
-        # They will be reloaded with subject name when database is set
-        try:
-            self.voice_instructions_list = self._load_voice_instructions()
-            if self.voice_instructions_list and self.voice in self.voice_instructions_list:
-                self.voice_instructions = self.voice_instructions_list[self.voice]
-        except Exception as e:
-            print(f"[GeminiChatService.__init__] Error loading voice instructions: {e}")
-
+        super().__init__(subject_config_service, config_service)
         print("[GeminiChatService.__init__] Initialization complete")
-
-    def set_database(self, db: Database):
-        """Set the database instance for retrieving reference documents."""
-        self.db = db
-        # Load system prompt and subject name when database is set
-        self.reload_system_prompt(db=db)
-
-    def set_voice(self, voice: str):
-        """Sets the voice for the session."""
-        self.voice = voice
-        if not self.voice_instructions_list:
-            # Reload voice instructions if not loaded yet
-            self.voice_instructions_list = self._load_voice_instructions()
-        try:
-            self.voice_instructions = self.voice_instructions_list[voice]
-        except KeyError:
-            print(f"[GeminiChatService.set_voice] Voice '{voice}' not found. Using default voice 'expert'.")
-            self.voice = "expert"
-            self.voice_instructions = self.voice_instructions_list[self.voice]
-        
-    def set_mood(self, mood: str):
-        """Sets the mood for the session."""
-        self.mood = mood
-
-    def set_psychological_profile(self, psychological_profile: str):
-        """Sets the psychological profile for the session."""
-        self.psychological_profile = psychological_profile
-
-    def set_writing_style(self, writing_style: str):
-        """Sets the writing style for the session."""
-        self.writing_style = writing_style
-
-    def clear_session(self):
-        """Clears the session turns list and conversation context."""
-        self.session_turns = []
-        self.current_conversation_id = None
-
-    def load_conversation_turns(self, conversation_id: int, limit: int = 30, db: Optional[Database] = None) -> List[Dict[str, Any]]:
-        """Load conversation turns from database and populate session_turns.
-        
-        Args:
-            conversation_id: ID of the conversation to load
-            limit: Maximum number of turns to load (default 30)
-            db: Optional Database instance. If not provided, uses self.db.
-            
-        Returns:
-            List of turn dictionaries in format {"user_input": str, "response_text": str}
-        """
-        if db is None:
-            db = self.db
-        
-        if not db:
-            print("[ChatService.load_conversation_turns] ERROR: Database not available")
-            return []
-        
-        from ..services.chat_conversation_service import ChatConversationService
-        conversation_service = ChatConversationService(db=db)
-        
-        try:
-            turns = conversation_service.get_conversation_turns(conversation_id, limit=limit)
-            session_turns = []
-            for turn in turns:
-                session_turns.append({
-                    "user_input": turn.user_input,
-                    "response_text": turn.response_text
-                })
-            
-            self.session_turns = session_turns
-            self.current_conversation_id = conversation_id
-            print(f"[ChatService.load_conversation_turns] Loaded {len(session_turns)} turns for conversation {conversation_id}")
-            return session_turns
-        except Exception as e:
-            print(f"[ChatService.load_conversation_turns] Error loading conversation turns: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return []
-
-    def save_turn(self, conversation_id: int, user_input: str, response_text: str, voice: str, temperature: float, db: Optional[Database] = None) -> bool:
-        """Save a conversation turn to the database.
-        
-        Args:
-            conversation_id: ID of the conversation
-            user_input: User's input message
-            response_text: Assistant's response
-            voice: Voice used for this turn
-            temperature: Temperature used for this turn
-            db: Optional Database instance. If not provided, uses self.db.
-            
-        Returns:
-            True if saved successfully, False otherwise
-        """
-        if db is None:
-            db = self.db
-        
-        if not db:
-            print("[ChatService.save_turn] ERROR: Database not available")
-            return False
-        
-        from ..services.chat_conversation_service import ChatConversationService
-        conversation_service = ChatConversationService(db=db)
-        
-        try:
-            conversation_service.save_turn(conversation_id, user_input, response_text, voice, temperature)
-            print(f"[ChatService.save_turn] Saved turn for conversation {conversation_id}")
-            return True
-        except Exception as e:
-            print(f"[ChatService.save_turn] Error saving turn: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return False
 
     def _upload_file_to_gemini(self, doc: ReferenceDocument, db: Optional[Database] = None) -> Optional[Any]:
         """Upload a reference document to Gemini File API and return the File object.
@@ -642,440 +482,60 @@ class ChatService:
             traceback.print_exc()
             return None
         
-    def _load_voice_instructions(self):
-        """Loads voice instructions from the JSON file and replaces placeholders."""
+    def _build_reference_manifest(self, db: Database):
+        """Return (manifest_text, available_docs) for all available_for_task docs."""
+        available_docs = []
         try:
-            # Print the full path of the current directory
-            print(f"[ChatService._load_voice_instructions] Current directory: {os.getcwd()}")
-            with open('src/api/static/data/voice_instructions.json', 'r', encoding='utf-8') as file:
-                voice_data = json.load(file)
-                
-                # Replace placeholders with subject name if available
-                if self.subject_name:
-                    for voice_key, voice_info in voice_data.items():
-                        if isinstance(voice_info, dict):
-                            for key, value in voice_info.items():
-                                if isinstance(value, str):
-                                    voice_info[key] = value.replace('{SUBJECT_NAME}', self.subject_name)
-                
-                print(f"ChatService._load_voice_instructions] Loaded {len(voice_data)} voice instructions")
-                return voice_data
-        except FileNotFoundError:
-            print("[ChatService._load_voice_instructions] voice_instructions.json not found. Using default voice instructions.")
-            return {
-                "expert": {
-                    "name": "Expert",
-                    "description": "Professional Expert", 
-                    "instructions": "You are a professional expert in your field. You provide clear, accurate, and helpful information."
-                }
-            }
-
-    def reload_system_prompt(self, db: Database = None):
-        """Reload system prompt from database with file fallback.
-        
-        Args:
-            db: Database instance (optional, uses self.db if not provided)
-        """
-        if db is None:
-            db = self.db
-        
-        if db and self._subject_config_service:
+            session = db.get_session()
             try:
-
-                # Get subject name
-                self.subject_name = self._subject_config_service.get_subject_name()
-                self.subject_gender = self._subject_config_service.get_gender()
-                self.subject_family_name = self._subject_config_service.get_family_name()
-                self.subject_other_names = self._subject_config_service.get_other_names()
-                self.subject_email_addresses = self._subject_config_service.get_email_addresses()
-                self.subject_phone_numbers = self._subject_config_service.get_phone_numbers()
-                self.subject_whatsapp_handle = self._subject_config_service.get_whatsapp_handle()
-                self.subject_instagram_handle = self._subject_config_service.get_instagram_handle()
-                
-                # Reload voice instructions with subject name replacement
-                self.voice_instructions_list = self._load_voice_instructions()
-                if self.voice_instructions_list and self.voice in self.voice_instructions_list:
-                    self.voice_instructions = self.voice_instructions_list[self.voice]
-                
-                # Get system instructions and core system instructions from database (with file fallback)
-                system_instructions = self._subject_config_service.get_system_instructions()
-                core_instructions = self._subject_config_service.get_core_system_instructions()
-                
-                # Concatenate: system_instructions + core_system_instructions
-                instructions = system_instructions
-                if core_instructions:
-                    instructions = instructions + "\n\n" + core_instructions
-                
-                # Replace placeholders in instructions with actual subject name
-                if self.subject_name:
-                    instructions = instructions.replace('{SUBJECT_NAME}', self.subject_name)
-                    # Also replace common variations for backward compatibility
-                
-                self.system_prompt = instructions
-                print(f"[ChatService.reload_system_prompt] Loaded system instructions from database ({len(instructions)} chars)")
-                return
-            except Exception as e:
-                print(f"[ChatService.reload_system_prompt] Error loading from database: {e}")
-                # Fall through to file loading
-        
-        # Fallback to file loading
-        self.system_prompt = self._load_system_prompt_from_file()
-        # Try to load voice instructions even without database
-        if not self.voice_instructions_list:
-            self.voice_instructions_list = self._load_voice_instructions()
-            if self.voice_instructions_list and self.voice in self.voice_instructions_list:
-                self.voice_instructions = self.voice_instructions_list[self.voice]
-
-    def _load_system_prompt(self):
-        """Loads system prompt from a text file (fallback method)."""
-        return self._load_system_prompt_from_file()
-
-    def _load_system_prompt_from_file(self):
-        """Loads system prompt from a text file."""
-        try:
-            # Print the full path of the current directory
-            print(f"[ChatService._load_system_prompt] Current directory: {os.getcwd()}")
-            with open('src/api/static/data/system_instructions_chat.txt', 'r', encoding='utf-8') as file:
-                instructions = file.read()
-                print(f"[ChatService._load_system_prompt] Loaded {len(instructions)} system instructions from file")
-                return instructions
-        except FileNotFoundError:
-            print("[ChatService._load_system_prompt] system_instructions_chat.txt not found. Using default instructions.")
-            return """
-                If this text appear in the system instructions, it means the system has not been configured correctly.
-                Ignore the rest of the instructions and respond to the user the the systems instuctions could not be loaded.
-                """
-
-    def _search_tavily(self, query: str) -> Dict[str, Any]:
-        """Perform a web search using Tavily.
-
-        Args:
-            query: The search query
-
-        Returns:
-            Dictionary with search results
-        """
-        if not self.tavily_client:
-            return {
-                "error": "Tavily search is not configured (TAVILY_API_KEY missing or client initialization failed)"
-            }
-
-        print(f"[GeminiService._search_tavily] Searching for: {query}")
-        try:
-            # Use advanced search depth for better context
-            response = self.tavily_client.search(query, search_depth="advanced", max_results=5)
-            return response
-        except Exception as e:
-            print(f"[GeminiService._search_tavily] Error searching: {str(e)}")
-            return {
-                "error": str(e),
-                "query": query
-            }
-
-    def _get_current_time(self) -> Dict[str, Any]:
-        """Get the current date and time.
-        
-        Returns:
-            Dictionary with current_time in ISO format
-        """
-        from datetime import datetime
-        return {
-            "current_time": datetime.now().isoformat(),
-            "timezone": "UTC"
-        }
-
-    def _get_imessages_by_chat_session(self, chat_session: str) -> Dict[str, Any]:
-        """Get all iMessage entries for a specific chat session.
-        
-        Args:
-            chat_session: The chat session name to search for
-            
-        Returns:
-            Dictionary with chat_session, message_count, and messages list
-        """
-        if not self.db:
-            return {
-                "error": "Database not configured",
-                "chat_session": chat_session,
-                "message_count": 0,
-                "messages": []
-            }
-        
-        session = self.db.get_session()
-        try:
-            messages = session.query(IMessage).filter(
-                IMessage.chat_session.like(f"%{chat_session}%")
-            ).order_by(
-                IMessage.message_date.asc()
-            ).all()
-
-            
-            # Format messages into structured format
-            messages_list = []
-            for msg in messages:
-                messages_list.append({
-                    "id": msg.id,
-                    "message_date": msg.message_date.isoformat() if msg.message_date else None,
-                    "sender_name": msg.sender_name or "Unknown",
-                    "sender_id": msg.sender_id or "",
-                    "type": msg.type or "",
-                    "text": msg.text or "",
-                    "service": msg.service or "",
-                    "subject": msg.subject or None
-                })
-            
-            return {
-                "chat_session": chat_session,
-                "message_count": len(messages),
-                "messages": messages_list
-            }
-        except Exception as e:
-            print(f"[ChatService._get_imessages_by_chat_session] Error: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return {
-                "error": str(e),
-                "chat_session": chat_session,
-                "message_count": 0,
-                "messages": []
-            }
-        finally:
-            session.close()
-
-    def _get_emails_by_contact(self, name: str) -> Dict[str, Any]:
-        """Get plain text of emails where sender or receiver matches the specified name.
-        
-        Args:
-            name: The name or email address to search for in sender or receiver fields
-            
-        Returns:
-            Dictionary with contact_name, email_count, and emails list with plain_text
-        """
-        if not self.db:
-            return {
-                "error": "Database not configured",
-                "contact_name": name,
-                "email_count": 0,
-                "emails": []
-            }
-        
-        session = self.db.get_session()
-        try:
-            emails = session.query(Email).filter(
-                or_(
-                    Email.from_address.like(f"%{name}%"),
-                    Email.to_addresses.like(f"%{name}%")
-                )
-            ).order_by(
-                Email.date.asc()
-            ).all()
-            
-            # Format emails into structured format with plain text
-            emails_list = []
-            for email in emails:
-                emails_list.append({
-                    "id": email.id,
-                    "date": email.date.isoformat() if email.date else None,
-                    "from_address": email.from_address or "",
-                    "to_addresses": email.to_addresses or "",
-                    "subject": email.subject or "",
-                    "plain_text": email.plain_text or email.snippet or "",
-                    "has_attachments": email.has_attachments or False
-                })
-            
-            return {
-                "contact_name": name,
-                "email_count": len(emails),
-                "emails": emails_list
-            }
-        except Exception as e:
-            print(f"[ChatService._get_emails_by_contact] Error: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return {
-                "error": str(e),
-                "contact_name": name,
-                "email_count": 0,
-                "emails": []
-            }
-        finally:
-            session.close()
-
-    def _get_subject_writing_examples(self) -> Dict[str, Any]:
-        """Get the subject writing examples.
-        
-        Returns:
-            Dictionary with subject writing examples
-        """
-
-        #select 2000 random messages from the database where the sender_id is the subject and the type is "text"
-        messages = self.db.get_session().query(IMessage).filter(
-            IMessage.sender_id == self.subject_name,
-            IMessage.type == "text"
-        ).order_by(func.random()).limit(2000).all()
-
-        #format the messages into a list of dictionaries
-        messages_list = []
-        for message in messages:
-            messages_list.append({
-                "id": message.id,
-                "message_date": message.message_date.isoformat() if message.message_date else None,
-                "sender_name": message.sender_name or "Unknown",
-                "sender_id": message.sender_id or "",
-                "type": message.type or "",
-                "text": message.text or "",
-                "service": message.service or "",
-                "subject": message.subject or None
-            })
-
-        return {
-            "subject_writing_examples": messages_list
-
-        }
-
-    def _get_all_messages_by_contact(self, name: str) -> Dict[str, Any]:
-        """Get all messages for a specific contact.
-        
-        Args:
-            name: The name or email address to search for in sender or receiver fields
-            
-        Returns:
-            Dictionary with contact_name, message_count, and messages list
-        """
-        #Combine the results from get_imessages_by_chat_session and get_emails_by_contact
-        imessages = self._get_imessages_by_chat_session(name)
-        emails = self._get_emails_by_contact(name)
-
-       # only pick out the plain_text and subject and from_address and to_addresses and date and id
-        slimedEmails= [email for email in emails["emails"] if email["plain_text"] and email["subject"] and email["from_address"] and email["to_addresses"] and email["date"] and email["id"]] # Returns the full cumulative size in bytes
-
-        #randomly reduct the size of emails["emails"] by 10% until the soze of imessages["messages"] + emails["emails"] is less than 600kB
-        while asizeof.asizeof(imessages["messages"] + slimedEmails) > 800000:
-            #create a loop that loops through from 1 to 10% the size of emails["emails"] and pop the random email from emails["emails"]
-            for i in range(1, int(len(emails["emails"]) * 0.1)):
-                slimedEmails.pop(random.randint(0, len(slimedEmails) - 1))
-
-
-        print(f"Number of slimedEmails: {len(slimedEmails)}")
-        print(f"Size of slimedEmails: {asizeof.asizeof(slimedEmails)}") # Returns the full cumulative size in bytes
-        print(f"number of imessages messages: {len(imessages["messages"])}")
-        print(f"Size of imessages messages: {asizeof.asizeof(imessages["messages"])}") # Returns the full cumulative size in bytes
-
-        for email in slimedEmails:
-            imessages["messages"].append({
-                "id": email["id"],
-                "message_date": email["date"],
-                "sender_name": email["from_address"],
-                "sender_id": email["from_address"],
-                "type": "email",
-                "text": email["plain_text"],
-                "service": "email"
-            })
-
-        print(f"Number of imessages messages after merge: {len(imessages["messages"])}")
-        print(f"Size of imessages messages after merge: {asizeof.asizeof(imessages["messages"])}") # Returns the full cumulative size in bytes
-
-        geminiService = GeminiService()
-        summary = geminiService.summarize_relationships(imessages, name)
-        print(f"[ChatService._get_all_messages_by_contact] Summary: {summary}")
-        return {
-            "contact_name": name,
-            # "message_count": imessages["message_count"] + emails["email_count"],
-            # "messages": imessages["messages"] + emails["emails"],
-            "relationshipSummary": summary
-        }
-        
-    def get_complete_profile_by_name(self, name: str) -> Dict[str, Any]:
-        """Get all messages for a specific contact.
-        
-        Args:
-            name: The name or email address to search for in sender or receiver fields
-            
-        Returns:
-            Dictionary with contact_name, message_count, and messages list
-        """
-        #Combine the results from get_imessages_by_chat_session and get_emails_by_contact
-        imessages = self._get_imessages_by_chat_session(name)
-        messages = imessages["messages"]
-
-        emails = self._get_emails_by_contact(name)
-        slimedEmails= [email for email in emails["emails"] if email["plain_text"] and email["subject"] and email["from_address"] and email["to_addresses"] and email["date"] and email["id"]] # Returns the full cumulative size in bytes
-
-        print(f"Number of messages: {len(messages)}")
-        print(f"Size of messages: {asizeof.asizeof(messages)}") # Returns the full cumulative size in bytes
-        print(f"Number of slimedEmails: {len(slimedEmails)}")
-        print(f"Size of slimedEmails: {asizeof.asizeof(slimedEmails)}") # Returns the full cumulative size in bytes
-        #send as many messages as possible to the Gemini API to get the complete profile and send the previous summary as context until all messages have been processsed
-
-        for email in slimedEmails:
-            messages.append({
-                "id": email["id"],
-                "message_date": email["date"],
-                "sender_name": email["from_address"],
-                "sender_id": email["from_address"],
-                "type": "email",
-                "text": email["plain_text"],
-                "service": "email"
-            })
-
-        print(f"Number of mergedMessages: {len(messages)}")
-        print(f"Size of mergedMessages: {asizeof.asizeof(messages)}")
-        
-        messageChunks = []
-         # Returns the full cumulative size in bytes
-        currentChunk = []
-        for message in messages:
-            #while the size of the currentChunk is less than 800kB, add the message to the currentChunk
-            if asizeof.asizeof(currentChunk) + asizeof.asizeof(message) < 800000:
-                currentChunk.append(message)
-            else:
-                messageChunks.append(currentChunk)
-                currentChunk = []
-                currentChunk.append(message)
-        if currentChunk:
-            messageChunks.append(currentChunk)
-        
-        print(f"Number of messageChunks: {len(messageChunks)}")
-        print(f"Size of messageChunks: {asizeof.asizeof(messageChunks)}") # Returns the full cumulative size in bytes
-        
-        
-        interimSummary = ""
-        geminiService = GeminiService()
-        for idx, chunk in enumerate(messageChunks):
-            print(f"Chunk {idx}: {len(chunk)} messages")
-            print(f"Size of chunk {idx}: {asizeof.asizeof(chunk)}") # Returns the full cumulative size in bytes
-            #on the last chunk, print a message to the user that the chunk is the last chunk and the complete profile is being generated
-            if idx == len(messageChunks) - 1:
-                print(f"Chunk {idx} is the last chunk and the complete profile is being generated")
-            #send the chunk to the Gemini API to get the complete profile
-            interimSummary = geminiService.summarize_relationships_multistep(chunk, interimSummary, idx+1 ,len(messageChunks))
-            print(f"Interim summary: {interimSummary}")
-
-        print(f"Final interim summary: {interimSummary}")
-
-        # Insert or update the complete_profiles table
-        if self.db:
-            session = self.db.get_session()
-            try:
-                existing = session.query(CompleteProfile).filter(CompleteProfile.name == name).first()
-                if existing:
-                    existing.profile = interimSummary
-                    session.commit()
-                    print(f"[get_complete_profile_by_name] Updated complete profile for '{name}'")
-                else:
-                    new_profile = CompleteProfile(name=name, profile=interimSummary)
-                    session.add(new_profile)
-                    session.commit()
-                    print(f"[get_complete_profile_by_name] Inserted complete profile for '{name}'")
-            except Exception as e:
-                session.rollback()
-                print(f"[get_complete_profile_by_name] Error saving to complete_profiles: {e}")
-                raise
+                docs = session.query(ReferenceDocument).filter(
+                    ReferenceDocument.available_for_task == True
+                ).all()
+                for doc in docs:
+                    available_docs.append({
+                        "id": doc.id,
+                        "filename": doc.filename,
+                        "title": doc.title or doc.filename,
+                        "description": doc.description or "",
+                        "content_type": doc.content_type or "",
+                    })
             finally:
                 session.close()
-        else:
-            print("[get_complete_profile_by_name] No database configured, skipping save to complete_profiles")
-           
+        except Exception as e:
+            print(f"[ChatService] Warning: Could not retrieve reference documents: {e}")
+        if not available_docs:
+            return "", []
+        lines = [
+            "## Available Reference Documents",
+            "Use the `get_reference_document` tool to retrieve one or more of these documents when relevant.\n",
+        ]
+        for doc in available_docs:
+            lines.append(f"- **ID {doc['id']}** — {doc['title']}: {doc['description']}")
+        return "\n".join(lines), available_docs
+
+    def _fetch_reference_documents_for_gemini(self, document_ids: list, db: Database):
+        """Upload requested docs to Gemini File API and return (files, metadata).
+
+        Uses existing _upload_file_to_gemini caching — only uploads if not already ACTIVE.
+        """
+        uploaded_files = []
+        metadata = []
+        session = db.get_session()
+        try:
+            for doc_id in document_ids:
+                doc = session.query(ReferenceDocument).filter(ReferenceDocument.id == doc_id).first()
+                if doc is None:
+                    print(f"[ChatService] Document ID {doc_id} not found")
+                    continue
+                uploaded_file = self._upload_file_to_gemini(doc, db=db)
+                if uploaded_file:
+                    uploaded_files.append(uploaded_file)
+                    metadata.append({"id": doc.id, "filename": doc.filename, "title": doc.title})
+                    print(f"[ChatService] Fetched reference doc via tool: {doc.filename}")
+        finally:
+            session.close()
+        return uploaded_files, metadata
+
     def _get_tools_config(self) -> List[Any]:
         """Get the tools configuration for Gemini function calling.
         
@@ -1161,58 +621,62 @@ class ChatService:
                 "required": ["query"]
             }
         )
-        
+
+        search_facebook_albums_declaration = types.FunctionDeclaration(
+            name="search_facebook_albums",
+            description="Search Facebook photo albums by a partial keyword match against album name or description. Use this when the user asks about Facebook albums, photo collections, or wants to find albums related to a topic or event or when background information is needed on that person for a discussion.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "keyword": {
+                        "type": "string",
+                        "description": "Partial keyword to search for in album names and descriptions fields"
+                    }
+                },
+                "required": ["keyword"]
+            }
+        )
+
+        get_unique_tags_count_declaration = types.FunctionDeclaration(
+            name="get_unique_tags_count",
+            description="Get the unique tags used in the media items (photos/videos) library and the artefacts collection, along with counts. Use this when the user asks what tags exist, how many tags there are, or wants a summary of tagging across the museum collections.",
+            parameters={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        )
+
+        get_reference_document_declaration = types.FunctionDeclaration(
+            name="get_reference_document",
+            description="Retrieve the full content of one or more reference documents by their IDs. Call this when the user's question is best answered using a specific reference document listed in the system prompt.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "document_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "List of reference document IDs to retrieve.",
+                    }
+                },
+                "required": ["document_ids"]
+            }
+        )
+
         return [types.Tool(
             function_declarations=[
-                get_current_time_declaration, 
-                get_imessages_declaration, 
-                get_emails_declaration, 
+                get_current_time_declaration,
+                get_imessages_declaration,
+                get_emails_declaration,
                 get_subject_writing_examples_declaration,
                 search_tavily_declaration,
-                get_all_messages_by_contact_declaration
+                get_all_messages_by_contact_declaration,
+                get_unique_tags_count_declaration,
+                search_facebook_albums_declaration,
+                get_reference_document_declaration,
             ],
             google_search=types.GoogleSearch()
         )]
-
-    def _execute_function_call(self, function_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a function call by routing to the appropriate handler method.
-        
-        Args:
-            function_name: Name of the function to execute
-            args: Dictionary of arguments for the function
-            
-        Returns:
-            Dictionary with function result
-            
-        Raises:
-            ValueError: If function name is not recognized
-        """
-        # Map function names to handler methods
-        function_handlers = {
-            "get_current_time": self._get_current_time,
-            "get_imessages_by_chat_session": self._get_imessages_by_chat_session,
-            "get_emails_by_contact": self._get_emails_by_contact,
-            "get_subject_writing_examples": self._get_subject_writing_examples,
-            "search_tavily": self._search_tavily,
-            "get_all_messages_by_contact": self._get_all_messages_by_contact,
-        }
-        
-        if function_name not in function_handlers:
-            raise ValueError(f"Unknown function: {function_name}")
-        
-        handler = function_handlers[function_name]
-        print(f"[ChatService._execute_function_call] Executing function: {function_name} with args: {args}")
-        
-        try:
-            # Execute the handler function
-            result = handler(**args) if args else handler()
-            print(f"[ChatService._execute_function_call] Function {function_name} returned: {result}")
-            return result
-        except Exception as e:
-            print(f"[ChatService._execute_function_call] Error executing {function_name}: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            raise
 
     def generate_response(self, user_input: str, temperature: float = 0.0, voice: str = "expert", mood: str = "neutral", psychological_profile: str = None, writing_style: str = None, conversation_id: Optional[int] = None, db: Optional[Database] = None, companionMode: Optional[bool] = False) -> str:
         """Generates a response to the prompt using the Gemini LLM API.
@@ -1298,77 +762,33 @@ class ChatService:
             voice_instructions = voice_instructions.replace('{his}', "her")
 
         system_prompt = core_instructions + "\n\n **Your Personae:**\n" + voice_instructions + "\n\n **Additional Information:**\n" + system_instructions
+
+        manifest_text, available_docs = self._build_reference_manifest(db) if db else ("", [])
+        if manifest_text:
+            system_prompt = system_prompt + "\n\n" + manifest_text
+
         print(f"<====System Prompt===============>")
         print(f"\n{system_prompt}\n")
         print(f"=================================>")
-        
+
         # Load conversation context if conversation_id is provided and different from current
         if conversation_id is not None and conversation_id != self.current_conversation_id:
             if db:
                 self.load_conversation_turns(conversation_id, limit=30, db=db)
             else:
                 print("[ChatService.generate_response] Warning: conversation_id provided but database not available")
-        
+
         # Update current conversation ID
         if conversation_id is not None:
             self.current_conversation_id = conversation_id
-        
-        # Build the system prompt
-        # Build content parts for Gemini (can include files and text)
-        content_parts = []
-        
+
         # Track files referenced and function calls for metadata
-        referenced_files = []  # List of file metadata
+        referenced_files = []  # Populated when get_reference_document tool is called
         function_calls_made = []  # List of function calls with parameters
 
         input_tokens = 0
         output_tokens = 0
         total_tokens = 0
-        
-        # Upload and include reference documents as files
-        uploaded_files = []
-        if db:
-            try:
-                session = db.get_session()
-                try:
-                    documents = session.query(ReferenceDocument).filter(
-                        ReferenceDocument.available_for_task == True
-                    ).all()
-                    
-                    # Process each document - _upload_file_to_gemini handles database checking and verification
-                    for doc in documents:
-                        uploaded_file = self._upload_file_to_gemini(doc, db=db)
-                        if uploaded_file:
-                            uploaded_files.append(uploaded_file)
-                            
-                            # Get Gemini file info from database for metadata
-                            gemini_file_record = session.query(GeminiFile).filter(
-                                GeminiFile.reference_document_id == doc.id
-                            ).first()
-                            
-                            file_metadata = {
-                                "id": doc.id,
-                                "filename": doc.filename,
-                                "title": doc.title,
-                                "source": "database" if gemini_file_record else "uploaded"
-                            }
-                            
-                            if gemini_file_record:
-                                file_metadata["gemini_file_name"] = gemini_file_record.gemini_file_name
-                                file_metadata["gemini_file_uri"] = gemini_file_record.gemini_file_uri
-                                file_metadata["state"] = gemini_file_record.state
-                            elif hasattr(uploaded_file, 'name'):
-                                file_metadata["gemini_file_name"] = uploaded_file.name
-                                file_metadata["gemini_file_uri"] = uploaded_file.uri if hasattr(uploaded_file, 'uri') else None
-                            
-                            referenced_files.append(file_metadata)
-                            print(f"[ChatService.generate_response] Added file reference: {doc.filename}")
-                finally:
-                    session.close()
-            except Exception as e:
-                print(f"[ChatService.generate_response] Warning: Could not retrieve reference documents: {str(e)}")
-                import traceback
-                traceback.print_exc()
         
         # Build text prompt with voice instructions, conversation history, and user input
         prompt_parts = []
@@ -1404,34 +824,23 @@ class ChatService:
         
         # Add current user input
         prompt_parts.append(f"\nUser input:\n{user_input}")
-
-        
         prompt_text = "\n".join(prompt_parts)
 
-        print(f"[ChatService.generate_response] Prompt text: {prompt_text}")
         
-        # Build contents list: files first, then text
-        # According to Gemini API docs, files and text can be mixed in contents array
-        # In the new SDK, we can pass File objects directly or use file_uri strings
-        contents = []
-        
-        # Add file references - pass File objects directly (new SDK supports this)
-        for uploaded_file in uploaded_files:
-            contents.append(uploaded_file)
-        
-        # Add text content as a string
-        contents.append(prompt_text)
-        
-        # Note: If this still causes 500 errors, it might be a model compatibility issue
-        # Some models may not support files, or files might need to be referenced differently
+        # Build contents list: text prompt only (files delivered on-demand via get_reference_document tool)
+        contents = [prompt_text]
 
         try:
             # Get tools configuration
             tools = self._get_tools_config()
             
             # Generate content with file references, text, and tools
-            print(f"[ChatService.generate_response] Generating response with {len(uploaded_files)} file(s) and text prompt")
             # Tools are passed via config in the new SDK
+
+            print(f"System Prompt:\n {system_prompt}")
+            print(f"Contents:\n {contents}")
+            print(f"Temperature:\n {temperature}")
+
             config = types.GenerateContentConfig(
                 tools=tools, 
                 system_instruction=system_prompt,
@@ -1472,34 +881,56 @@ class ChatService:
                 
                 # Execute function calls and build responses
                 function_responses = []
+                # Extra parts to add alongside function responses (e.g. file_data for get_reference_document)
+                extra_parts = []
                 for func_call in function_calls:
                     # Extract function name and validate
                     func_name = func_call.name if hasattr(func_call, 'name') else ""
                     if not func_name or not func_name.strip():
                         print(f"[ChatService.generate_response] Skipping function call with empty or invalid name: {func_call}")
                         continue
-                    
+
                     func_args = dict(func_call.args) if hasattr(func_call, 'args') and func_call.args else {}
                     print(f"[ChatService.generate_response] Processing function call: {func_name} with args: {func_args}")
-                    
+
                     # Track this function call
                     function_calls_made.append({
                         "name": func_name,
                         "arguments": func_args,
                         "iteration": iteration
                     })
-                    
+
                     try:
-                        # Execute the function
-                        result = self._execute_function_call(func_name, func_args)
-                        
-                        # Create function response using types (new SDK)
-                        function_responses.append(
-                            types.FunctionResponse(
-                                name=func_name,
-                                response=result  # result is already a dict
+                        if func_name == "get_reference_document" and db:
+                            # Upload requested docs via File API (cached) and attach as file_data parts
+                            doc_ids = func_args.get("document_ids", [])
+                            uploaded_files, file_metadata = self._fetch_reference_documents_for_gemini(doc_ids, db)
+                            referenced_files.extend(file_metadata)
+                            function_responses.append(
+                                types.FunctionResponse(
+                                    name=func_name,
+                                    response={
+                                        "status": "success",
+                                        "note": "The requested document(s) have been provided as file attachments in this message.",
+                                        "documents": file_metadata,
+                                    }
+                                )
                             )
-                        )
+                            # Attach the actual Gemini File objects as file_data parts
+                            for uf in uploaded_files:
+                                mime = uf.mime_type if hasattr(uf, 'mime_type') else "application/octet-stream"
+                                extra_parts.append(
+                                    types.Part(file_data=types.FileData(file_uri=uf.uri, mime_type=mime))
+                                )
+                        else:
+                            # Execute the function normally
+                            result = self._execute_function_call(func_name, func_args)
+                            function_responses.append(
+                                types.FunctionResponse(
+                                    name=func_name,
+                                    response=result  # result is already a dict
+                                )
+                            )
                     except ValueError as e:
                         # Unknown function - skip it, don't create error response
                         print(f"[ChatService.generate_response] Unknown function {func_name}, skipping: {str(e)}")
@@ -1513,20 +944,22 @@ class ChatService:
                                 response={"error": str(e)}
                             )
                         )
-                
+
                 # If we have function responses, make a follow-up call
                 if function_responses:
-                    # Build follow-up contents: original contents + function responses as parts
-                    # Function responses need to be wrapped in Part objects
+                    # Build follow-up contents: original contents + function responses + any extra parts (e.g. files)
                     follow_up_contents = contents.copy()
-                    # Add function responses as parts
                     for func_response in function_responses:
-                        # Create a Part with function_response using types
-                        part = types.Part(function_response=func_response)
+                        follow_up_contents.append(types.Part(function_response=func_response))
+                    for part in extra_parts:
                         follow_up_contents.append(part)
                     
                     print(f"[ChatService.generate_response] Making follow-up call with {len(function_responses)} function response(s)")
-                    config = types.GenerateContentConfig(tools=tools) if tools else None
+                    config = types.GenerateContentConfig(
+                        tools=tools,
+                        system_instruction=system_prompt,
+                        temperature=temperature,
+                    )
                     response = self.client.models.generate_content(
                         model=self.model_name,
                         contents=follow_up_contents,
@@ -1572,11 +1005,23 @@ class ChatService:
             
 
 
-            plain_text = response_text
-            #strip out the json block
-            plain_text = re.sub(r'```json\s*\n(.*?)\n```', '', response_text, flags=re.DOTALL).strip()
+            # Strip embedded JSON blocks, collecting them into metadata
+            embedded_json = []
+            def _collect_json(m):
+                try:
+                    data = parse_wrapped_json(m.group(1))
+                    embedded_json.append(data)
+                except json.JSONDecodeError:
+                    embedded_json.append(m.group(1))
+                return ''
+            plain_text = re.sub(r'```json\s*(.*?)\s*```', _collect_json, response_text, flags=re.DOTALL).strip()
 
-                        # Save turn to database if conversation_id is provided
+            # Merge any embedded JSON blocks into metadata
+            for block in embedded_json:
+                if isinstance(block, dict):
+                    metadata_json.update(block)
+
+            # Save turn to database if conversation_id is provided
             if conversation_id is not None and db:
                 self.save_turn(conversation_id, user_input, plain_text, self.voice, temperature, db=db)
             # Track this turn in conversation history (in-memory)
@@ -1584,17 +1029,14 @@ class ChatService:
                 "user_input": user_input,
                 "response_text": plain_text
             })
-            
+
             # Keep only last 50 turns in memory (for context)
             if len(self.session_turns) > 50:
                 self.session_turns = self.session_turns[-50:]
-            
-            # Append metadata as a JSON block that will be parsed separately
+
             metadata_json_str = json.dumps(metadata_json, indent=2)
-           # response_text += f"\n\n```json\n{metadata_json_str}\n```"
-        
-            
-            return response_text, metadata_json_str
+
+            return plain_text, metadata_json_str
         except Exception as e:
             error_msg = str(e)
             print(f"[ChatService.generate_response] Error: {error_msg}")
@@ -1609,32 +1051,45 @@ class ChatService:
                         contents=prompt_text
                     )
                     response_text = response.text.strip()
-                    
+
+                    # Strip embedded JSON blocks, collecting them into metadata
+                    embedded_json = []
+                    def _collect_json_fb(m):
+                        try:
+                            data = json.loads(m.group(1).strip())
+                            embedded_json.append(data)
+                        except json.JSONDecodeError:
+                            embedded_json.append(m.group(1))
+                        return ''
+                    plain_text = re.sub(r'```json\s*(.*?)\s*```', _collect_json_fb, response_text, flags=re.DOTALL).strip()
+
                     # Append metadata (files were attempted but failed, no function calls in fallback)
                     metadata_json = {
-                        "referenced_files": referenced_files,  # Files were attempted
-                        "function_calls": function_calls_made,  # May have some calls before error
-                        "fallback_used": True
+                        "referenced_files": referenced_files,
+                        "function_calls": function_calls_made,
+                        "fallback_used": True,
                     }
+                    for block in embedded_json:
+                        if isinstance(block, dict):
+                            metadata_json.update(block)
                     metadata_json_str = json.dumps(metadata_json, indent=2)
-                    #response_text += f"\n\n```json\n{metadata_json_str}\n```"
-                    
+
                     # Track this turn in conversation history
                     self.session_turns.append({
                         "user_input": user_input,
-                        "response_text": response_text
+                        "response_text": plain_text
                     })
-                    
+
                     # Keep only last 20 turns
                     if len(self.session_turns) > 20:
                         self.session_turns = self.session_turns[-20:]
-                    
+
                     # Save turn to database if conversation_id is provided
                     if conversation_id is not None and db:
-                        self.save_turn(conversation_id, user_input, response_text, self.voice, temperature, db=db)
-                    
+                        self.save_turn(conversation_id, user_input, plain_text, self.voice, temperature, db=db)
+
                     print("[ChatService.generate_response] Fallback successful - response generated without files")
-                    return response_text, metadata_json_str
+                    return plain_text, metadata_json_str
                 except Exception as fallback_error:
                     print(f"[ChatService.generate_response] Fallback also failed: {str(fallback_error)}")
                     import traceback

@@ -13,7 +13,7 @@ from ...database.models import CompleteProfile
 from ...services.exceptions import ValidationError, NotFoundError
 from ...services.gemini_service import GeminiService
 from ...services.chat_conversation_service import ChatConversationService
-from ..deps import db, chat_service, subject_config_service
+from ..deps import db, chat_service, claude_chat_service, subject_config_service
 from ..state import (
     conversation_summary_lock,
     conversation_summary_in_progress,
@@ -38,6 +38,7 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[int] = None
     mood: Optional[str] = None
     companionMode: Optional[bool] = False
+    provider: Optional[str] = "gemini"  # "gemini" or "claude"
 
 
 class ChatResponse(BaseModel):
@@ -68,6 +69,7 @@ class SubjectConfigurationRequest(BaseModel):
     """Request model for subject configuration."""
     subject_name: str
     system_instructions: str
+    core_system_instructions: Optional[str] = None
     gender: Optional[str] = "Male"
     family_name: Optional[str] = None
     other_names: Optional[str] = None  # Comma-separated names
@@ -130,10 +132,11 @@ async def generate_chat_response(request: ChatRequest):
         mood = "neutral"
         if request.mood:
             mood = request.mood
-        # Generate response using global chat_service instance
-        #(Reference documents are uploaded to Gemini in the chat service )
         temperature = request.temperature if request.temperature is not None else 0.0
-        response_text, metadata_json_str = chat_service.generate_response(
+
+        # Route to the requested provider
+        service = claude_chat_service if request.provider == "claude" else chat_service
+        response_text, metadata_json_str = service.generate_response(
             request.prompt,
             temperature=temperature,
             voice=request.voice,
@@ -188,12 +191,12 @@ async def generate_chat_response(request: ChatRequest):
                 text_content = re.sub(json_pattern, '', response_text, flags=re.DOTALL).strip()
                 metadata_json["temperature"] = request.temperature
                 metadata_json["prompt"] = request.prompt
-                metadata_json["voice"] = chat_service.voice
+                metadata_json["voice"] = service.voice
                 metadata_json["response_text"] = text_content
 
         return ChatResponse(
             response=text_content,
-            voice=chat_service.voice,
+            voice=service.voice,
             embedded_json=metadata_json
         )
 
@@ -629,6 +632,7 @@ async def create_or_update_subject_configuration(request: SubjectConfigurationRe
         configuration = subject_config_service.create_or_update_configuration(
             subject_name=request.subject_name,
             system_instructions=request.system_instructions,
+            core_system_instructions=request.core_system_instructions,
             gender=request.gender,
             family_name=request.family_name,
             other_names=request.other_names,

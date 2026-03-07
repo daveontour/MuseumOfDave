@@ -63,17 +63,18 @@ const App = (() => {
                     prompt: finalMessage,
                     voice: selectedVoice,
                     mood: selectedMood,
-                    interviewMode: AppState.isInterviewerMode, // Use interviewer mode state instead of checkbox
                     companionMode: DOM.companionModeCheckbox ? DOM.companionModeCheckbox.checked : false,
                     supplementary_prompt: supplementary_prompt,
                     temperature: parseFloat(DOM.creativityLevel ? DOM.creativityLevel.value : '0'),
                     conversation_id: conversationId,
                     clientId: AppState.clientId,
-                    userId:currentUserId
+                    userId:currentUserId,
+                    provider: DOM.llmProviderSelect ? DOM.llmProviderSelect.value : 'gemini',
                 });
                 
                 // Non-streaming JSON response handling (original code commented out streaming)
                 const data = await response.json();
+                debugger;
                 UI.hideLoadingIndicator(); // Hide after getting response, before adding message
                 if (data.error) UI.displayError(data.error);
                 else Chat.addMessage('assistant', data.response, true, null, data.embedded_json);
@@ -429,6 +430,11 @@ const App = (() => {
                 if (targetTab === 'manage-contacts') {
                     if (Modals.EmailMatches && Modals.EmailMatches.load) Modals.EmailMatches.load();
                     if (Modals.EmailClassifications && Modals.EmailClassifications.load) Modals.EmailClassifications.load();
+                    if (Modals.EmailExclusions && Modals.EmailExclusions.load) Modals.EmailExclusions.load();
+                }
+                // Load configuration when Configuration tab is opened
+                if (targetTab === 'app-configuration') {
+                    if (Modals.AppConfig && Modals.AppConfig.load) Modals.AppConfig.load();
                 }
                 // Load dashboard when Dashboard tab is opened
                 if (targetTab === 'dashboard') {
@@ -1296,7 +1302,7 @@ const App = (() => {
             image_export: { needsInput: true, title: 'Export Images to Filesystem', fields: [{ id: 'target_directory', key: 'image_export_directory', label: 'Target Directory', placeholder: 'e.g., C:\\Users\\Dave\\Exports\\images', required: true }], run: async (vals) => { const r = await fetch('/images/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_directory: vals.target_directory }) }); return r; }, stream: '/images/export/stream' },
             thumbnails: { needsInput: false, title: 'Image Processing', run: async () => { const r = await fetch('/images/process-thumbnails', { method: 'POST' }); return r; }, stream: '/images/process-thumbnails/stream' },
             contacts: { needsInput: false, title: 'Contacts Merge', run: async () => { const r = await fetch('/contacts/extract', { method: 'POST' }); return r; }, stream: '/contacts/extract/stream' },
-            imap_processing: { needsInput: true, title: 'IMAP Import', fields: [{ id: 'host', key: 'imap_host', label: 'IMAP Host', placeholder: 'e.g., imap.outlook.com', required: true }, { id: 'port', key: 'imap_port', label: 'Port', placeholder: '993', required: true, type: 'number' }, { id: 'username', key: 'imap_username', label: 'Username', placeholder: 'your@email.com', required: true }, { id: 'password', key: 'imap_password', label: 'Password', placeholder: '', required: true, type: 'password' }, { id: 'use_ssl', key: 'imap_use_ssl', label: 'Use SSL/TLS', required: false, type: 'checkbox' }, { id: 'all_folders', key: 'imap_all_folders', label: 'Process all folders', required: false, type: 'checkbox' }, { id: 'folders', key: 'imap_folders', label: 'Folders (comma-separated, leave empty for INBOX)', placeholder: 'INBOX, Sent', required: false }, { id: 'new_only', key: 'imap_new_only', label: 'New only (skip already imported)', required: false, type: 'checkbox' }], run: async (vals) => { const rawFolders = vals.all_folders ? [] : (vals.folders ? vals.folders.split(',').map(f => f.trim()).filter(Boolean) : []); const body = { host: vals.host, port: parseInt(vals.port, 10), username: vals.username, password: vals.password, use_ssl: vals.use_ssl !== false, all_folders: vals.all_folders || false, folders: rawFolders.length ? rawFolders : (vals.all_folders ? [] : ['INBOX']), new_only: vals.new_only || false }; return await fetch('/imap/process', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }, stream: '/imap/process/stream' }
+            imap_processing: { needsInput: true, title: 'IMAP Import', run: async (vals) => { const body = { host: vals.host, port: vals.port, username: vals.username, password: vals.password, use_ssl: vals.use_ssl !== false, all_folders: vals.all_folders || false, folders: vals.folders && vals.folders.length ? vals.folders : (vals.all_folders ? [] : ['INBOX']), new_only: vals.new_only || false }; return await fetch('/imap/process', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }, stream: '/imap/process/stream' }
         };
 
         async function showEmailProcessingModal(onSubmit) {
@@ -1365,6 +1371,162 @@ const App = (() => {
                 }
                 importInputModal.style.display = 'none';
                 onSubmit({ all_folders, labels, new_only });
+            };
+
+            importInputModalSubmit.onclick = doSubmit;
+            importInputModalCancel.onclick = () => { importInputModal.style.display = 'none'; };
+            importInputModal.onclick = (e) => { if (e.target === importInputModal) importInputModal.style.display = 'none'; };
+        }
+
+        async function showImapModal(onSubmit) {
+            importInputModalTitle.textContent = 'IMAP Import';
+            importInputModalBody.innerHTML = `
+                <div class="setting-group" style="margin-bottom: 15px;">
+                    <label for="imap-modal-host" style="display: block; margin-bottom: 5px; font-weight: 500;">IMAP Host</label>
+                    <input type="text" id="imap-modal-host" placeholder="e.g., imap.outlook.com" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                </div>
+                <div class="setting-group" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: flex-end;">
+                    <div style="flex: 1;">
+                        <label for="imap-modal-port" style="display: block; margin-bottom: 5px; font-weight: 500;">Port</label>
+                        <input type="number" id="imap-modal-port" placeholder="993" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                    </div>
+                    <div style="margin-bottom: 9px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="imap-modal-use-ssl" style="cursor: pointer;">
+                            <span>SSL/TLS</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="setting-group" style="margin-bottom: 15px;">
+                    <label for="imap-modal-username" style="display: block; margin-bottom: 5px; font-weight: 500;">Username</label>
+                    <input type="text" id="imap-modal-username" placeholder="your@email.com" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                </div>
+                <div class="setting-group" style="margin-bottom: 15px;">
+                    <label for="imap-modal-password" style="display: block; margin-bottom: 5px; font-weight: 500;">Password</label>
+                    <input type="password" id="imap-modal-password" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da;">
+                </div>
+                <div class="setting-group" style="margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
+                    <button id="imap-modal-fetch-folders" style="padding: 6px 14px; border-radius: 4px; border: 1px solid #bfc9da; cursor: pointer; background: #e8f0fe; font-weight: 500;">Fetch Folders</button>
+                    <span id="imap-modal-fetch-status" style="font-size: 0.9em; color: #666;"></span>
+                </div>
+                <div class="setting-group" style="margin-bottom: 15px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="imap-modal-all-folders" style="cursor: pointer;">
+                        <span>Process All Folders</span>
+                    </label>
+                </div>
+                <div id="imap-modal-folders-wrap" class="setting-group" style="margin-bottom: 15px; display: none;">
+                    <label for="imap-modal-folders" style="display: block; margin-bottom: 5px; font-weight: 500;">Select Folders</label>
+                    <select id="imap-modal-folders" multiple style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da; min-height: 120px;"></select>
+                    <small style="color: #666; margin-top: 4px; display: block;">Hold Ctrl/Cmd to select multiple</small>
+                </div>
+                <div class="setting-group" style="margin-bottom: 15px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="imap-modal-new-only" style="cursor: pointer;">
+                        <span>New Only (skip already imported emails)</span>
+                    </label>
+                </div>
+            `;
+
+            const hostEl = document.getElementById('imap-modal-host');
+            const portEl = document.getElementById('imap-modal-port');
+            const useSslEl = document.getElementById('imap-modal-use-ssl');
+            const usernameEl = document.getElementById('imap-modal-username');
+            const passwordEl = document.getElementById('imap-modal-password');
+            const fetchBtn = document.getElementById('imap-modal-fetch-folders');
+            const fetchStatus = document.getElementById('imap-modal-fetch-status');
+            const allFoldersCb = document.getElementById('imap-modal-all-folders');
+            const foldersWrap = document.getElementById('imap-modal-folders-wrap');
+            const foldersSelect = document.getElementById('imap-modal-folders');
+            const newOnlyCb = document.getElementById('imap-modal-new-only');
+
+            if (typeof getControlValue === 'function') {
+                const defs = typeof controlDefaults !== 'undefined' ? controlDefaults : {};
+                hostEl.value = getControlValue('imap_host', defs.imap_host || '') || '';
+                portEl.value = getControlValue('imap_port', defs.imap_port || '993') || '993';
+                useSslEl.checked = getControlValue('imap_use_ssl', defs.imap_use_ssl !== undefined ? defs.imap_use_ssl : true) !== false;
+                usernameEl.value = getControlValue('imap_username', defs.imap_username || '') || '';
+                allFoldersCb.checked = !!(getControlValue('imap_all_folders', false));
+                newOnlyCb.checked = !!(getControlValue('imap_new_only', defs.imap_new_only !== undefined ? defs.imap_new_only : true));
+            }
+
+            allFoldersCb.addEventListener('change', () => {
+                foldersWrap.style.display = (!allFoldersCb.checked && foldersSelect.options.length > 0) ? 'block' : 'none';
+            });
+
+            fetchBtn.addEventListener('click', async () => {
+                const host = hostEl.value.trim();
+                const port = parseInt(portEl.value, 10) || 993;
+                const username = usernameEl.value.trim();
+                const password = passwordEl.value;
+                const use_ssl = useSslEl.checked;
+                if (!host || !username || !password) {
+                    fetchStatus.textContent = 'Fill in host, username, and password first.';
+                    fetchStatus.style.color = '#c0392b';
+                    return;
+                }
+                fetchBtn.disabled = true;
+                fetchStatus.textContent = 'Connecting...';
+                fetchStatus.style.color = '#666';
+                try {
+                    const resp = await fetch('/imap/folders', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ host, port, username, password, use_ssl })
+                    });
+                    if (!resp.ok) {
+                        const err = await resp.json();
+                        fetchStatus.textContent = err.detail || 'Failed to fetch folders';
+                        fetchStatus.style.color = '#c0392b';
+                        return;
+                    }
+                    const data = await resp.json();
+                    const folders = data.folders || [];
+                    foldersSelect.innerHTML = '';
+                    folders.forEach(f => {
+                        const opt = document.createElement('option');
+                        opt.value = f;
+                        opt.textContent = f;
+                        foldersSelect.appendChild(opt);
+                    });
+                    const inboxOpt = Array.from(foldersSelect.options).find(o => o.value.toUpperCase() === 'INBOX');
+                    if (inboxOpt) inboxOpt.selected = true;
+                    fetchStatus.textContent = `${folders.length} folder(s) loaded`;
+                    fetchStatus.style.color = '#27ae60';
+                    if (!allFoldersCb.checked) foldersWrap.style.display = 'block';
+                } catch (e) {
+                    fetchStatus.textContent = 'Connection error: ' + e.message;
+                    fetchStatus.style.color = '#c0392b';
+                } finally {
+                    fetchBtn.disabled = false;
+                }
+            });
+
+            importInputModal.style.display = 'flex';
+            importInputModal.style.alignItems = 'center';
+            importInputModal.style.justifyContent = 'center';
+
+            const doSubmit = () => {
+                const host = hostEl.value.trim();
+                const port = parseInt(portEl.value, 10) || 993;
+                const username = usernameEl.value.trim();
+                const password = passwordEl.value;
+                const use_ssl = useSslEl.checked;
+                const all_folders = allFoldersCb.checked;
+                const folders = all_folders ? [] : Array.from(foldersSelect.selectedOptions).map(o => o.value).filter(Boolean);
+                const new_only = newOnlyCb.checked;
+                if (!host || !username || !password) return;
+                if (!all_folders && folders.length === 0 && foldersSelect.options.length > 0) return;
+                if (typeof saveControlValue === 'function') {
+                    saveControlValue('imap_host', host);
+                    saveControlValue('imap_port', String(port));
+                    saveControlValue('imap_use_ssl', use_ssl);
+                    saveControlValue('imap_username', username);
+                    saveControlValue('imap_all_folders', all_folders);
+                    saveControlValue('imap_new_only', new_only);
+                }
+                importInputModal.style.display = 'none';
+                onSubmit({ host, port, username, password, use_ssl, all_folders, folders, new_only });
             };
 
             importInputModalSubmit.onclick = doSubmit;
@@ -1473,28 +1635,23 @@ const App = (() => {
             }
         }
 
+        function triggerImport(importType) {
+            if (importInProgress) return;
+            if (importType === 'email_processing') {
+                showEmailProcessingModal((vals) => runImport(importType, vals));
+            } else if (importType === 'imap_processing') {
+                showImapModal((vals) => runImport(importType, vals));
+            } else {
+                showImportModal(importType, (vals) => runImport(importType, vals));
+            }
+        }
+
         document.querySelectorAll('.import-execute-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const importType = btn.getAttribute('data-import');
-                if (importInProgress) return;
-                if (importType === 'email_processing') {
-                    showEmailProcessingModal((vals) => runImport(importType, vals));
-                } else {
-                    showImportModal(importType, (vals) => runImport(importType, vals));
-                }
-            });
+            btn.addEventListener('click', () => triggerImport(btn.getAttribute('data-import')));
         });
 
         document.querySelectorAll('.import-control-tile').forEach(tile => {
-            tile.addEventListener('click', () => {
-                const importType = tile.getAttribute('data-import');
-                if (importInProgress) return;
-                if (importType === 'email_processing') {
-                    showEmailProcessingModal((vals) => runImport(importType, vals));
-                } else {
-                    showImportModal(importType, (vals) => runImport(importType, vals));
-                }
-            });
+            tile.addEventListener('click', () => triggerImport(tile.getAttribute('data-import')));
         });
 
         importCancelBtns().forEach(btn => {
@@ -1655,39 +1812,6 @@ const App = (() => {
             });
         }
 
-        // Interviewee management event listeners
-        if (DOM.intervieweeSelect) {
-            DOM.intervieweeSelect.addEventListener('change', handleIntervieweeSelectChange);
-        }
-
-        if (DOM.addIntervieweeBtn) {
-            DOM.addIntervieweeBtn.addEventListener('click', handleAddIntervieweeClick);
-        }
-
-        if (DOM.closeAddIntervieweeModal) {
-            DOM.closeAddIntervieweeModal.addEventListener('click', handleAddIntervieweeCancel);
-        }
-
-        if (DOM.addIntervieweeSubmitBtn) {
-            DOM.addIntervieweeSubmitBtn.addEventListener('click', handleAddIntervieweeSubmit);
-        }
-
-        if (DOM.addIntervieweeCancelBtn) {
-            DOM.addIntervieweeCancelBtn.addEventListener('click', handleAddIntervieweeCancel);
-        }
-
-        // Add keyboard support for the modal
-        if (DOM.newIntervieweeName) {
-            DOM.newIntervieweeName.addEventListener('keydown', (event) => {
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    handleAddIntervieweeSubmit();
-                } else if (event.key === 'Escape') {
-                    event.preventDefault();
-                    handleAddIntervieweeCancel();
-                }
-            });
-        }
     }
 
     function init() {

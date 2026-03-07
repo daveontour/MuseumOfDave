@@ -798,7 +798,7 @@ func runContactsNormalise() {
 	workers := fs.Int("workers", runtime.NumCPU(), "number of concurrent workers")
 	classificationsFile := fs.String("classifications", "email_classifications.json", "JSON file mapping boolean columns to contact names (applied after contacts are written)")
 	emailMatchesFile := fs.String("email-matches", "email_matches.json", "JSON file containing sets of email addresses that are absolute matches")
-	exclusionsFile := fs.String("exclusions", "", "JSON file containing email and name exclusion patterns (default: built-in list)")
+	exclusionsFile := fs.String("exclusions.json", "", "JSON file containing email and name exclusion patterns (default: built-in list)")
 	fs.Parse(os.Args[2:])
 
 	cfg, err := config.Load()

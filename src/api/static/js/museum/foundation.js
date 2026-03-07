@@ -62,14 +62,6 @@ const CONSTANTS = {
     API_PATHS: {
         CHAT: '/chat/generate',
         NEW_CHAT: '/new',
-        INTERVIEW: '/interviewer/interview',
-        NEW_INTERVIEW: '/interviewer/newinterview',
-        CHECK_INTERVIEW_DATA: '/interviewer/checkinterviewdata',
-        RESUME_INTERVIEW: '/interviewer/resumeinterview',
-        PAUSE_INTERVIEW: '/interviewer/pauseinterview',
-        FINISH_INTERVIEW: '/interviewer/finishinterview',
-        WRITE_INTERIM_BIO: '/interviewer/writeinterimbio',
-        WRITE_FINAL_BIO: '/interviewer/writefinalbio',
         VOICE: '/voice',
         SUGGESTIONS_JSON: '/api/suggestions',
         FB_CHATTERS: '/facebook-chatters/one_to_one',
@@ -109,6 +101,7 @@ const DOM = {
     showJsonTags: document.getElementById('show-json-tags'),
     autoVoiceShortResponses: document.getElementById('auto-voice-short-responses'),
     companionModeCheckbox: document.getElementById('companion-mode'),
+    llmProviderSelect: document.getElementById('llm-provider-select'),
     voiceRadios: document.querySelectorAll('input[name="voice"]'),
     moodSelector: document.getElementById('mood-selector'),
     ownerMood: document.getElementById('owner-mood'),
@@ -424,35 +417,6 @@ const DOM = {
     artefactDetailStory: document.getElementById('artefact-detail-story'),
     artefactPhotosStrip: document.getElementById('artefact-photos-strip'),
    // haveYourSaySidebarBtn: document.getElementById('have-your-say-sidebar-btn'),
-    // Interviewer mode elements
-    interviewerModeBtn: document.getElementById('interviewer-mode-btn'),
-    interviewerMain: document.querySelector('.interviewer-main'),
-    interviewerChatBox: document.getElementById('interviewer-chat-box'),
-    interviewerChatForm: document.getElementById('interviewer-chat-form'),
-    interviewerUserInput: document.getElementById('interviewer-user-input'),
-    interviewerSendButton: document.getElementById('interviewer-send-button'),
-    interviewerLoadingIndicator: document.getElementById('interviewer-loading-indicator'),
-    interviewerErrorDisplay: document.getElementById('interviewer-error-display'),
-    interviewerStartDictationBtn: document.getElementById('interviewer-start-dictation-btn'),
-    interviewerStopDictationBtn: document.getElementById('interviewer-stop-dictation-btn'),
-    interviewerDictationStatus: document.getElementById('interviewer-dictation-status'),
-    exitInterviewerModeBtn: document.getElementById('exit-interviewer-mode-btn'),
-    // Interview control buttons
-    startInterviewBtn: document.getElementById('start-interview-btn'),
-    resumeInterviewBtn: document.getElementById('resume-interview-btn'),
-    pauseInterviewBtn: document.getElementById('pause-interview-btn'),
-    writeInterimBioBtn: document.getElementById('write-interim-bio-btn'),
-    finishInterviewBtn: document.getElementById('finish-interview-btn'),
-    writeFinalBioBtn: document.getElementById('write-final-bio-btn'),
-    resetInterviewBtn: document.getElementById('reset-interview-btn'),
-    intervieweeSelect: document.getElementById('interviewee-select'),
-    addIntervieweeBtn: document.getElementById('add-interviewee-btn'),
-    addIntervieweeModal: document.getElementById('add-interviewee-modal'),
-    closeAddIntervieweeModal: document.getElementById('close-add-interviewee-modal'),
-    newIntervieweeName: document.getElementById('new-interviewee-name'),
-    addIntervieweeSubmitBtn: document.getElementById('add-interviewee-submit-btn'),
-    addIntervieweeCancelBtn: document.getElementById('add-interviewee-cancel-btn'),
-    interviewPurposeSelect: document.getElementById('interview-purpose'),
     // Single Image Modal Elements
     singleImageModal: document.getElementById('single-image-modal'),
     singleImageModalImg: document.getElementById('single-image-modal-img'),
@@ -485,14 +449,6 @@ const AppState = {
     chatDictationRecognition: null,
     isChatDictationListening: false,
     finalChatDictationTranscript: '',
-    // Interviewer mode state
-    isInterviewerMode: false,
-    interviewerDictationRecognition: null,
-    isInterviewerDictationListening: false,
-    finalInterviewerDictationTranscript: '',
-    // Interview state management
-    interviewState: 'initial', // 'initial', 'active', 'paused', 'finished'
-    interviewSubjectName: 'Dave' // Name of the person being interviewed
 };
 
 let mapViewInitialized = false;

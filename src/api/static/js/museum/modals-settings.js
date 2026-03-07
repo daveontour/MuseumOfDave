@@ -1211,24 +1211,28 @@ Modals.SubjectConfiguration = (() => {
             }
         }
 
-        async function saveConfiguration(subjectName, systemInstructions, gender, familyName, otherNames, emailAddresses, phoneNumbers, whatsappHandle, instagramHandle) {
+        async function saveConfiguration(subjectName, systemInstructions, coreSystemInstructions, gender, familyName, otherNames, emailAddresses, phoneNumbers, whatsappHandle, instagramHandle) {
             try {
+                const payload = {
+                    subject_name: subjectName,
+                    system_instructions: systemInstructions,
+                    gender: gender || 'Male',
+                    family_name: familyName || null,
+                    other_names: otherNames || null,
+                    email_addresses: emailAddresses || null,
+                    phone_numbers: phoneNumbers || null,
+                    whatsapp_handle: whatsappHandle || null,
+                    instagram_handle: instagramHandle || null
+                };
+                if (coreSystemInstructions !== undefined) {
+                    payload.core_system_instructions = coreSystemInstructions;
+                }
                 const response = await fetch('/api/subject-configuration', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        subject_name: subjectName,
-                        system_instructions: systemInstructions,
-                        gender: gender || 'Male',
-                        family_name: familyName || null,
-                        other_names: otherNames || null,
-                        email_addresses: emailAddresses || null,
-                        phone_numbers: phoneNumbers || null,
-                        whatsapp_handle: whatsappHandle || null,
-                        instagram_handle: instagramHandle || null
-                    })
+                    body: JSON.stringify(payload)
                 });
 
                 if (!response.ok) {
@@ -1318,7 +1322,9 @@ Modals.SubjectConfiguration = (() => {
                             DOM.systemInstructionsTextarea.value = config.system_instructions || '';
                         }
                         if (DOM.coreSystemInstructionsTextarea) {
-                            DOM.coreSystemInstructionsTextarea.value = config.core_system_instructions || '';
+                            const coreVal = config.core_system_instructions || '';
+                            DOM.coreSystemInstructionsTextarea.value = coreVal;
+                            loadedCoreSystemInstructions = coreVal;
                         }
                     } else {
                         // No config exists, load default from file
@@ -1343,21 +1349,23 @@ Modals.SubjectConfiguration = (() => {
             // Try to load from API first (in case initialization already happened)
             try {
                 const config = await loadConfiguration();
-                if (config) {
-                    if (DOM.systemInstructionsTextarea) {
-                        DOM.systemInstructionsTextarea.value = config.system_instructions || '';
+                    if (config) {
+                        if (DOM.systemInstructionsTextarea) {
+                            DOM.systemInstructionsTextarea.value = config.system_instructions || '';
+                        }
+                        if (DOM.coreSystemInstructionsTextarea) {
+                            const coreVal = config.core_system_instructions || '';
+                            DOM.coreSystemInstructionsTextarea.value = coreVal;
+                            loadedCoreSystemInstructions = coreVal;
+                        }
+                        if (DOM.writingStyleDisplay) {
+                            _renderWritingStyleMarkdown(config.writing_style_ai || '');
+                        }
+                        if (DOM.psychologicalProfileDisplay) {
+                            _renderPsychologicalProfileMarkdown(config.psychological_profile_ai || '');
+                        }
+                        return;
                     }
-                    if (DOM.coreSystemInstructionsTextarea) {
-                        DOM.coreSystemInstructionsTextarea.value = config.core_system_instructions || '';
-                    }
-                    if (DOM.writingStyleDisplay) {
-                        _renderWritingStyleMarkdown(config.writing_style_ai || '');
-                    }
-                    if (DOM.psychologicalProfileDisplay) {
-                        _renderPsychologicalProfileMarkdown(config.psychological_profile_ai || '');
-                    }
-                    return;
-                }
             } catch (err) {
                 console.debug('Could not load configuration from API:', err);
             }
@@ -1384,6 +1392,7 @@ Modals.SubjectConfiguration = (() => {
                         const text = await response.text();
                         if (DOM.coreSystemInstructionsTextarea) {
                             DOM.coreSystemInstructionsTextarea.value = text;
+                            loadedCoreSystemInstructions = text;
                         }
                     }
                 } catch (err) {
@@ -1398,6 +1407,8 @@ Modals.SubjectConfiguration = (() => {
             }
         }
 
+        let loadedCoreSystemInstructions = null;
+
         async function handleSave() {
             const subjectName = DOM.subjectNameInput ? DOM.subjectNameInput.value.trim() : '';
             const gender = DOM.subjectGenderSelect ? DOM.subjectGenderSelect.value : 'Male';
@@ -1408,6 +1419,7 @@ Modals.SubjectConfiguration = (() => {
             const whatsappHandle = DOM.whatsappHandleInput ? DOM.whatsappHandleInput.value.trim() : '';
             const instagramHandle = DOM.instagramHandleInput ? DOM.instagramHandleInput.value.trim() : '';
             const systemInstructions = DOM.systemInstructionsTextarea ? DOM.systemInstructionsTextarea.value.trim() : '';
+            const coreSystemInstructions = DOM.coreSystemInstructionsTextarea ? DOM.coreSystemInstructionsTextarea.value : '';
 
             if (!subjectName) {
                 alert('Please enter a subject name');
@@ -1419,15 +1431,30 @@ Modals.SubjectConfiguration = (() => {
                 return;
             }
 
+            const coreInstructionsChanged = loadedCoreSystemInstructions !== null &&
+                coreSystemInstructions !== loadedCoreSystemInstructions;
+
+            if (coreInstructionsChanged) {
+                const firstConfirm = confirm(
+                    'WARNING: You are about to change the Core System Instructions.\n\n' +
+                    'Incorrect changes can destroy chat functionality. The system may stop working correctly.\n\n' +
+                    'Are you sure you want to proceed?'
+                );
+                if (!firstConfirm) return;
+
+                const secondConfirm = confirm(
+                    'Final confirmation: This will overwrite the Core System Instructions.\n\n' +
+                    'Are you absolutely sure you want to save these changes?'
+                );
+                if (!secondConfirm) return;
+            }
+
             try {
-                await saveConfiguration(subjectName, systemInstructions, gender, familyName, otherNames, emailAddresses, phoneNumbers, whatsappHandle, instagramHandle);
-                //updatePageReferences(subjectName, gender);
+                await saveConfiguration(subjectName, systemInstructions, coreSystemInstructions, gender, familyName, otherNames, emailAddresses, phoneNumbers, whatsappHandle, instagramHandle);
                 closeModal();
-                
-                // Show success message
+
                 alert('Subject configuration saved successfully!');
-                
-                // Reload page to ensure all references are updated
+
                 window.location.reload();
             } catch (error) {
                 alert(`Error saving configuration: ${error.message}`);
@@ -1832,6 +1859,7 @@ Modals.initAll = () => {
         Modals.Profiles.init();
         if (Modals.EmailMatches && Modals.EmailMatches.init) Modals.EmailMatches.init();
         if (Modals.EmailClassifications && Modals.EmailClassifications.init) Modals.EmailClassifications.init();
+        if (Modals.EmailExclusions && Modals.EmailExclusions.init) Modals.EmailExclusions.init();
 };
 
 Modals.closeAll = () => {
@@ -2387,6 +2415,423 @@ Modals.EmailClassifications = (() => {
         init: init,
         loadOptions: loadClassificationOptions,
         populateTypeFilter: populateTypeFilter
+    };
+})();
+
+
+// --- Email Exclusions (Manage Contacts) ---
+Modals.EmailExclusions = (() => {
+    let editingId = null;
+
+    function getEl(id) {
+        return document.getElementById(id);
+    }
+
+    function escapeHtml(s) {
+        if (s == null) return '';
+        const div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+    }
+
+    function getTypeLabel(row) {
+        if (row.name_email) return 'Name+Email pair';
+        if (row.email) return 'Email pattern';
+        if (row.name) return 'Name pattern';
+        return '';
+    }
+
+    function toggleModalFields() {
+        const typeSel = getEl('email-exclusion-type');
+        const emailGroup = getEl('email-exclusion-email-group');
+        const nameGroup = getEl('email-exclusion-name-group');
+        if (!typeSel || !emailGroup || !nameGroup) return;
+        const val = typeSel.value;
+        if (val === 'email') {
+            emailGroup.style.display = 'block';
+            nameGroup.style.display = 'none';
+        } else if (val === 'name') {
+            emailGroup.style.display = 'none';
+            nameGroup.style.display = 'block';
+        } else {
+            emailGroup.style.display = 'block';
+            nameGroup.style.display = 'block';
+        }
+    }
+
+    async function loadEmailExclusions() {
+        const tbody = getEl('email-exclusions-tbody');
+        const loading = getEl('email-exclusions-loading');
+        const tableContainer = getEl('email-exclusions-table-container');
+        const emptyMsg = getEl('email-exclusions-empty-msg');
+        const filterInput = getEl('email-exclusions-filter');
+        const typeFilter = getEl('email-exclusions-type-filter');
+        if (!tbody || !loading) return;
+
+        loading.style.display = 'block';
+        if (tableContainer) tableContainer.style.display = 'none';
+        if (emptyMsg) emptyMsg.style.display = 'none';
+
+        try {
+            const params = new URLSearchParams();
+            if (filterInput && filterInput.value.trim()) {
+                params.append('search', filterInput.value.trim());
+            }
+            if (typeFilter && typeFilter.value === 'name_email') {
+                params.append('name_email', 'true');
+            } else if (typeFilter && (typeFilter.value === 'email' || typeFilter.value === 'name')) {
+                params.append('name_email', 'false');
+            }
+            const response = await fetch(`/email-exclusions?${params.toString()}`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            let data = await response.json();
+            if (typeFilter && typeFilter.value === 'email') {
+                data = data.filter(r => r.email && !r.name_email);
+            } else if (typeFilter && typeFilter.value === 'name') {
+                data = data.filter(r => r.name && !r.name_email);
+            }
+
+            loading.style.display = 'none';
+            if (tableContainer) tableContainer.style.display = 'block';
+
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '';
+                if (emptyMsg) emptyMsg.style.display = 'block';
+                return;
+            }
+            if (emptyMsg) emptyMsg.style.display = 'none';
+
+            tbody.innerHTML = data.map(row => `
+                <tr style="border-bottom: 1px solid #e9ecef;">
+                    <td style="padding: 8px;">${escapeHtml(row.email)}</td>
+                    <td style="padding: 8px;">${escapeHtml(row.name)}</td>
+                    <td style="padding: 8px;">${escapeHtml(getTypeLabel(row))}</td>
+                    <td style="padding: 8px; text-align: center;">
+                        <button type="button" class="email-exclusion-edit-btn modal-btn modal-btn-secondary" data-id="${row.id}" style="padding: 4px 8px; font-size: 0.85em;">
+                            <i class="fas fa-edit"></i> Edit
+                        </button>
+                        <button type="button" class="email-exclusion-delete-btn modal-btn" data-id="${row.id}" style="padding: 4px 8px; font-size: 0.85em; background: #dc3545; color: white; margin-left: 4px;">
+                            <i class="fas fa-trash-alt"></i> Delete
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+
+            tbody.querySelectorAll('.email-exclusion-edit-btn').forEach(btn => {
+                btn.addEventListener('click', () => openEditModal(parseInt(btn.dataset.id, 10)));
+            });
+            tbody.querySelectorAll('.email-exclusion-delete-btn').forEach(btn => {
+                btn.addEventListener('click', () => deleteExclusion(parseInt(btn.dataset.id, 10)));
+            });
+        } catch (err) {
+            loading.style.display = 'none';
+            if (tableContainer) tableContainer.style.display = 'block';
+            tbody.innerHTML = `<tr><td colspan="4" style="padding: 1em; color: #c00;">Failed to load: ${escapeHtml(err.message)}</td></tr>`;
+        }
+    }
+
+    function openCreateModal() {
+        editingId = null;
+        const modal = getEl('email-exclusion-modal');
+        const title = getEl('email-exclusion-modal-title');
+        const typeSel = getEl('email-exclusion-type');
+        const email = getEl('email-exclusion-email');
+        const name = getEl('email-exclusion-name');
+        const errEl = getEl('email-exclusion-modal-error');
+        if (!modal || !title || !typeSel || !email || !name) return;
+        title.textContent = 'Add Email Exclusion';
+        typeSel.value = 'email';
+        email.value = '';
+        name.value = '';
+        toggleModalFields();
+        if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+        modal.style.display = 'flex';
+    }
+
+    async function openEditModal(id) {
+        editingId = id;
+        const modal = getEl('email-exclusion-modal');
+        const title = getEl('email-exclusion-modal-title');
+        const typeSel = getEl('email-exclusion-type');
+        const email = getEl('email-exclusion-email');
+        const name = getEl('email-exclusion-name');
+        const errEl = getEl('email-exclusion-modal-error');
+        if (!modal || !title || !typeSel || !email || !name) return;
+
+        try {
+            const res = await fetch(`/email-exclusions/${id}`);
+            if (!res.ok) throw new Error(res.statusText);
+            const row = await res.json();
+            title.textContent = 'Edit Email Exclusion';
+            if (row.name_email) {
+                typeSel.value = 'name_email';
+                email.value = row.email || '';
+                name.value = row.name || '';
+            } else if (row.email) {
+                typeSel.value = 'email';
+                email.value = row.email || '';
+                name.value = '';
+            } else {
+                typeSel.value = 'name';
+                email.value = '';
+                name.value = row.name || '';
+            }
+            toggleModalFields();
+            if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+            modal.style.display = 'flex';
+        } catch (err) {
+            if (errEl) { errEl.textContent = 'Failed to load: ' + err.message; errEl.style.display = 'block'; }
+        }
+    }
+
+    function closeModal() {
+        const modal = getEl('email-exclusion-modal');
+        if (modal) modal.style.display = 'none';
+        editingId = null;
+    }
+
+    async function saveExclusion() {
+        const typeSel = getEl('email-exclusion-type');
+        const email = getEl('email-exclusion-email');
+        const name = getEl('email-exclusion-name');
+        const errEl = getEl('email-exclusion-modal-error');
+        if (!typeSel || !email || !name) return;
+
+        const typeVal = typeSel.value;
+        const em = email.value.trim();
+        const nm = name.value.trim();
+        const name_email = typeVal === 'name_email';
+
+        if (name_email) {
+            if (!em || !nm) {
+                if (errEl) { errEl.textContent = 'Both email and name are required for name+email pair'; errEl.style.display = 'block'; }
+                return;
+            }
+        } else {
+            if (typeVal === 'email') {
+                if (!em) {
+                    if (errEl) { errEl.textContent = 'Email is required'; errEl.style.display = 'block'; }
+                    return;
+                }
+            } else {
+                if (!nm) {
+                    if (errEl) { errEl.textContent = 'Name is required'; errEl.style.display = 'block'; }
+                    return;
+                }
+            }
+        }
+        if (errEl) errEl.style.display = 'none';
+
+        const payload = {
+            email: name_email || typeVal === 'email' ? em : '',
+            name: name_email || typeVal === 'name' ? nm : '',
+            name_email: name_email
+        };
+
+        try {
+            if (editingId !== null) {
+                const res = await fetch(`/email-exclusions/${editingId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) {
+                    const d = await res.json().catch(() => ({}));
+                    const msg = typeof d.detail === 'string' ? d.detail : (Array.isArray(d.detail) && d.detail[0]?.msg ? d.detail[0].msg : JSON.stringify(d.detail || res.statusText));
+                    throw new Error(msg);
+                }
+            } else {
+                const res = await fetch('/email-exclusions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) {
+                    const d = await res.json().catch(() => ({}));
+                    const msg = typeof d.detail === 'string' ? d.detail : (Array.isArray(d.detail) && d.detail[0]?.msg ? d.detail[0].msg : JSON.stringify(d.detail || res.statusText));
+                    throw new Error(msg);
+                }
+            }
+            closeModal();
+            loadEmailExclusions();
+        } catch (err) {
+            if (errEl) { errEl.textContent = err.message; errEl.style.display = 'block'; }
+        }
+    }
+
+    async function deleteExclusion(id) {
+        const msg = 'Are you sure you want to delete this email exclusion?';
+        if (!confirm(msg)) return;
+        try {
+            const res = await fetch(`/email-exclusions/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(res.statusText);
+            loadEmailExclusions();
+        } catch (err) {
+            alert('Failed to delete: ' + err.message);
+        }
+    }
+
+    function init() {
+        const createBtn = getEl('email-exclusions-create-btn');
+        const refreshBtn = getEl('email-exclusions-refresh-btn');
+        const filterInput = getEl('email-exclusions-filter');
+        const typeFilter = getEl('email-exclusions-type-filter');
+        const closeBtn = getEl('close-email-exclusion-modal');
+        const cancelBtn = getEl('email-exclusion-modal-cancel');
+        const saveBtn = getEl('email-exclusion-modal-save');
+        const typeSel = getEl('email-exclusion-type');
+
+        if (createBtn) createBtn.addEventListener('click', openCreateModal);
+        if (refreshBtn) refreshBtn.addEventListener('click', () => loadEmailExclusions());
+        if (filterInput) {
+            filterInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') loadEmailExclusions(); });
+        }
+        if (typeFilter) typeFilter.addEventListener('change', () => loadEmailExclusions());
+        if (closeBtn) closeBtn.addEventListener('click', closeModal);
+        if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+        if (saveBtn) saveBtn.addEventListener('click', saveExclusion);
+        if (typeSel) typeSel.addEventListener('change', toggleModalFields);
+
+        const modal = getEl('email-exclusion-modal');
+        if (modal) {
+            modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+        }
+    }
+
+    return {
+        load: loadEmailExclusions,
+        init: init
+    };
+})();
+
+Modals.AppConfig = (() => {
+    let loaded = false;
+
+    function setStatus(msg, color) {
+        const el = document.getElementById('cfg-status');
+        if (el) { el.textContent = msg; el.style.color = color || '#666'; }
+    }
+
+    function _renderRow(cfg) {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #dee2e6';
+        if (cfg.is_mandatory) tr.style.backgroundColor = '#fff3e0';
+        tr.dataset.key = cfg.key;
+
+        const valueId = `cfg-val-${cfg.key.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+        tr.innerHTML = `
+            <td style="padding:8px; font-family:monospace; word-break:break-all">${_esc(cfg.key)}</td>
+            <td style="padding:8px">
+                <input class="modal-input" id="${valueId}" value="${_esc(cfg.value || '')}" style="width:100%">
+            </td>
+            <td style="padding:8px; text-align:center">
+                <input type="checkbox" ${cfg.is_mandatory ? 'checked disabled' : 'disabled'}>
+            </td>
+            <td style="padding:8px; color:#666; font-size:12px">${_esc(cfg.description || '')}</td>
+            <td style="padding:8px; white-space:nowrap">
+                <button class="modal-btn modal-btn-primary" style="padding:4px 10px; font-size:12px"
+                    onclick="Modals.AppConfig.update('${_esc(cfg.key)}', '${valueId}')">Save</button>
+                <button class="modal-btn modal-btn-secondary" style="padding:4px 10px; font-size:12px; margin-left:4px"
+                    onclick="Modals.AppConfig.delete('${_esc(cfg.key)}')">Delete</button>
+            </td>`;
+        return tr;
+    }
+
+    function _esc(s) {
+        return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    async function load() {
+        try {
+            setStatus('Loading…');
+            const res = await fetch('/api/configuration');
+            if (!res.ok) throw new Error(await res.text());
+            const rows = await res.json();
+            rows.sort((a, b) => (b.is_mandatory ? 1 : 0) - (a.is_mandatory ? 1 : 0));
+            const tbody = document.getElementById('cfg-table-body');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            rows.forEach(cfg => tbody.appendChild(_renderRow(cfg)));
+            setStatus(`${rows.length} key(s) loaded.`);
+            loaded = true;
+        } catch (e) {
+            setStatus('Error loading configuration: ' + e.message, '#c00');
+        }
+    }
+
+    async function save() {
+        const key = (document.getElementById('cfg-new-key')?.value || '').trim();
+        const value = document.getElementById('cfg-new-value')?.value || '';
+        const is_mandatory = document.getElementById('cfg-new-mandatory')?.checked || false;
+        if (!key) { setStatus('Key must not be empty.', '#c00'); return; }
+        try {
+            setStatus('Saving…');
+            const res = await fetch('/api/configuration', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key, value, is_mandatory })
+            });
+            if (!res.ok) throw new Error(await res.text());
+            document.getElementById('cfg-new-key').value = '';
+            document.getElementById('cfg-new-value').value = '';
+            document.getElementById('cfg-new-mandatory').checked = false;
+            setStatus(`Saved '${key}'.`, '#2a7a2a');
+            await load();
+        } catch (e) {
+            setStatus('Error saving: ' + e.message, '#c00');
+        }
+    }
+
+    async function update(key, inputId) {
+        const value = document.getElementById(inputId)?.value ?? '';
+        try {
+            setStatus('Saving…');
+            const res = await fetch('/api/configuration', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key, value })
+            });
+            if (!res.ok) throw new Error(await res.text());
+            setStatus(`Saved '${key}'.`, '#2a7a2a');
+            await load();
+        } catch (e) {
+            setStatus('Error saving: ' + e.message, '#c00');
+        }
+    }
+
+    async function deleteKey(key) {
+        if (!confirm(`Delete '${key}' from database? (Will revert to .env value.)`)) return;
+        try {
+            setStatus('Deleting…');
+            const res = await fetch(`/api/configuration/${encodeURIComponent(key)}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(await res.text());
+            setStatus(`Deleted '${key}'.`, '#2a7a2a');
+            await load();
+        } catch (e) {
+            setStatus('Error deleting: ' + e.message, '#c00');
+        }
+    }
+
+    async function seed() {
+        try {
+            setStatus('Seeding from .env…');
+            const res = await fetch('/api/configuration/seed', { method: 'POST' });
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+            setStatus(data.message, '#2a7a2a');
+            await load();
+        } catch (e) {
+            setStatus('Error seeding: ' + e.message, '#c00');
+        }
+    }
+
+    return {
+        load,
+        save,
+        update,
+        delete: deleteKey,
+        seed,
     };
 })();
 

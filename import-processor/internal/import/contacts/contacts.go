@@ -16,6 +16,10 @@ func RunContactsNormalise(ctx context.Context, opts RunOptions) error {
 		if err := LoadExclusions(opts.ExclusionsFile); err != nil {
 			return fmt.Errorf("load exclusions: %w", err)
 		}
+	} else if opts.ContactsDB != nil {
+		if err := LoadExclusionsFromDB(ctx, opts.ContactsDB); err != nil {
+			return fmt.Errorf("load exclusions from db: %w", err)
+		}
 	}
 
 	var emailMatchMap map[string]string

@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from ...database.models import (
     ImportControlLastRun,
-    IMessage,
+    Message,
     MessageAttachment,
     MediaMetadata,
     MediaBlob,
@@ -28,7 +28,7 @@ from ...database.models import (
     CompleteProfile,
 )
 from ...config import get_config
-from ..deps import db, templates, subject_config_service
+from ..deps import db, templates, subject_config_service, config_service
 
 router = APIRouter()
 
@@ -258,18 +258,18 @@ async def get_dashboard():
     try:
         # Messages by service
         msg_by_service = (
-            session.query(IMessage.service, func.count(IMessage.id))
-            .group_by(IMessage.service)
+            session.query(Message.service, func.count(Message.id))
+            .group_by(Message.service)
             .all()
         )
         message_counts = {s or "unknown": c for s, c in msg_by_service}
         total_messages = sum(message_counts.values())
 
         # Messages by year (exclude null message_date)
-        year_col = extract("year", IMessage.message_date)
+        year_col = extract("year", Message.message_date)
         msg_by_year = (
-            session.query(year_col.label("yr"), func.count(IMessage.id))
-            .filter(IMessage.message_date.isnot(None))
+            session.query(year_col.label("yr"), func.count(Message.id))
+            .filter(Message.message_date.isnot(None))
             .group_by(year_col)
             .order_by(year_col)
             .all()
@@ -305,11 +305,11 @@ async def get_dashboard():
         if contact_0 and contact_0[0] and contact_0[0].strip():
             subject_names_lower.add(contact_0[0].strip().lower())
         msg_by_sender = (
-            session.query(IMessage.sender_name, func.count(IMessage.id))
-            .filter(IMessage.sender_name.isnot(None))
-            .filter(IMessage.sender_name != "")
-            .group_by(IMessage.sender_name)
-            .order_by(func.count(IMessage.id).desc())
+            session.query(Message.sender_name, func.count(Message.id))
+            .filter(Message.sender_name.isnot(None))
+            .filter(Message.sender_name != "")
+            .group_by(Message.sender_name)
+            .order_by(func.count(Message.id).desc())
             .limit(100)
             .all()
         )
@@ -474,7 +474,7 @@ async def get_control_defaults():
         Dictionary of default values for all control tab inputs
     """
     config = get_config()
-    return config.get_control_defaults()
+    return config.get_control_defaults(config_service=config_service)
 
 
 @router.delete("/admin/empty-media-tables")
@@ -494,8 +494,8 @@ async def empty_media_tables():
         session.query(MessageAttachment).delete()
 
         # 2. Delete messages
-        message_count = session.query(IMessage).count()
-        session.query(IMessage).delete()
+        message_count = session.query(Message).count()
+        session.query(Message).delete()
 
         # 3. Delete media_items (references media_blob)
         media_item_count = session.query(MediaMetadata).count()

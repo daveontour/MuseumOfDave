@@ -93,7 +93,7 @@ class MessageAttachment(Base):
     media_item_id = Column(Integer, ForeignKey("media_items.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime, default=utcnow)
 
-    message = relationship("IMessage", back_populates="media_attachments")
+    message = relationship("Message", back_populates="media_attachments")
     media_item = relationship("MediaMetadata", foreign_keys=[media_item_id])
 
     __table_args__ = (
@@ -157,7 +157,7 @@ class ArtefactMedia(Base):
     )
 
 
-class IMessage(Base):
+class Message(Base):
     """Message model (supports iMessage, SMS, and WhatsApp)."""
 
     __tablename__ = "messages"
@@ -583,5 +583,19 @@ class EmailExclusions (Base):
     email = Column(String(300), nullable=False)
     name = Column(String(500), nullable=False)
     name_email = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class AppConfiguration(Base):
+    """Application configuration key-value store. Values here override .env."""
+
+    __tablename__ = "app_configuration"
+
+    id = Column(Integer, primary_key=True)
+    key = Column(String(255), unique=True, nullable=False, index=True)
+    value = Column(Text, nullable=True)
+    is_mandatory = Column(Boolean, default=False, nullable=False)
+    description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

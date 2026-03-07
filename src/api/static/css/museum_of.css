@@ -590,6 +590,10 @@ body {
     background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
 }
 
+.response-action-btn--facebook-album {
+    background: linear-gradient(135deg, #1877f2 0%, #0d65d9 100%);
+}
+
 /* Audio tag visibility (JS toggles 'hide-audio-tags' class on body) */
 .hide-audio-tags .message-content audio,
 .hide-audio-tags .audio-status { /* Also hide status if audio tags are hidden */

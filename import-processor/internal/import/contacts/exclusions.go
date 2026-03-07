@@ -1,10 +1,13 @@
 package contacts
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
+
+	"import-processor/internal/database"
 )
 
 // NameEmailPair excludes a specific name when paired with a specific email
@@ -42,6 +45,37 @@ func LoadExclusions(filename string) error {
 	var cfg ExclusionsConfig
 	if err := json.Unmarshal(raw, &cfg); err != nil {
 		return fmt.Errorf("failed to parse exclusions JSON: %w", err)
+	}
+	exclusions = cfg
+	exclusions.NameEmail = append(defaultNameEmailExclusions, exclusions.NameEmail...)
+	return nil
+}
+
+// LoadExclusionsFromDB loads exclusions from the email_exclusions database table.
+func LoadExclusionsFromDB(ctx context.Context, db *database.DB) error {
+	rows, err := db.Pool.Query(ctx, "SELECT email, name, name_email FROM email_exclusions")
+	if err != nil {
+		return fmt.Errorf("query email_exclusions: %w", err)
+	}
+	defer rows.Close()
+
+	var cfg ExclusionsConfig
+	for rows.Next() {
+		var email, name string
+		var nameEmail bool
+		if err := rows.Scan(&email, &name, &nameEmail); err != nil {
+			return fmt.Errorf("scan exclusion row: %w", err)
+		}
+		if nameEmail {
+			cfg.NameEmail = append(cfg.NameEmail, NameEmailPair{Name: name, Email: email})
+		} else if email != "" {
+			cfg.Email = append(cfg.Email, email)
+		} else if name != "" {
+			cfg.Name = append(cfg.Name, name)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate exclusion rows: %w", err)
 	}
 	exclusions = cfg
 	exclusions.NameEmail = append(defaultNameEmailExclusions, exclusions.NameEmail...)

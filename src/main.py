@@ -35,7 +35,10 @@ def main(test: bool = False):
         print("Running in test mode")
         test_gemini_service(db)
     else:
-        from src.api.deps import subject_config_service
+        from src.api.deps import subject_config_service, config_service
+        seeded = config_service.seed_from_env()
+        if seeded:
+            print(f"Configuration: seeded {seeded} key(s) from .env")
         subject_config_service.initialize_from_files()
         print("Subject configuration initialized from files.")
 

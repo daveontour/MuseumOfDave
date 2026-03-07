@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy import text, func, or_
 
-from ...database.models import Contacts, IMessage, EmailMatches, EmailClassifications
+from ...database.models import Contacts, Message, EmailMatches, EmailClassifications, EmailExclusions
 from ..deps import db
 from .. import state as import_state
 
@@ -124,6 +124,30 @@ class EmailClassificationUpdate(BaseModel):
     """Request model for updating an email classification."""
     name: Optional[str] = None
     classification: Optional[str] = None
+
+
+class EmailExclusionResponse(BaseModel):
+    """Response model for an email exclusion row."""
+    id: int
+    email: str
+    name: str
+    name_email: bool
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class EmailExclusionCreate(BaseModel):
+    """Request model for creating an email exclusion."""
+    email: str = ""
+    name: str = ""
+    name_email: bool = False
+
+
+class EmailExclusionUpdate(BaseModel):
+    """Request model for updating an email exclusion."""
+    email: Optional[str] = None
+    name: Optional[str] = None
+    name_email: Optional[bool] = None
 
 
 class ContactsNamesListResponse(BaseModel):
@@ -765,6 +789,170 @@ async def delete_email_match(match_id: int):
         session.delete(row)
         session.commit()
         return {"message": "Email match deleted", "id": match_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        session.close()
+
+
+# ---------------------------------------------------------------------------
+# Email exclusions (email/name patterns and name+email pairs) used by import-processor
+# ---------------------------------------------------------------------------
+
+@router.get("/email-exclusions", response_model=List[EmailExclusionResponse])
+async def get_email_exclusions(
+    search: Optional[str] = Query(None, description="Filter by email or name (partial match, case-insensitive)"),
+    name_email: Optional[bool] = Query(None, description="Filter by name_email type"),
+):
+    """List all email exclusions from the email_exclusions table."""
+    session = db.get_session()
+    try:
+        q = session.query(EmailExclusions).order_by(EmailExclusions.email, EmailExclusions.name)
+        if search and search.strip():
+            term = f"%{search.strip()}%"
+            q = q.filter(or_(EmailExclusions.email.ilike(term), EmailExclusions.name.ilike(term)))
+        if name_email is not None:
+            q = q.filter(EmailExclusions.name_email == name_email)
+        rows = q.all()
+        return [
+            EmailExclusionResponse(
+                id=r.id,
+                email=r.email or "",
+                name=r.name or "",
+                name_email=r.name_email or False,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in rows
+        ]
+    finally:
+        session.close()
+
+
+@router.get("/email-exclusions/{exclusion_id}", response_model=EmailExclusionResponse)
+async def get_email_exclusion(exclusion_id: int):
+    """Get a single email exclusion by ID."""
+    session = db.get_session()
+    try:
+        row = session.query(EmailExclusions).filter(EmailExclusions.id == exclusion_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Email exclusion not found: id={exclusion_id}")
+        return EmailExclusionResponse(
+            id=row.id,
+            email=row.email or "",
+            name=row.name or "",
+            name_email=row.name_email or False,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+    finally:
+        session.close()
+
+
+@router.post("/email-exclusions", response_model=EmailExclusionResponse)
+async def create_email_exclusion(req: EmailExclusionCreate):
+    """Create a new email exclusion."""
+    em = (req.email or "").strip()
+    nm = (req.name or "").strip()
+    name_email = req.name_email
+    if name_email:
+        if not em or not nm:
+            raise HTTPException(status_code=400, detail="Both email and name are required for name+email pair")
+    else:
+        if not em and not nm:
+            raise HTTPException(status_code=400, detail="Either email or name is required")
+        if em and nm:
+            raise HTTPException(status_code=400, detail="For email or name pattern, only one field should be set (use name+email pair for both)")
+    session = db.get_session()
+    try:
+        existing = session.query(EmailExclusions).filter(
+            EmailExclusions.email == em,
+            EmailExclusions.name == nm,
+            EmailExclusions.name_email == name_email,
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Email exclusion already exists")
+        row = EmailExclusions(email=em, name=nm, name_email=name_email)
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return EmailExclusionResponse(
+            id=row.id,
+            email=row.email,
+            name=row.name,
+            name_email=row.name_email,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        session.close()
+
+
+@router.put("/email-exclusions/{exclusion_id}", response_model=EmailExclusionResponse)
+async def update_email_exclusion(exclusion_id: int, req: EmailExclusionUpdate):
+    """Update an existing email exclusion."""
+    session = db.get_session()
+    try:
+        row = session.query(EmailExclusions).filter(EmailExclusions.id == exclusion_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Email exclusion not found: id={exclusion_id}")
+        if req.email is not None:
+            em = req.email.strip()
+            row.email = em
+        if req.name is not None:
+            nm = req.name.strip()
+            row.name = nm
+        if req.name_email is not None:
+            row.name_email = req.name_email
+        em = row.email or ""
+        nm = row.name or ""
+        name_email = row.name_email
+        if name_email:
+            if not em or not nm:
+                raise HTTPException(status_code=400, detail="Both email and name are required for name+email pair")
+        else:
+            if not em and not nm:
+                raise HTTPException(status_code=400, detail="Either email or name is required")
+            if em and nm:
+                raise HTTPException(status_code=400, detail="For email or name pattern, only one field should be set")
+        session.commit()
+        session.refresh(row)
+        return EmailExclusionResponse(
+            id=row.id,
+            email=row.email,
+            name=row.name,
+            name_email=row.name_email,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        session.close()
+
+
+@router.delete("/email-exclusions/{exclusion_id}")
+async def delete_email_exclusion(exclusion_id: int):
+    """Delete an email exclusion by ID."""
+    session = db.get_session()
+    try:
+        row = session.query(EmailExclusions).filter(EmailExclusions.id == exclusion_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Email exclusion not found: id={exclusion_id}")
+        session.delete(row)
+        session.commit()
+        return {"message": "Email exclusion deleted", "id": exclusion_id}
     except HTTPException:
         raise
     except Exception as e:

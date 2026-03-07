@@ -9,7 +9,7 @@ from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
 
 from .connection import Database
-from .models import Email, IMessage, FacebookAlbum, MediaMetadata, MediaBlob, MessageAttachment, AlbumMedia, utcnow
+from .models import Email, Message, FacebookAlbum, MediaMetadata, MediaBlob, MessageAttachment, AlbumMedia, utcnow
 
 
 class EmailStorage:
@@ -337,7 +337,7 @@ class IMessageStorage:
         attachment_filename: Optional[str] = None,
         attachment_type: Optional[str] = None,
         source: Optional[str] = None
-    ) -> Tuple[IMessage, bool]:
+    ) -> Tuple[Message, bool]:
         """Save iMessage to database. Updates existing message if found, otherwise creates new one.
         
         If attachment_data is provided, it will be saved to media_blob/media_items tables
@@ -350,7 +350,7 @@ class IMessageStorage:
         - type (Incoming/Outgoing)
         
         Returns:
-            tuple: (IMessage instance, is_update: bool) where is_update is True if message was updated, False if created
+            tuple: (Message instance, is_update: bool) where is_update is True if message was updated, False if created
         """
         session = self.db.get_session()
 
@@ -361,11 +361,11 @@ class IMessageStorage:
             
         try:
             # Check if message already exists
-            existing = session.query(IMessage).filter(
-                IMessage.chat_session == message_data.get("chat_session"),
-                IMessage.message_date == message_data.get("message_date"),
-                IMessage.sender_id == message_data.get("sender_id"),
-                IMessage.type == message_data.get("type")
+            existing = session.query(Message).filter(
+                Message.chat_session == message_data.get("chat_session"),
+                Message.message_date == message_data.get("message_date"),
+                Message.sender_id == message_data.get("sender_id"),
+                Message.type == message_data.get("type")
             ).first()
             
             if existing:
@@ -388,7 +388,7 @@ class IMessageStorage:
                 is_update = True
             else:
                 # Create new message
-                imessage = IMessage(
+                imessage = Message(
                     chat_session=message_data.get("chat_session"),
                     message_date=message_data.get("message_date"),
                     delivered_date=message_data.get("delivered_date"),
