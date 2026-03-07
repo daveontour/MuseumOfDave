@@ -587,6 +587,19 @@ class EmailExclusions (Base):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
 
+class SavedResponse(Base):
+    """Saved chat response content for later reference."""
+
+    __tablename__ = "saved_responses"
+
+    id = Column(Integer, primary_key=True)
+    title = Column(String(500), nullable=False)
+    content = Column(Text, nullable=False)
+    voice = Column(String(100), nullable=True)
+    llm_provider = Column(String(100), nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+
+
 class AppConfiguration(Base):
     """Application configuration key-value store. Values here override .env."""
 

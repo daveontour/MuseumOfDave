@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi.templating import Jinja2Templates
 
 from src.services.subject_configuration_service import SubjectConfigurationService
+from src.services.saved_response_service import SavedResponseService
 from ..database import Database
 from ..services.gemini_service import ChatService
 from ..services.claude_service import ClaudeChatService
@@ -12,6 +13,7 @@ from ..config import get_config
 db = Database(get_config())
 
 config_service = ConfigurationService(db)
+saved_response_service = SavedResponseService(db)
 
 subject_config_service = SubjectConfigurationService(db=db, config_service=config_service)
 chat_service = ChatService(subject_config_service=subject_config_service, config_service=config_service)

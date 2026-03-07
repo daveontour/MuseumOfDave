@@ -70,6 +70,21 @@ class Database:
         except Exception as e:
             print(f"Warning: Could not apply is_referenced migration: {e}")
 
+        # Migration: add voice and llm_provider to saved_responses
+        try:
+            with self.engine.connect() as conn:
+                conn.execute(text(
+                    "ALTER TABLE saved_responses ADD COLUMN IF NOT EXISTS "
+                    "voice VARCHAR(100)"
+                ))
+                conn.execute(text(
+                    "ALTER TABLE saved_responses ADD COLUMN IF NOT EXISTS "
+                    "llm_provider VARCHAR(100)"
+                ))
+                conn.commit()
+        except Exception as e:
+            print(f"Warning: Could not apply saved_responses migration: {e}")
+
         # Create index for plain_text column
         try:
             with self.engine.connect() as conn:

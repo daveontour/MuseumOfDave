@@ -342,6 +342,16 @@ body {
     border-color: #f44336;
 }
 
+.message .save-hover-btn {
+    right: 55px;
+}
+
+.copy-hover-btn.saved {
+    background-color: #4CAF50;
+    color: white;
+    border-color: #4CAF50;
+}
+
 /* Old Copy Markdown Button (if still used, check JS) */
 .message-toolbar {
     text-align: right;
