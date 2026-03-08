@@ -209,7 +209,6 @@ const DOM = {
     closeConversationListModalBtn: document.getElementById('close-conversation-list-modal'),
     conversationListContainer: document.getElementById('conversation-list-container'),
     newConversationBtn: document.getElementById('new-conversation-btn'),
-    resumeConversationBtn: document.getElementById('resume-conversation-btn'),
     conversationIndicator: document.getElementById('conversation-indicator'),
     newConversationModal: document.getElementById('new-conversation-modal'),
     // Subject Configuration Modal elements
@@ -239,8 +238,6 @@ const DOM = {
     newConversationVoiceSelect: document.getElementById('new-conversation-voice-select'),
     createConversationBtn: document.getElementById('create-conversation-btn'),
     // Chat dictation elements
-    chatStartDictationBtn: document.getElementById('chat-start-dictation-btn'),
-    chatStopDictationBtn: document.getElementById('chat-stop-dictation-btn'),
     chatDictationStatus: document.getElementById('chat-dictation-status'),
     geoMetadataModal: document.getElementById('geo-metadata-modal'),
     geoList: document.getElementById('geo-metadata-list'),

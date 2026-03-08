@@ -98,13 +98,6 @@ const App = (() => {
             processFormSubmit(userPrompt);
         });
         
-        // Resume Conversation button
-        if (DOM.resumeConversationBtn) {
-            DOM.resumeConversationBtn.addEventListener('click', () => {
-                Modals.ConversationManager.showConversationList();
-            });
-        }
-
         DOM.userInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
@@ -1309,6 +1302,7 @@ const App = (() => {
             reference_import: { needsInput: false, title: 'Import Reference Images to Database', run: async () => { const r = await fetch('/images/import-reference', { method: 'POST' }); return r; }, stream: '/images/import-reference/stream' },
             image_export: { needsInput: true, title: 'Export Images to Filesystem', fields: [{ id: 'target_directory', key: 'image_export_directory', label: 'Target Directory', placeholder: 'e.g., C:\\Users\\Dave\\Exports\\images', required: true }], run: async (vals) => { const r = await fetch('/images/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_directory: vals.target_directory }) }); return r; }, stream: '/images/export/stream' },
             thumbnails: { needsInput: false, title: 'Image Processing', run: async () => { const r = await fetch('/images/process-thumbnails', { method: 'POST' }); return r; }, stream: '/images/process-thumbnails/stream' },
+            thumbnails_async: { needsInput: false, title: 'Image Processing (Async)', run: async () => { const r = await fetch('/images/process-thumbnails/async', { method: 'POST' }); return r; }, stream: null },
             contacts: { needsInput: false, title: 'Contacts Merge', run: async () => { const r = await fetch('/contacts/extract', { method: 'POST' }); return r; }, stream: '/contacts/extract/stream' },
             imap_processing: { needsInput: true, title: 'IMAP Import', run: async (vals) => { const body = { host: vals.host, port: vals.port, username: vals.username, password: vals.password, use_ssl: vals.use_ssl !== false, all_folders: vals.all_folders || false, folders: vals.folders && vals.folders.length ? vals.folders : (vals.all_folders ? [] : ['INBOX']), new_only: vals.new_only || false }; return await fetch('/imap/process', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }, stream: '/imap/process/stream' }
         };
@@ -1632,12 +1626,20 @@ const App = (() => {
 
             try {
                 const res = await cfg.run(values);
-                const result = await res.json();
+                let result = {};
+                try {
+                    const text = await res.text();
+                    if (text) result = JSON.parse(text);
+                } catch (_) {}
                 if (!res.ok) {
                     finishImport(importType, false, result.detail || 'Failed to start');
                     return;
                 }
-                connectToImportStream(importType);
+                if (cfg.stream) {
+                    connectToImportStream(importType);
+                } else {
+                    finishImport(importType, true, 'Accepted');
+                }
             } catch (e) {
                 finishImport(importType, false, e.message || 'Error');
             }

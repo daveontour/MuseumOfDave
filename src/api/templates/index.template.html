@@ -21,24 +21,17 @@
 
 <body>
     <div class="app-container">
-        <div class="sidebar" style="background-color: #19264d;">
-            <div class="header-container">
-                <h2>{{ page_title }}</h2>
-                <button id="hamburger-menu" class="hamburger-btn">
-                    <i class="fas fa-cog"></i>
-                </button>
+        <!-- Top Bar -->
+        <div class="top-bar" style="background-color: #19264d;">
+            <div class="top-bar-title">
+                <h2 id="top-bar-page-title">{{ page_title }}</h2>
             </div>
-
-            <div class="voice-selector">
-                <h3>Answer in the Voice Of:</h3>
-                
-                <!-- Voice Image Display -->
-                <div class="voice-image-display" style="background:none !important;">
+            <div class="top-bar-voice voice-selector">
+                <div class="top-bar-voice-image">
                     <img id="selected-voice-image" src="/static/images/expert.png" alt="Selected Voice" class="selected-voice-img">
                 </div>
-                
-                <!-- Voice Dropdown Select -->
-                <div class="voice-dropdown-container">
+                <div class="top-bar-voice-controls">
+                    <label for="voice-select" class="top-bar-label">Answer in the Voice Of:</label>
                     <select id="voice-select" name="voice">
                         <option value="owner">{{ owners }} own voice</option>
                         <option value="expert" selected>A dispassionate expert</option>
@@ -55,57 +48,54 @@
                         <option value="parents">{{owner}}'s mother and father</option>
                         <option value="preacher">A fire and brimstone preacher who disapproves of all aspects of {{owner}}'s lif</option>
                     </select>
-                </div>
-                
-                <!-- Mood Selector (for own voice) -->
-                <div id="mood-selector" style="display: none; margin-top: 10px;">
-                    <select id="owner-mood" name="owner-mood">
-                        <option value="neutral">Neutral - Just Regular</option>
-                        <option value="reflective">Reflective - Thoughtful and Contemplative</option>
-                        <option value="excited">Excited - Enthusiastic and Energetic</option>
-                        <option value="melancholic">Melancholic - Wistful and Nostalgic</option>
-                        <option value="depressed">Depressed - Hopeless and Dispondent</option>
-                        <option value="philosophical">Philosophical - Deep and Analytical</option>
-                        <option value="humorous">Humorous - Witty and Playful</option>
-                        <option value="cynical">Cynical - Skeptical and Sardonic</option>
-                        <option value="optimistic">Optimistic - Hopeful and Positive</option>
-                        <option value="analytical">Analytical - Factual and Detached</option>
-                        <option value="angry">Angry - Aggressive and Resentful</option>
-                        <option value="sad">Sad - Mournful and Melancholic</option>
-                        <option value="anxious">Anxious - Nervous and Worried</option>
-                        <option value="content">Content - Satisfied and Content</option>
-                        <option value="grateful">Grateful - Appreciative and Thankful</option>
-                    </select>
-                </div>
-
-                <div class="work-mode-container">
-                    <label class="work-mode-label">
-                        <input type="checkbox" id="companion-mode" name="companion-mode">
-                        <span>Companion Mode</span>
-                        <i class="fas fa-heart"></i>
-                    </label>
-
-                    
-                    <div class="slider-container" style="margin-top: 15px;">
-                        <label for="creativity-level">Creativity</label>
-                        <input type="range" id="creativity-level" min="0" max="2" step="0.1" value="0">
-                        <span class="value-display">0</span>
-                    </div>
-
-                    <div style="margin-top: 15px;">
-                        <label for="llm-provider-select" style="display: block; font-size: 13px; color: #555; margin-bottom: 4px;">LLM Provider</label>
-                        <select id="llm-provider-select" style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 6px 8px; font-size: 13px;">
-                            <option value="gemini" selected>Gemini</option>
-                            <option value="claude">Claude</option>
+                    <div id="mood-selector" style="display: none; margin-top: 6px;">
+                        <select id="owner-mood" name="owner-mood">
+                            <option value="neutral">Neutral - Just Regular</option>
+                            <option value="reflective">Reflective - Thoughtful and Contemplative</option>
+                            <option value="excited">Excited - Enthusiastic and Energetic</option>
+                            <option value="melancholic">Melancholic - Wistful and Nostalgic</option>
+                            <option value="depressed">Depressed - Hopeless and Dispondent</option>
+                            <option value="philosophical">Philosophical - Deep and Analytical</option>
+                            <option value="humorous">Humorous - Witty and Playful</option>
+                            <option value="cynical">Cynical - Skeptical and Sardonic</option>
+                            <option value="optimistic">Optimistic - Hopeful and Positive</option>
+                            <option value="analytical">Analytical - Factual and Detached</option>
+                            <option value="angry">Angry - Aggressive and Resentful</option>
+                            <option value="sad">Sad - Mournful and Melancholic</option>
+                            <option value="anxious">Anxious - Nervous and Worried</option>
+                            <option value="content">Content - Satisfied and Content</option>
+                            <option value="grateful">Grateful - Appreciative and Thankful</option>
                         </select>
                     </div>
-
+                </div>
+                <label class="work-mode-label">
+                    <input type="checkbox" id="companion-mode" name="companion-mode">
+                    <span>Companion Mode</span>
+                    <i class="fas fa-heart"></i>
+                </label>
+                <div class="slider-container top-bar-slider">
+                    <label for="creativity-level">Creativity</label>
+                    <input type="range" id="creativity-level" min="0" max="2" step="0.1" value="0">
+                    <span class="value-display">0</span>
                 </div>
             </div>
-            
-            <!-- More Options Section -->
+            <div class="top-bar-llm">
+                <label for="llm-provider-select" class="top-bar-label">LLM Provider</label>
+                <select id="llm-provider-select">
+                    <option value="gemini" selected>Gemini</option>
+                    <option value="claude">Claude</option>
+                </select>
+            </div>
+            <button id="hamburger-menu" class="hamburger-btn">
+                <i class="fas fa-cog"></i>
+            </button>
+        </div>
+
+        <div class="main-content">
+        <div class="sidebar sidebar-left" style="background-color: #19264d;">
+            <!-- More Options Section (Left - Media & Communication) -->
             <div class="more-options-section">
-                <h3>Explore {{owner}}'s World</h3>
+                <!-- <h3>Explore {{owner}}'s World</h3> -->
                 <div class="more-options-buttons">
                     <button type="button" class="more-options-btn" id="sms-messages-sidebar-btn">
                         <i class="fas fa-comment-dots"></i> Messages and Chats
@@ -122,41 +112,9 @@
                     <button type="button" class="more-options-btn" id="fb-posts-sidebar-btn">
                         <i class="fas fa-newspaper"></i> Facebook Posts
                     </button>
-                    <!-- <button type="button" class="more-options-btn" id="image-gallery-sidebar-btn">
-                        <i class="fas fa-photo-video"></i> Image Gallery
-                    </button> -->
                     <button type="button" class="more-options-btn" id="locations-sidebar-btn">
                         <i class="fas fa-map-marker-alt"></i> Locations
                     </button>
-
-                    <button type="button" class="more-options-btn" id="statistics-sidebar-btn">
-                        <i class="fas fa-chart-bar"></i> Statistics
-                    </button>
-                    <button type="button" class="more-options-btn" id="previous-responses-sidebar-btn">
-                        <i class="fas fa-history"></i> Previous Responses
-                    </button>
-                    <button type="button" class="more-options-btn" id="suggestions-sidebar-btn">
-                        <i class="fas fa-lightbulb"></i> Suggestions
-                    </button>
-                    <!-- <button type="button" class="more-options-btn" id="have-your-say-sidebar-btn">
-                        <i class="fas fa-microphone"></i> Have Your Say
-                    </button> -->
-                    <button type="button" class="more-options-btn" id="contacts-sidebar-btn">
-                        <i class="fas fa-address-book"></i> Contacts
-                    </button>
-                    <button type="button" class="more-options-btn" id="profiles-sidebar-btn">
-                        <i class="fas fa-id-card"></i> Profiles
-                    </button>
-                    <button type="button" class="more-options-btn" id="relationships-btn">
-                        <i class="fas fa-project-diagram"></i> Relationships
-                    </button>
-                    <button type="button" class="more-options-btn" id="artefacts-sidebar-btn">
-                        <i class="fas fa-box-open"></i> Artefacts
-                    </button>
-                    <button type="button" class="more-options-btn" id="sensitive-data-sidebar-btn">
-                        <i class="fas fa-lock"></i> Sensitive &amp; Private Data
-                    </button>
-
                 </div>
             </div>
             
@@ -166,7 +124,6 @@
 
         <div class="chat-main">
             <div class="chat-header">
-                <button id="resume-conversation-btn">Select or Start a Conversation</button>
                 <div id="conversation-indicator" style="display: none; margin-left: 1rem; padding: 0.5rem 1rem; background: #e3f2fd; border-radius: 4px; color: #1976d2; font-size: 0.9em;"></div>
             </div>
             <div id="chat-box">
@@ -214,27 +171,47 @@
 
 
             <form id="chat-form" style="background-color: #19264d;padding-left: 0px;">
-                <div style="position: relative; width: 100%;">
+                <div style="width: 100%;">
                     <textarea id="user-input" placeholder="Enter your question or comment..." rows="3" style="width: 100%;"></textarea>
-                    <div style="position: absolute; top: 50%; right: 5px; transform: translateY(-50%); display: flex; flex-direction: column; gap: 5px;">
-                        <button type="button" id="chat-start-dictation-btn" class="chat-dictation-btn" title="Start voice dictation" style="background: #90EE90; color: #2c3e50; border: none; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 14px;">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                                <path d="M5 3a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0z"/>
-                                <path d="M3.5 6.5A.5.5 0 0 1 4 7v1a4 4 0 0 0 8 0V7a.5.5 0 0 1 1 0v1a5 5 0 0 1-4.5 4.975V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 .5-.5"/>
-                            </svg>
-                        </button>
-                        <button type="button" id="chat-stop-dictation-btn" class="chat-dictation-btn" title="Stop voice dictation" style="display: none; background: #FFB6C1; color: #2c3e50; border: none; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 14px;">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                                <path d="M13 8c0 .564-.094 1.107-.266 1.613l-.814-.814A4.02 4.02 0 0 0 12 8V7a.5.5 0 0 1 1 0zm-5 4c.818 0 1.578-.245 2.212-.667l.718.719a4.973 4.973 0 0 1-2.43.923V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 1 0v1a4 4 0 0 0 4 4m3-9v4.879L5.158 2.037A3.001 3.001 0 0 1 11 3"/>
-                                <path d="M9.486 10.607 5 6.12V8a3 3 0 0 0 4.486 2.607m-7.84-9.253 12 12L1.646 2.354 1.354 2.06l-.708.708 12 12 .708-.707L2.354 1.646z"/>
-                            </svg>
-                        </button>
-                    </div>
                 </div>
                 <div id="chat-dictation-status" style="color: #b8e0f7; font-size: 12px; margin-top: 5px; min-height: 15px; margin-left: 10px;"></div>
                 <button type="submit" id="send-button" >Send</button>
             </form>
         </div>
+
+        <!-- Right Sidebar -->
+        <div class="sidebar sidebar-right" style="background-color: #19264d;">
+            <div class="more-options-section">
+                <!-- <h3>Tools &amp; Data</h3> -->
+                <div class="more-options-buttons">
+                    <button type="button" class="more-options-btn" id="statistics-sidebar-btn">
+                        <i class="fas fa-chart-bar"></i> Statistics
+                    </button>
+                    <button type="button" class="more-options-btn" id="previous-responses-sidebar-btn">
+                        <i class="fas fa-history"></i> Previous Responses
+                    </button>
+                    <button type="button" class="more-options-btn" id="suggestions-sidebar-btn">
+                        <i class="fas fa-lightbulb"></i> Suggestions
+                    </button>
+                    <button type="button" class="more-options-btn" id="contacts-sidebar-btn">
+                        <i class="fas fa-address-book"></i> Contacts
+                    </button>
+                    <button type="button" class="more-options-btn" id="profiles-sidebar-btn">
+                        <i class="fas fa-id-card"></i> Profiles
+                    </button>
+                    <button type="button" class="more-options-btn" id="relationships-btn">
+                        <i class="fas fa-project-diagram"></i> Relationships
+                    </button>
+                    <button type="button" class="more-options-btn" id="artefacts-sidebar-btn">
+                        <i class="fas fa-box-open"></i> Artefacts
+                    </button>
+                    <button type="button" class="more-options-btn" id="sensitive-data-sidebar-btn">
+                        <i class="fas fa-lock"></i> Sensitive &amp; Private Data
+                    </button>
+                </div>
+            </div>
+        </div>
+        </div><!-- end main-content -->
         
         
         <!-- Configuration Modal -->
@@ -808,6 +785,10 @@
                                     <div class="import-tile-title">Image Processing (Thumbnails and Location)</div>
                                     <div id="import-last-run-thumbnails" class="import-tile-last-run"></div>
                                     <div class="import-tile-explanation">Generate thumbnails and extract location metadata from images.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="thumbnails_async" title="Click to run">
+                                    <div class="import-tile-title">Image Processing (Async)</div>
+                                    <div class="import-tile-explanation">Start thumbnail processing in the background. No progress reporting.</div>
                                 </div>
                                 <div style="grid-column: 1 / -1; height: 15px;"></div>
                                 <div class="import-control-tile" data-import="reference_import" title="Click to run">

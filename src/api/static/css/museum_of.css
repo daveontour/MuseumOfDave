@@ -15,25 +15,172 @@ body {
 
 .app-container {
     display: flex;
+    flex-direction: column;
     width: 100%;
     height: 100%;
 }
 
+/* --- Top Bar --- */
+.top-bar {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 10px 20px;
+    flex-shrink: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    box-sizing: border-box;
+}
+
+.top-bar-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.top-bar-title h2 {
+    margin: 0;
+    font-size: 1.25em;
+    color: #fff;
+}
+
+.top-bar-voice {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+}
+
+.top-bar-voice-image {
+    flex-shrink: 0;
+}
+
+.top-bar-voice-image img {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.top-bar-voice-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.top-bar-voice-controls #voice-select,
+.top-bar-voice-controls #owner-mood {
+    width: 100%;
+    max-width: 280px;
+    min-width: 180px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.95);
+    font-size: 13px;
+}
+
+.top-bar-llm select {
+    min-width: 120px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.95);
+    font-size: 13px;
+}
+
+.top-bar-label {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.8);
+    margin: 0;
+}
+
+.top-bar-llm {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.top-bar-voice .work-mode-label {
+    color: rgba(255, 255, 255, 0.95);
+    white-space: nowrap;
+}
+
+.top-bar-voice .work-mode-label:hover {
+    color: #fff;
+}
+
+.top-bar-slider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.top-bar-slider label {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.top-bar-slider .value-display {
+    color: rgba(255, 255, 255, 0.9);
+    min-width: 28px;
+    font-size: 12px;
+}
+
+.top-bar-slider input[type="range"] {
+    width: 80px;
+    flex: none;
+}
+
+.top-bar .hamburger-btn {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 6px;
+    margin-left: auto;
+}
+
+.top-bar .hamburger-btn:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+    color: #fff;
+}
+
+.main-content {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
 /* --- Layout Components --- */
 .sidebar {
-    width: 400px;
-    min-width: 400px; /* Prevent shrinking below this width */
-    flex-shrink: 0; /* Prevent the sidebar from shrinking */
+    width: 280px;
+    min-width: 280px;
+    flex-shrink: 0;
     background-color: #e0e0e0;
-    padding: 20px;
+    padding: 10px;
     padding-top: 0px;
-    padding-bottom: 5px;
+    padding-bottom: 10px;
     border-right: 1px solid #ccc;
     display: flex;
     flex-direction: column;
-    height: 100vh; /* Full height */
-    box-sizing: border-box; /* Include padding in height */
-    overflow-y: auto; /* Allow scrolling if content is too tall */
+    height: 100%;
+    box-sizing: border-box;
+    overflow-y: auto;
+}
+
+.sidebar-right {
+    border-right: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.15);
+    min-width: 280px;
+    width: 280px;
+    padding-top: 0px;
+}
+
+.sidebar-right .more-options-section {
+    margin-top: 0;
 }
 
 .sidebar h2 {
@@ -71,14 +218,15 @@ body {
 }
 
 .chat-main {
-    flex-grow: 1; /* Takes remaining width */
+    flex-grow: 1;
     display: flex;
     flex-direction: column;
-    height: 100vh; /* Full height */
-    background-color: #e6f3ff;
-    position: relative; /* For absolute positioning of children */
-    margin-left: -1px; /* To avoid any border issues */
-    overflow: visible; /* Allow dropup to extend outside container */
+    min-width: 0;
+    height: 100%;
+    position: relative;
+    margin-left: -1px;
+    overflow: visible;
+    background-color: #19264d;
 }
 
 .chat-header {
@@ -92,6 +240,8 @@ body {
 #chat-box {
     flex-grow: 1;
     overflow-y: auto;
+    background-color: #e6f3ff;
+    border-radius: 8px;
     padding: 20px;
     padding-top: 50px; /* Add space for the fixed button */
     display: flex;
@@ -624,7 +774,8 @@ body {
 /* --- Input Form --- */
 #chat-form {
     display: flex;
-    padding: 15px;
+    padding: 10px;
+    padding-bottom: 5px;
     background-color: #f8f8f8;
     position: relative; /* Ensure proper positioning context for dropup */
     overflow: visible; /* Allow dropup to extend outside form */
@@ -633,13 +784,12 @@ body {
 #user-input {
     width: 100%;
     padding: 12px;
-    padding-right: 50px; /* Add space for the floating microphone icon */
     border: 1px solid #ccc;
     border-radius: 8px;
-    font-size: 16px;
+    font-size: 18px;
     font-family: inherit;
     resize: vertical;
-    min-height: 60px;
+    min-height: 135px;
     box-sizing: border-box;
     background-color: #fff;
     color: #333;
@@ -658,6 +808,9 @@ body {
 #chat-form button:first-of-type { /* Send button */
     background-color: #007bff;
     margin-left: 0; /* No left margin for the very first button */
+    min-width: 180px;
+    padding: 14px 32px;
+    font-size: 1.5em;
 }
 
 #chat-form button:first-of-type:hover {
@@ -672,26 +825,6 @@ body {
 
 .chat-form-button:hover {
     background-color: #a3d4f4;
-}
-
-#resume-conversation-btn {
-    background-color: #87CEEB;
-    color: white;
-    border: none;
-    padding: 9px 16px;
-    border-radius: 5px;
-    cursor: pointer;
-    white-space: nowrap;
-    font-size: 1.1em;
-    height: 38px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-#resume-conversation-btn:hover {
-    background-color: #6CA6CD;
 }
 
 /* --- UI Elements --- */
@@ -925,6 +1058,13 @@ body {
     background-color: #f5f5f5;
     border-radius: 8px;
     overflow-y: auto;
+}
+
+/* Top bar voice selector overrides */
+.top-bar .voice-selector {
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
     flex-shrink: 0; /* Changed from 1 to 0 to prevent shrinking */
     max-height: none; /* Remove max-height constraint */
 }
@@ -989,7 +1129,7 @@ body {
 
 /* More Options Section - occupies remaining vertical space with scroll for overflow */
 .more-options-section {
-    margin-top: 20px;
+    margin-top: 0px;
     padding: 15px;
     background-color: #f5f5f5;
     border-radius: 8px;
@@ -1005,43 +1145,48 @@ body {
 }
 
 .more-options-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
 }
 
 .more-options-btn {
-    width: 100%;
-    padding: 10px 12px;
+    padding: 14px 12px;
     background-color: #007bff;
     color: white;
     border: none;
-    border-radius: 6px;
-    font-size: 14px;
+    border-radius: 10px;
+    font-size: 13px;
     cursor: pointer;
-    transition: background-color 0.2s ease, transform 0.1s ease;
+    transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 8px;
-    text-align: left;
+    justify-content: center;
+    gap: 6px;
+    text-align: center;
     overflow-wrap: break-word;
     word-wrap: break-word;
-    min-width: 0; /* Allow flex item to shrink for overflow */
+    min-width: 0;
+    min-height: 64px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 }
 
 .more-options-btn:hover {
     background-color: #0056b3;
     color: white;
-    transform: translateY(-1px);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 .more-options-btn:active {
     transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
 .more-options-btn i {
-    width: 16px;
-    text-align: center;
+    font-size: 1.2em;
+    flex-shrink: 0;
 }
 
 /* Legacy radio group styles - keeping for backward compatibility */

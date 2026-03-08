@@ -10,7 +10,7 @@ import mimetypes
 from pathlib import Path
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Response, BackgroundTasks, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from sqlalchemy import or_, func, and_
@@ -1185,6 +1185,39 @@ async def start_thumbnail_processing(
         "message": "Thumbnail processing started",
         "status": "started"
     }
+
+
+@router.post("/images/process-thumbnails/async")
+async def start_thumbnail_processing_async(
+    background_tasks: BackgroundTasks,
+    reprocess: bool = False,
+):
+    """Start thumbnail processing asynchronously.
+
+    Fire-and-forget: starts processing and returns immediately with no status.
+    Use /images/process-thumbnails for a response indicating processing has started.
+
+    Args:
+        reprocess: If True, reprocess all image items including already processed (re-extract EXIF).
+
+    Raises:
+        HTTPException: 400 if processing is already in progress
+    """
+    global thumbnail_processing_in_progress
+
+    with thumbnail_processing_lock:
+        if thumbnail_processing_in_progress:
+            raise HTTPException(
+                status_code=400,
+                detail="Thumbnail processing is already in progress"
+            )
+
+    background_tasks.add_task(
+        process_thumbnails_background_subprocess,
+        reprocess,
+    )
+
+    return JSONResponse(status_code=202, content={"status": "accepted"})
 
 
 @router.get("/images/process-thumbnails/stream")
