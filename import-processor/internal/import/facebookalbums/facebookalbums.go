@@ -3,6 +3,7 @@ package facebookalbumsimport
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -71,18 +72,15 @@ func ImportFacebookAlbumsFromDirectory(
 		return nil, fmt.Errorf("path is not a directory: %s", directoryPath)
 	}
 
-	// Resolve album directory: use directory/album if it exists, else directory
-	albumDir := directoryPath
-	albumSubdir := filepath.Join(directoryPath, "album")
-	if info, err := os.Stat(albumSubdir); err == nil && info.IsDir() {
-		albumDir = albumSubdir
-	}
-
-	jsonFiles, err := filepath.Glob(filepath.Join(albumDir, "*.json"))
+	albumDirs, err := findAlbumDirsRecursive(directoryPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find JSON files: %w", err)
+		return nil, fmt.Errorf("failed to walk directory: %w", err)
 	}
 
+	var jsonFiles []string
+	for _, files := range albumDirs {
+		jsonFiles = append(jsonFiles, files...)
+	}
 	sort.Strings(jsonFiles)
 
 	stats := &ImportStats{
@@ -116,18 +114,24 @@ func ImportFacebookAlbumsFromDirectory(
 		numWorkers = 1
 	}
 
-	jsonChan := make(chan string, len(jsonFiles))
-	for _, jf := range jsonFiles {
-		jsonChan <- jf
+	type albumWork struct {
+		jsonFile string
+		albumDir string
 	}
-	close(jsonChan)
+	workChan := make(chan albumWork, len(jsonFiles))
+	for albumDir, files := range albumDirs {
+		for _, jf := range files {
+			workChan <- albumWork{jsonFile: jf, albumDir: albumDir}
+		}
+	}
+	close(workChan)
 
 	var wg sync.WaitGroup
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for jsonFile := range jsonChan {
+			for work := range workChan {
 				if cancelledCheck != nil && cancelledCheck() {
 					return
 				}
@@ -139,12 +143,12 @@ func ImportFacebookAlbumsFromDirectory(
 
 				stats.mu.Lock()
 				stats.AlbumsProcessed++
-				stats.CurrentAlbum = filepath.Base(jsonFile)
+				stats.CurrentAlbum = filepath.Base(work.jsonFile)
 				stats.mu.Unlock()
 
-				err := processAlbumJSONFile(ctx, storage, jsonFile, albumDir, stats, exportRoot, filenameCache, cancelledCheck)
+				err := processAlbumJSONFile(ctx, storage, work.jsonFile, work.albumDir, stats, exportRoot, filenameCache, cancelledCheck)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error processing album file %s: %v\n", jsonFile, err)
+					fmt.Fprintf(os.Stderr, "Error processing album file %s: %v\n", work.jsonFile, err)
 					stats.mu.Lock()
 					stats.Errors++
 					stats.mu.Unlock()
@@ -161,6 +165,49 @@ func ImportFacebookAlbumsFromDirectory(
 	return stats, nil
 }
 
+// findAlbumDirsRecursive walks directoryPath and returns a map of album directory
+// paths to their *.json file paths. Album directories are subdirs with "album" in their name.
+func findAlbumDirsRecursive(directoryPath string) (map[string][]string, error) {
+	var albumDirPaths []string
+	err := filepath.WalkDir(directoryPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		if !strings.Contains(strings.ToLower(d.Name()), "album") {
+			return nil
+		}
+		albumDirPaths = append(albumDirPaths, path)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	albumDirs := make(map[string][]string)
+	for _, dirPath := range albumDirPaths {
+		entries, err := os.ReadDir(dirPath)
+		if err != nil {
+			continue
+		}
+		var jsonFiles []string
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			if strings.HasSuffix(e.Name(), ".json") {
+				jsonFiles = append(jsonFiles, filepath.Join(dirPath, e.Name()))
+			}
+		}
+		if len(jsonFiles) > 0 {
+			albumDirs[dirPath] = jsonFiles
+		}
+	}
+	return albumDirs, nil
+}
+
 // ListFilesToProcess lists JSON files that would be processed
 func ListFilesToProcess(directoryPath string) error {
 	dirInfo, err := os.Stat(directoryPath)
@@ -171,19 +218,34 @@ func ListFilesToProcess(directoryPath string) error {
 		return fmt.Errorf("path is not a directory: %s", directoryPath)
 	}
 
-	albumDir := directoryPath
-	albumSubdir := filepath.Join(directoryPath, "album")
-	if info, err := os.Stat(albumSubdir); err == nil && info.IsDir() {
-		albumDir = albumSubdir
+	albumDirs, err := findAlbumDirsRecursive(directoryPath)
+	if err != nil {
+		return fmt.Errorf("failed to walk directory: %w", err)
 	}
 
-	jsonFiles, _ := filepath.Glob(filepath.Join(albumDir, "*.json"))
-	sort.Strings(jsonFiles)
-
-	fmt.Printf("\nFound %d album JSON file(s) in %s\n\n", len(jsonFiles), albumDir)
-	for _, jf := range jsonFiles {
-		fmt.Printf("  - %s\n", filepath.Base(jf))
+	var albumPaths []string
+	for dir := range albumDirs {
+		albumPaths = append(albumPaths, dir)
 	}
+	sort.Strings(albumPaths)
+
+	var totalJSON int
+	fmt.Printf("\nFound %d album directory(ies)\n\n", len(albumPaths))
+	for _, albumDir := range albumPaths {
+		jsonFiles := albumDirs[albumDir]
+		sort.Strings(jsonFiles)
+		totalJSON += len(jsonFiles)
+		relName, _ := filepath.Rel(directoryPath, albumDir)
+		if relName == "." {
+			relName = filepath.Base(albumDir)
+		}
+		fmt.Printf("Album dir: %s\n  JSON files (%d):\n", relName, len(jsonFiles))
+		for _, jf := range jsonFiles {
+			fmt.Printf("    - %s\n", filepath.Base(jf))
+		}
+		fmt.Println()
+	}
+	fmt.Printf("Total: %d album dir(s), %d JSON file(s)\n", len(albumPaths), totalJSON)
 	return nil
 }
 

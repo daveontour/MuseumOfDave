@@ -326,16 +326,16 @@ class ChatService(BaseChatService):
 
     def __init__(self, subject_config_service=None, config_service=None):
         print("[GeminiChatService.__init__] Starting initialization...")
+        
         _get = config_service.get if config_service else os.getenv
         api_key = _get("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY environment variable is not set")
         model_name = _get("GEMINI_MODEL_NAME", "gemini-2.5-flash") or "gemini-2.5-flash"
-        print(f"[GeminiChatService.__init__] Using model: {model_name}")
         self.client = genai.Client(api_key=api_key)
         self.model_name = model_name
         super().__init__(subject_config_service, config_service)
-        print("[GeminiChatService.__init__] Initialization complete")
+        print(f"[GeminiChatService.__init__] Initialization complete. Using model: {model_name}")
 
     def _upload_file_to_gemini(self, doc: ReferenceDocument, db: Optional[Database] = None) -> Optional[Any]:
         """Upload a reference document to Gemini File API and return the File object.

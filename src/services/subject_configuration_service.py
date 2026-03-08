@@ -455,16 +455,27 @@ class SubjectConfigurationService:
                 # Create new configuration with both instructions from files
                 chat_instructions = self._load_chat_instructions_from_file()
 
+                # #get the default subject name and family name from config (DB-first, env-fallback)
+                # _get = self._config_service.get if self._config_service else os.getenv
+                # default_subject_name = _get("DEFAULT_SUBJECT_NAME")
+                # default_subject_family_name = _get("DEFAULT_SUBJECT_FAMILY_NAME")
+                # default_gender = _get("DEFAULT_SUBJECT_GENDER")
+
+                # configuration = SubjectConfiguration(
+                #     subject_name=default_subject_name,  # Default subject name
+                #     gender=default_gender,  # Default gender
+                #     family_name=default_subject_family_name,  # Default family name
+                #     system_instructions=chat_instructions,
+                #     core_system_instructions=core_instructions
+                # )
+
                 #get the default subject name and family name from config (DB-first, env-fallback)
-                _get = self._config_service.get if self._config_service else os.getenv
-                default_subject_name = _get("DEFAULT_SUBJECT_NAME")
-                default_subject_family_name = _get("DEFAULT_SUBJECT_FAMILY_NAME")
-                default_gender = _get("DEFAULT_SUBJECT_GENDER")
+
 
                 configuration = SubjectConfiguration(
-                    subject_name=default_subject_name,  # Default subject name
-                    gender=default_gender,  # Default gender
-                    family_name=default_subject_family_name,  # Default family name
+                    subject_name="", 
+                    gender="Male",  # Default gender
+                    family_name="", 
                     system_instructions=chat_instructions,
                     core_system_instructions=core_instructions
                 )

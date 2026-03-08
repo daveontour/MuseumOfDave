@@ -209,8 +209,8 @@ func (s *MessageStorage) saveAttachment(ctx context.Context, tx pgx.Tx, messageI
 		media_blob_id, tags, source, source_reference, title, description,
 		media_type, year, month, latitude, longitude, altitude, has_gps,
 		processed, available_for_task, rating, is_personal, is_business,
-		is_social, is_promotional, is_spam, is_important, created_at, updated_at
-	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, NOW(), NOW())
+		is_social, is_promotional, is_spam, is_important, created_at, updated_at, is_referenced
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, NOW(), NOW(), False)
 	RETURNING id`
 
 	err = tx.QueryRow(ctx, insertMetadataQuery,

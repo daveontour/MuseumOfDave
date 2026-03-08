@@ -13,7 +13,7 @@ from ...database.models import CompleteProfile
 from ...services.exceptions import ValidationError, NotFoundError
 from ...services.gemini_service import GeminiService
 from ...services.chat_conversation_service import ChatConversationService
-from ..deps import db, chat_service, claude_chat_service, subject_config_service
+from ..deps import db, chat_service, claude_chat_service, subject_config_service, gemini_available, claude_available
 from ..state import (
     conversation_summary_lock,
     conversation_summary_in_progress,
@@ -82,6 +82,15 @@ class SubjectConfigurationRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Chat routes
 # ---------------------------------------------------------------------------
+
+@router.get("/chat/availability")
+async def get_chat_availability():
+    """Return availability of Gemini and Claude chat services."""
+    return {
+        "gemini_available": gemini_available,
+        "claude_available": claude_available,
+    }
+
 
 @router.post("/chat/generate", response_model=ChatResponse)
 async def generate_chat_response(request: ChatRequest):
@@ -642,8 +651,11 @@ async def create_or_update_subject_configuration(request: SubjectConfigurationRe
             instagram_handle=request.instagram_handle
         )
 
-        # Reload system prompt in chat service to use new configuration
-        chat_service.reload_system_prompt(db=db)
+        # Reload system prompt in chat services to use new configuration (if available)
+        if chat_service:
+            chat_service.reload_system_prompt(db=db)
+        if claude_chat_service:
+            claude_chat_service.reload_system_prompt(db=db)
 
         return {
             "id": configuration.id,

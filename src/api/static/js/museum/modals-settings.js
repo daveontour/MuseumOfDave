@@ -2766,6 +2766,15 @@ Modals.SaveResponseTitle = (() => {
 Modals.PreviousResponses = (() => {
     let currentId = null;
 
+    function _formatDateDMY(dateString) {
+        if (!dateString) return '';
+        try {
+            const d = new Date(dateString);
+            if (isNaN(d.getTime())) return '';
+            return d.toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        } catch (e) { return ''; }
+    }
+
     function _esc(s) {
         return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
@@ -2804,7 +2813,7 @@ Modals.PreviousResponses = (() => {
                 titleSpan.textContent = item.title;
                 titleSpan.style.fontWeight = '500';
                 const dateSpan = document.createElement('span');
-                dateSpan.textContent = item.created_at ? new Date(item.created_at).toLocaleString() : '';
+                dateSpan.textContent = _formatDateDMY(item.created_at);
                 dateSpan.style.color = '#666'; dateSpan.style.fontSize = '0.9em';
                 topRow.appendChild(titleSpan);
                 topRow.appendChild(dateSpan);
@@ -2834,7 +2843,7 @@ Modals.PreviousResponses = (() => {
             document.getElementById('previous-responses-detail-title').textContent = item.title;
             const metaEl = document.getElementById('previous-responses-detail-meta');
             const metaParts = [];
-            if (item.created_at) metaParts.push('Saved: ' + new Date(item.created_at).toLocaleString());
+            if (item.created_at) metaParts.push('Saved: ' + _formatDateDMY(item.created_at));
             if (item.voice) metaParts.push('Voice: ' + item.voice);
             if (item.llm_provider) metaParts.push('LLM: ' + item.llm_provider);
             metaEl.textContent = metaParts.length ? metaParts.join(' · ') : '';

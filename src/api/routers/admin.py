@@ -1,6 +1,5 @@
 """Admin, system, and utility routes."""
 import json
-import os
 import platform
 from datetime import datetime
 from pathlib import Path
@@ -9,6 +8,8 @@ from sqlalchemy import func, extract
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
+from ..deps import db, chat_service, claude_chat_service, subject_config_service, gemini_available, claude_available
+
 
 from ...database.models import (
     ImportControlLastRun,
@@ -102,24 +103,25 @@ async def root(request: Request):
     """Serve the new page."""
 
     platform_name = platform.system()
-    if platform_name == "Windows":
-        print("Windows platform detected")
-    else:
-        print("Linux platform detected")
+
 
     subject_context = get_subject_template_context()
-    page_title = os.getenv("PAGE_TITLE", "Digital Museum of SUBJECT_NAME")
+    page_title = config_service.get("PAGE_TITLE", "Digital Museum of SUBJECT_NAME")
     page_title = page_title.replace("SUBJECT_NAME", subject_context["owner"])
 
     subject_configuration = subject_config_service.get_configuration()
     is_subject_not_init = (
         subject_configuration is not None  
-        and subject_configuration.subject_name == "-"
-        and subject_configuration.family_name == "-"
+        and subject_configuration.subject_name == ""
+        and subject_configuration.family_name == ""
     )
     template_name = "non_user_init.template.html" if is_subject_not_init else "index.template.html"
 
-    print(f"Page title: {page_title}")
+    #check if gemini and claude are available and set the template_name accordingly
+
+
+
+    
     return templates.TemplateResponse(
         template_name,
         {"request": request, "page_title": page_title, **subject_context}
@@ -145,6 +147,15 @@ async def get_foundation_js():
     content = path.read_text(encoding="utf-8")
     template = templates.env.from_string(content)
     subject_context = get_subject_template_context()
+    if gemini_available:
+        subject_context["gemini_configured"] = "True"
+    else:
+        subject_context["gemini_configured"] = "False"
+          
+    if claude_available:
+        subject_context["claude_configured"] = "True"
+    else:
+        subject_context["claude_configured"] = "False"
     rendered = template.render(
         **subject_context
     )

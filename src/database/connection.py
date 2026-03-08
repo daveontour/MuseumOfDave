@@ -59,31 +59,6 @@ class Database:
         from .models import Base
         Base.metadata.create_all(self.engine)
 
-        # Migrations for columns added after initial schema
-        try:
-            with self.engine.connect() as conn:
-                conn.execute(text(
-                    "ALTER TABLE media_items ADD COLUMN IF NOT EXISTS "
-                    "is_referenced BOOLEAN NOT NULL DEFAULT FALSE"
-                ))
-                conn.commit()
-        except Exception as e:
-            print(f"Warning: Could not apply is_referenced migration: {e}")
-
-        # Migration: add voice and llm_provider to saved_responses
-        try:
-            with self.engine.connect() as conn:
-                conn.execute(text(
-                    "ALTER TABLE saved_responses ADD COLUMN IF NOT EXISTS "
-                    "voice VARCHAR(100)"
-                ))
-                conn.execute(text(
-                    "ALTER TABLE saved_responses ADD COLUMN IF NOT EXISTS "
-                    "llm_provider VARCHAR(100)"
-                ))
-                conn.commit()
-        except Exception as e:
-            print(f"Warning: Could not apply saved_responses migration: {e}")
 
         # Create index for plain_text column
         try:
@@ -207,7 +182,7 @@ class Database:
                     $$ LANGUAGE plpgsql;
                 """))
                 conn.commit()
-                print("Created/updated update_location_regions() function.")
+                print("Created/updated update_image_location_regions() function.")
         except Exception as e:
             # Log error but don't fail - function creation is optional
             print(f"Warning: Could not create update_location_regions() function: {e}")

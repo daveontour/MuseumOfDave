@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -91,20 +92,19 @@ func ImportFacebookFromDirectory(
 	storage := database.NewMessageStorage(db)
 	subjectService := services.NewSubjectConfigurationService(db)
 
-	entries, err := os.ReadDir(directoryPath)
+	convDirs, err := findConversationDirsRecursive(directoryPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read directory: %w", err)
+		return nil, fmt.Errorf("failed to walk directory: %w", err)
 	}
 
-	totalConversations := 0
-	for _, entry := range entries {
-		if entry.IsDir() {
-			totalConversations++
-		}
+	var conversationPaths []string
+	for dir := range convDirs {
+		conversationPaths = append(conversationPaths, dir)
 	}
+	sort.Strings(conversationPaths)
 
 	stats := &ImportStats{
-		TotalConversations:         totalConversations,
+		TotalConversations:         len(conversationPaths),
 		MissingAttachmentFilenames: []string{},
 		AttachmentErrors:           []string{},
 	}
@@ -125,29 +125,27 @@ func ImportFacebookFromDirectory(
 		}
 	}
 
-	var conversationDirs []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			conversationDirs = append(conversationDirs, entry.Name())
-		}
-	}
-
 	numWorkers := runtime.NumCPU()
-	if numWorkers > len(conversationDirs) {
-		numWorkers = len(conversationDirs)
+	if numWorkers > len(conversationPaths) {
+		numWorkers = len(conversationPaths)
 	}
 	if numWorkers < 1 {
 		numWorkers = 1
 	}
 
-	conversationChan := make(chan string, len(conversationDirs))
+	type conversationWork struct {
+		subdirPath       string
+		conversationName string
+		jsonFiles        []string
+	}
+	conversationChan := make(chan conversationWork, len(conversationPaths))
 	var wg sync.WaitGroup
 
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for conversationName := range conversationChan {
+			for work := range conversationChan {
 				if cancelledCheck != nil && cancelledCheck() {
 					return
 				}
@@ -159,19 +157,12 @@ func ImportFacebookFromDirectory(
 
 				stats.mu.Lock()
 				stats.ConversationsProcessed++
-				stats.CurrentConversation = conversationName
+				stats.CurrentConversation = work.conversationName
 				stats.mu.Unlock()
 
-				subdirPath := filepath.Join(directoryPath, conversationName)
-
-				jsonFiles, err := filepath.Glob(filepath.Join(subdirPath, "message_*.json"))
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error finding JSON files in %s: %v\n", conversationName, err)
-					stats.mu.Lock()
-					stats.Errors++
-					stats.mu.Unlock()
-					continue
-				}
+				subdirPath := work.subdirPath
+				conversationName := work.conversationName
+				jsonFiles := work.jsonFiles
 
 				if len(jsonFiles) == 0 {
 					if progressCallback != nil {
@@ -211,8 +202,13 @@ func ImportFacebookFromDirectory(
 		}()
 	}
 
-	for _, conversationName := range conversationDirs {
-		conversationChan <- conversationName
+	for _, subdirPath := range conversationPaths {
+		jsonFiles := convDirs[subdirPath]
+		relName, _ := filepath.Rel(directoryPath, subdirPath)
+		if relName == "." {
+			relName = filepath.Base(subdirPath)
+		}
+		conversationChan <- conversationWork{subdirPath: subdirPath, conversationName: relName, jsonFiles: jsonFiles}
 	}
 	close(conversationChan)
 	wg.Wait()
@@ -231,6 +227,30 @@ func ImportFacebookFromDirectory(
 	return stats, nil
 }
 
+// findConversationDirsRecursive walks directoryPath recursively and returns a map of
+// conversation directory paths (absolute) to their message_*.json file paths.
+func findConversationDirsRecursive(directoryPath string) (map[string][]string, error) {
+	convDirs := make(map[string][]string)
+	err := filepath.WalkDir(directoryPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		name := d.Name()
+		if strings.HasPrefix(name, "message_") && strings.HasSuffix(name, ".json") {
+			dir := filepath.Dir(path)
+			convDirs[dir] = append(convDirs[dir], path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return convDirs, nil
+}
+
 // ListFilesToProcess lists JSON files that would be processed
 func ListFilesToProcess(directoryPath string) error {
 	dirInfo, err := os.Stat(directoryPath)
@@ -241,44 +261,42 @@ func ListFilesToProcess(directoryPath string) error {
 		return fmt.Errorf("path is not a directory: %s", directoryPath)
 	}
 
-	entries, err := os.ReadDir(directoryPath)
+	convDirs, err := findConversationDirsRecursive(directoryPath)
 	if err != nil {
-		return fmt.Errorf("failed to read directory: %w", err)
+		return fmt.Errorf("failed to walk directory: %w", err)
 	}
 
-	var conversationDirs []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			conversationDirs = append(conversationDirs, entry.Name())
-		}
+	var conversationPaths []string
+	for dir := range convDirs {
+		conversationPaths = append(conversationPaths, dir)
 	}
-	sort.Strings(conversationDirs)
+	sort.Strings(conversationPaths)
 
-	fmt.Printf("\nFound %d conversation directory(ies)\n\n", len(conversationDirs))
+	fmt.Printf("\nFound %d conversation directory(ies)\n\n", len(conversationPaths))
 
 	var totalJSON int
-	for _, name := range conversationDirs {
-		subdirPath := filepath.Join(directoryPath, name)
-		jsonFiles, _ := filepath.Glob(filepath.Join(subdirPath, "message_*.json"))
+	for _, subdirPath := range conversationPaths {
+		jsonFiles := convDirs[subdirPath]
 		sort.Slice(jsonFiles, func(i, j int) bool {
 			return extractMessageNumber(jsonFiles[i]) < extractMessageNumber(jsonFiles[j])
 		})
 
-		if len(jsonFiles) == 0 {
-			fmt.Printf("Conversation: %s\n  No JSON files found\n\n", name)
-			continue
+		relName, _ := filepath.Rel(directoryPath, subdirPath)
+		if relName == "." {
+			relName = filepath.Base(subdirPath)
 		}
 
-		fmt.Printf("Conversation: %s\n  JSON files (%d):\n", name, len(jsonFiles))
+		// fmt.Printf("Conversation: %s\n  JSON files (%d):\n", relName, len(jsonFiles))
 		for _, jf := range jsonFiles {
 			rel, _ := filepath.Rel(directoryPath, jf)
-			fmt.Printf("    - %s\n", rel)
+			// fmt.Printf("    - %s\n", rel)
+			fmt.Printf("Process File: %s\n", rel)
 		}
 		fmt.Println()
 		totalJSON += len(jsonFiles)
 	}
 
-	fmt.Printf("Total: %d conversation(s), %d JSON file(s)\n", len(conversationDirs), totalJSON)
+	fmt.Printf("Total: %d conversation(s), %d JSON file(s)\n", len(conversationPaths), totalJSON)
 	return nil
 }
 

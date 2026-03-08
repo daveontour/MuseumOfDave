@@ -1814,6 +1814,26 @@ const App = (() => {
 
     }
 
+    async function loadLLMProviderAvailability() {
+        const select = DOM.llmProviderSelect;
+        if (!select) return;
+        try {
+            const res = await fetch('/chat/availability');
+            if (!res.ok) return;
+            const { gemini_available, claude_available } = await res.json();
+            const geminiOpt = select.querySelector('option[value="gemini"]');
+            const claudeOpt = select.querySelector('option[value="claude"]');
+            if (geminiOpt) geminiOpt.disabled = !gemini_available;
+            if (claudeOpt) claudeOpt.disabled = !claude_available;
+            const current = select.value;
+            if ((current === 'gemini' && !gemini_available) || (current === 'claude' && !claude_available)) {
+                select.value = gemini_available ? 'gemini' : (claude_available ? 'claude' : 'gemini');
+            }
+        } catch (e) {
+            console.error('Failed to load LLM availability:', e);
+        }
+    }
+
     function init() {
         // Info box modal: set up close first (before other inits that might throw)
         window.closeInfoBoxModal = function() {
@@ -1821,6 +1841,15 @@ const App = (() => {
             if (modal) {
                 modal.classList.add('info-box-modal-closed');
                 if (typeof UI !== 'undefined' && UI.setControlsEnabled) UI.setControlsEnabled(true);
+            }
+            const geminiOk = CONSTANTS.LLM_PROVIDERS && CONSTANTS.LLM_PROVIDERS.GEMINI === 'True';
+            const claudeOk = CONSTANTS.LLM_PROVIDERS && CONSTANTS.LLM_PROVIDERS.CLAUDE === 'True';
+            if (!geminiOk && !claudeOk && Modals.ConfirmationModal) {
+                Modals.ConfirmationModal.open(
+                    'No AI Provider Available',
+                    'No LLM provider is available. AI functions will not be available until at least one API key (Gemini or Anthropic) is configured in the Application Configuration.',
+                    undefined
+                );
             }
         };
         const infoBoxModal = document.getElementById('info-box-modal');
@@ -1839,7 +1868,8 @@ const App = (() => {
         //SSE.init();
         //InterviewerMode.init(); // Initialize interviewer mode
         initEventListeners(); // Attach main app event listeners
-         window.onbeforeunload = () => { SSE.close(); };
+        loadLLMProviderAvailability();
+        window.onbeforeunload = () => { SSE.close(); };
     }
     return { init, processFormSubmit };
 })();

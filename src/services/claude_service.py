@@ -34,10 +34,9 @@ class ClaudeChatService(BaseChatService):
 
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model_name = _get("CLAUDE_MODEL_NAME", "claude-sonnet-4-6") or "claude-sonnet-4-6"
-        print(f"[ClaudeChatService.__init__] Using model: {self.model_name}")
-
+    
         super().__init__(subject_config_service, config_service)
-        print("[ClaudeChatService.__init__] Initialization complete")
+        print(f"[ClaudeChatService.__init__] Initialization complete. Using model: {self.model_name}")
 
     # ------------------------------------------------------------------
     # Tool declarations — Anthropic format

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"os/signal"
@@ -42,6 +43,7 @@ Commands:
   filesystem        Import images from filesystem directories
   thumbnails        Process thumbnails and EXIF for media items
   contacts        Merge contact records (emails/names) into normalized output
+  list-files       Walk a directory and list all files
 
 Run "import-processor <command> -h" for options per command.
 `
@@ -72,6 +74,8 @@ func main() {
 		runThumbnails()
 	case "contacts":
 		runContactsNormalise()
+	case "list-files":
+		runListFiles()
 	case "-h", "--help", "help":
 		fmt.Print(helpSummary)
 		os.Exit(0)
@@ -1115,6 +1119,39 @@ func runThumbnails() {
 
 	if err := processThumbnailsAndExif(ctx, db, *reprocess); err != nil {
 		log.Fatalf("Failed to process thumbnails: %v", err)
+	}
+}
+
+func runListFiles() {
+	flagSet := flag.NewFlagSet("list-files", flag.ExitOnError)
+	path := flagSet.String("path", "", "Directory to walk and list files from")
+	flagSet.Parse(os.Args[2:])
+
+	directory := strings.TrimSpace(*path)
+	if directory == "" {
+		log.Fatalf("No directory specified. Use --path <directory>")
+	}
+
+	info, err := os.Stat(directory)
+	if err != nil {
+		log.Fatalf("Failed to access path: %v", err)
+	}
+	if !info.IsDir() {
+		log.Fatalf("Path is not a directory: %s", directory)
+	}
+
+	err = filepath.WalkDir(directory, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		fmt.Println(path)
+		return nil
+	})
+	if err != nil {
+		log.Fatalf("Failed to walk directory: %v", err)
 	}
 }
 

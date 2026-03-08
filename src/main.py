@@ -4,6 +4,7 @@ Creates database tables and starts the API server.
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -15,10 +16,6 @@ if str(_root) not in sys.path:
 import uvicorn
 from src.database import Database
 from src.config import get_config
-from src.api import app
-
-from src.services.gemini_service import ChatService
-from src.services.relationship_service import RelationshipService
 
 
 def main(test: bool = False):
@@ -31,35 +28,21 @@ def main(test: bool = False):
     db.create_tables()
     print("Database tables created/verified.")
 
-    if test:
-        print("Running in test mode")
-        test_gemini_service(db)
-    else:
-        from src.api.deps import subject_config_service, config_service
-        seeded = config_service.seed_from_env()
-        if seeded:
-            print(f"Configuration: seeded {seeded} key(s) from .env")
-        subject_config_service.initialize_from_files()
-        print("Subject configuration initialized from files.")
+    # Import app after tables exist so config_service queries succeed
+    from src.api import app
+    from src.api.deps import subject_config_service, config_service
 
-        print("Starting API server on http://0.0.0.0:8000")
-        print("API documentation available at http://localhost:8000/docs")
-        uvicorn.run(app, host="0.0.0.0", port=8000)
+    seeded = config_service.seed_from_env()
+    if seeded:
+        print(f"Configuration: seeded {seeded} key(s) from .env")
+    subject_config_service.initialize_from_files()
 
-
-def testContactExtract():
-    """Test the contact extraction service."""
-    config = get_config()
-    db = Database(config)
-    relationship_service = RelationshipService(db=db)
-    relationship_service.merge_duplicate_email_contacts()
-
-
-def test_gemini_service(db: Database):
-    """Test the Gemini service."""
-    chat_service = ChatService()
-    chat_service.set_database(db=db)
-    chat_service.get_complete_profile_by_name("Dave Burton")
+    port = int(os.getenv("HOST_PORT", "8000"))
+    print("Subject configuration initialized from files.")
+    print(f"Starting API server on http://0.0.0.0:{port}")
+    print(f"API documentation available at http://localhost:{port}/docs")
+    
+    uvicorn.run(app, host="0.0.0.0", port=port)
 
 
 if __name__ == "__main__":

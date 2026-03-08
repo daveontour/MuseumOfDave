@@ -75,6 +75,10 @@ const CONSTANTS = {
     },
     LOCAL_STORAGE_KEYS: {
         CHAT_SETTINGS: 'chatSettings'
+    },
+    LLM_PROVIDERS: {
+        GEMINI: "{{gemini_configured}}",
+        CLAUDE: "{{claude_configured}}"
     }
 };
 
