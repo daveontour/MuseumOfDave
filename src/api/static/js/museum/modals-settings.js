@@ -1834,6 +1834,7 @@ Modals.ManageKeys = (() => {
 Modals.initAll = () => {
         Modals.Suggestions.init();
         Modals.FBAlbums.init();
+        Modals.FBPosts.init();
         Modals.ImageDetailModal.init();
         Modals.MultiImageDisplay.init();
         //Modals.HaveYourSay.init();

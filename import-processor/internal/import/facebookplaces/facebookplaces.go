@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"import-processor/internal/database"
@@ -122,17 +124,23 @@ func ImportFacebookPlacesFromFile(ctx context.Context, db *database.DB, filePath
 
 // ImportFacebookPlacesFromDirectory imports places from all JSON files in a directory
 func ImportFacebookPlacesFromDirectory(ctx context.Context, db *database.DB, directoryPath string, progressCallback ProgressCallback, cancelledCheck CancelledCheck) (*ImportStats, error) {
-	entries, err := os.ReadDir(directoryPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read directory: %w", err)
-	}
-
 	var jsonFiles []string
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ".json") {
-			jsonFiles = append(jsonFiles, filepath.Join(directoryPath, e.Name()))
+	err := filepath.WalkDir(directoryPath, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
+		if d.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(strings.ToLower(d.Name()), ".json") {
+			jsonFiles = append(jsonFiles, p)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to walk directory: %w", err)
 	}
+	sort.Strings(jsonFiles)
 
 	aggStats := &ImportStats{Errors: []string{}}
 

@@ -207,6 +207,37 @@ class FacebookAlbum(Base):
     media_items = relationship("AlbumMedia", back_populates="album", cascade="all, delete-orphan")
 
 
+class FacebookPost(Base):
+    """Facebook Post model — status updates, shared links, and photo/video posts."""
+
+    __tablename__ = "facebook_posts"
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, nullable=True)
+    title = Column(String(500), nullable=True)
+    post_text = Column(Text, nullable=True)
+    external_url = Column(String(2000), nullable=True)
+    post_type = Column(String(50), nullable=True)  # 'status', 'link', 'photo', 'mixed'
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    post_media = relationship("PostMedia", back_populates="post", cascade="all, delete-orphan")
+
+
+class PostMedia(Base):
+    """Junction table linking Facebook posts to media items."""
+
+    __tablename__ = "post_media"
+
+    id = Column(Integer, primary_key=True)
+    post_id = Column(Integer, ForeignKey("facebook_posts.id", ondelete="CASCADE"), nullable=False)
+    media_item_id = Column(Integer, ForeignKey("media_items.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
+    post = relationship("FacebookPost", back_populates="post_media")
+    media_item = relationship("MediaMetadata", foreign_keys=[media_item_id])
+
+
 class ReferenceDocument(Base):
     """Reference Document model."""
 

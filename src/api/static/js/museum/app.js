@@ -1202,6 +1202,8 @@ const App = (() => {
             imessage: '/imessages/import/cancel',
             facebook_albums: '/facebook/albums/import/cancel',
             facebook_places: '/facebook/import-places/cancel',
+            facebook_posts: '/facebook/posts/import/cancel',
+            facebook_all: '/facebook/all/import/cancel',
             filesystem: '/images/import/cancel',
             reference_import: '/images/import-reference/cancel',
             image_export: '/images/export/cancel',
@@ -1256,6 +1258,10 @@ const App = (() => {
                     return `Album: ${data.current_album || '-'} | ${data.albums_processed || 0}/${data.total_albums || 0} | ${data.images_imported || 0} imported, ${data.images_found || 0} found, ${data.images_missing || 0} missing | ${data.errors || 0} errors`;
                 case 'facebook_places':
                     return data.status_line || `Places: ${data.places_imported || 0} imported`;
+                case 'facebook_posts':
+                    return `Post: ${data.current_post || '-'} | ${data.posts_processed || 0}/${data.total_posts || 0} | ${data.posts_imported || 0} new, ${data.posts_updated || 0} updated | ${data.with_media || 0} with media, ${data.images_imported || 0} images | ${data.errors || 0} errors`;
+                case 'facebook_all':
+                    return data.status_line || 'Running...';
                 case 'filesystem':
                     return `File: ${data.current_file || '-'} | ${data.files_processed || 0}/${data.total_files || 0} | ${data.images_imported || 0} imported, ${data.images_referenced || 0} referenced, ${data.images_updated || 0} updated | ${data.errors || 0} errors`;
                 case 'reference_import':
@@ -1297,6 +1303,8 @@ const App = (() => {
             imessage: { needsInput: true, title: 'iMessage Import', fields: [{ id: 'directory_path', key: 'imessage_directory_path', label: 'Directory Path', placeholder: 'Path to iMessage conversation subdirectories', required: true }], run: async (vals) => { const r = await fetch('/imessages/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ directory_path: vals.directory_path }) }); return r; }, stream: '/imessages/import/stream' },
             facebook_albums: { needsInput: true, title: 'Facebook Albums Import', fields: [{ id: 'directory_path', key: 'facebook_albums_import_directory', label: 'Export Directory', placeholder: 'e.g., G:\\My Drive\\meta-2026-Jan-11\\your_facebook_activity\\posts', required: true }], run: async (vals) => { const r = await fetch('/facebook/albums/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ directory_path: vals.directory_path }) }); return r; }, stream: '/facebook/albums/import/stream' },
             facebook_places: { needsInput: true, title: 'Facebook Places Import', fields: [{ id: 'file_path', key: 'facebook_places_import_file', label: 'Facebook Posts JSON File', placeholder: 'e.g., G:\\My Drive\\meta-2026-Jan-11\\your_posts__check_ins__photos_and_videos_1.json', required: true }], run: async (vals) => { const r = await fetch('/facebook/import-places', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_path: vals.file_path }) }); return r; }, stream: '/facebook/import-places/stream' },
+            facebook_posts: { needsInput: true, title: 'Facebook Posts Import', fields: [{ id: 'file_path', key: 'facebook_posts_import_path', label: 'Posts JSON File or Directory', placeholder: 'e.g., G:\\My Drive\\meta-2026-Jan-11\\your_posts__check_ins__photos_and_videos_1.json', required: true }, { id: 'export_root', key: 'facebook_posts_export_root', label: 'Export Root (Optional — auto-detected if blank)', placeholder: 'e.g., G:\\My Drive\\meta-2026-Jan-11', required: false }], run: async (vals) => { const r = await fetch('/facebook/posts/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_path: vals.file_path, export_root: vals.export_root || null }) }); return r; }, stream: '/facebook/posts/import/stream' },
+            facebook_all: { needsInput: true, title: 'Facebook Full Import', fields: [{ id: 'directory_path', key: 'facebook_all_directory_path', label: 'Facebook Export Root Directory', placeholder: 'e.g., G:\\My Drive\\meta-2026-Jan-11', required: true }, { id: 'user_name', key: 'facebook_all_user_name', label: 'Your Name (for Messenger classification, optional)', placeholder: 'e.g., Dave', required: false }], run: async (vals) => { const r = await fetch('/facebook/all/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ directory_path: vals.directory_path, user_name: vals.user_name || null }) }); return r; }, stream: '/facebook/all/import/stream' },
             filesystem: { needsInput: true, title: 'Filesystem Image Import', fields: [{ id: 'root_directory', key: 'filesystem_import_directory', label: 'Root Directory(ies)', placeholder: 'e.g., C:\\Users\\Dave\\Pictures; D:\\Photos', required: true }, { id: 'max_images', key: 'filesystem_import_max_images', label: 'Max Images (Optional)', placeholder: 'Leave empty for all', required: false, type: 'number' }, { id: 'reference_mode', key: 'filesystem_import_reference_mode', label: 'Reference only — leave images on filesystem', required: false, type: 'checkbox' }], run: async (vals) => { const body = { root_directory: vals.root_directory, create_thumb_and_get_exif: false, reference_mode: !!vals.reference_mode }; if (vals.max_images) body.max_images = parseInt(vals.max_images, 10); const r = await fetch('/images/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return r; }, stream: '/images/import/stream' },
             reference_import: { needsInput: false, title: 'Import Reference Images to Database', run: async () => { const r = await fetch('/images/import-reference', { method: 'POST' }); return r; }, stream: '/images/import-reference/stream' },
             image_export: { needsInput: true, title: 'Export Images to Filesystem', fields: [{ id: 'target_directory', key: 'image_export_directory', label: 'Target Directory', placeholder: 'e.g., C:\\Users\\Dave\\Exports\\images', required: true }], run: async (vals) => { const r = await fetch('/images/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_directory: vals.target_directory }) }); return r; }, stream: '/images/export/stream' },
@@ -1704,6 +1712,11 @@ const App = (() => {
         if (DOM.fbAlbumsSidebarBtn) {
             DOM.fbAlbumsSidebarBtn.addEventListener('click', () => {
                 Modals.FBAlbums.open();
+            });
+        }
+        if (DOM.fbPostsSidebarBtn) {
+            DOM.fbPostsSidebarBtn.addEventListener('click', () => {
+                Modals.FBPosts.open();
             });
         }
 

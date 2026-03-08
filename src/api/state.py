@@ -1003,3 +1003,162 @@ def broadcast_imap_progress_event_sync(event_type: str, data: Dict[str, Any]):
         for client in disconnected_clients:
             if client in imap_sse_clients:
                 imap_sse_clients.remove(client)
+
+
+# ---------------------------------------------------------------------------
+# Facebook Posts import state
+# ---------------------------------------------------------------------------
+
+facebook_posts_import_lock = threading.Lock()
+facebook_posts_import_cancelled = threading.Event()
+facebook_posts_import_in_progress = False
+
+facebook_posts_import_progress: Dict[str, Any] = {
+    "current_post": None,
+    "posts_processed": 0,
+    "total_posts": 0,
+    "posts_imported": 0,
+    "posts_updated": 0,
+    "with_media": 0,
+    "images_imported": 0,
+    "images_found": 0,
+    "images_missing": 0,
+    "errors": 0,
+    "status": "idle",  # idle, in_progress, completed, cancelled, error
+    "error_message": None,
+    "status_line": None,
+}
+
+facebook_posts_sse_clients: List[asyncio.Queue] = []
+facebook_posts_sse_clients_lock = threading.Lock()
+
+
+def update_facebook_posts_progress_state(**kwargs):
+    """Thread-safe function to update Facebook Posts import progress state."""
+    global facebook_posts_import_progress
+    with facebook_posts_import_lock:
+        for key, value in kwargs.items():
+            if key in facebook_posts_import_progress:
+                facebook_posts_import_progress[key] = value
+
+
+def get_facebook_posts_progress_state() -> Dict[str, Any]:
+    """Thread-safe function to get current Facebook Posts import progress state."""
+    global facebook_posts_import_progress
+    with facebook_posts_import_lock:
+        return facebook_posts_import_progress.copy()
+
+
+def broadcast_facebook_posts_progress_event_sync(event_type: str, data: Dict[str, Any]):
+    """Thread-safe function to queue Facebook Posts import progress event for SSE clients."""
+    global facebook_posts_sse_clients
+    event_data = {
+        "type": event_type,
+        "data": data
+    }
+    message = f"data: {json.dumps(event_data)}\n\n"
+
+    with facebook_posts_sse_clients_lock:
+        disconnected_clients = []
+        for client_queue in facebook_posts_sse_clients:
+            try:
+                client_queue.put_nowait(message)
+            except asyncio.QueueFull:
+                pass
+            except Exception:
+                disconnected_clients.append(client_queue)
+
+        for client in disconnected_clients:
+            if client in facebook_posts_sse_clients:
+                facebook_posts_sse_clients.remove(client)
+
+
+# ---------------------------------------------------------------------------
+# Facebook All (combined) import state
+# ---------------------------------------------------------------------------
+
+facebook_all_import_lock = threading.Lock()
+facebook_all_import_cancelled = threading.Event()
+facebook_all_import_in_progress = False
+
+facebook_all_import_progress: Dict[str, Any] = {
+    "status": "idle",
+    "status_line": None,
+    "error_message": None,
+    # per-importer last status lines
+    "messenger": {"status_line": None},
+    "albums": {"status_line": None},
+    "places": {"status_line": None},
+    "posts": {"status_line": None},
+    # messenger stats
+    "conversations": 0,
+    "messages_imported": 0,
+    "messages_created": 0,
+    "messages_updated": 0,
+    "att_found": 0,
+    "att_missing": 0,
+    "messenger_errors": 0,
+    # albums stats
+    "albums_processed": 0,
+    "albums_imported": 0,
+    "album_images_imported": 0,
+    "album_images_found": 0,
+    "album_images_missing": 0,
+    "albums_errors": 0,
+    # places stats
+    "places_imported": 0,
+    "places_created": 0,
+    "places_updated": 0,
+    # posts stats
+    "posts_processed": 0,
+    "posts_imported": 0,
+    "posts_updated": 0,
+    "with_media": 0,
+    "images_imported": 0,
+    "images_found": 0,
+    "images_missing": 0,
+    "posts_errors": 0,
+}
+
+facebook_all_sse_clients: List[asyncio.Queue] = []
+facebook_all_sse_clients_lock = threading.Lock()
+
+
+def update_facebook_all_progress_state(**kwargs):
+    """Thread-safe function to update Facebook All import progress state."""
+    global facebook_all_import_progress
+    with facebook_all_import_lock:
+        for key, value in kwargs.items():
+            if key in facebook_all_import_progress:
+                facebook_all_import_progress[key] = value
+
+
+def get_facebook_all_progress_state() -> Dict[str, Any]:
+    """Thread-safe function to get current Facebook All import progress state."""
+    global facebook_all_import_progress
+    with facebook_all_import_lock:
+        return facebook_all_import_progress.copy()
+
+
+def broadcast_facebook_all_progress_event_sync(event_type: str, data: Dict[str, Any]):
+    """Thread-safe function to queue Facebook All import progress event for SSE clients."""
+    global facebook_all_sse_clients
+    event_data = {
+        "type": event_type,
+        "data": data
+    }
+    message = f"data: {json.dumps(event_data)}\n\n"
+
+    with facebook_all_sse_clients_lock:
+        disconnected_clients = []
+        for client_queue in facebook_all_sse_clients:
+            try:
+                client_queue.put_nowait(message)
+            except asyncio.QueueFull:
+                pass
+            except Exception:
+                disconnected_clients.append(client_queue)
+
+        for client in disconnected_clients:
+            if client in facebook_all_sse_clients:
+                facebook_all_sse_clients.remove(client)

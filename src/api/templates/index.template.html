@@ -119,6 +119,9 @@
                     <button type="button" class="more-options-btn" id="fb-albums-sidebar-btn">
                         <i class="fas fa-images"></i> Facebook Albums
                     </button>
+                    <button type="button" class="more-options-btn" id="fb-posts-sidebar-btn">
+                        <i class="fas fa-newspaper"></i> Facebook Posts
+                    </button>
                     <!-- <button type="button" class="more-options-btn" id="image-gallery-sidebar-btn">
                         <i class="fas fa-photo-video"></i> Image Gallery
                     </button> -->
@@ -759,6 +762,16 @@
                                     <div id="import-last-run-facebook_albums" class="import-tile-last-run"></div>
                                     <div class="import-tile-explanation">Import photos from Facebook albums in a Meta data export (posts folder).</div>
                                 </div>
+                                <div class="import-control-tile" data-import="facebook_posts" title="Click to run">
+                                    <div class="import-tile-title">Facebook Posts Import</div>
+                                    <div id="import-last-run-facebook_posts" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import Facebook status updates, shared links, and attached photos/videos from your_posts__check_ins__photos_and_videos_*.json.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="facebook_all" title="Click to run">
+                                    <div class="import-tile-title">Facebook Full Import</div>
+                                    <div id="import-last-run-facebook_all" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import Messenger, albums, places, and posts in parallel from a single Facebook export directory.</div>
+                                </div>
                                 <div class="import-control-tile" data-import="facebook_places" title="Click to run">
                                     <div class="import-tile-title">Facebook Places Import</div>
                                     <div id="import-last-run-facebook_places" class="import-tile-last-run"></div>
@@ -905,6 +918,42 @@
                         <div id="fb-albums-images-container" style="flex: 1; overflow-y: auto; padding: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; align-content: start; min-height: 0;">
                             <!-- Images will be displayed here -->
                             <div style="text-align: center; padding: 2rem; color: #666; grid-column: 1 / -1;">Select an album to view images</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Facebook Posts Modal -->
+        <div id="fb-posts-modal" class="modal">
+            <div class="modal-content" style="max-width: 1400px; width: 95vw; padding: 0; display: flex; flex-direction: column; height: 90vh;">
+                <div class="modal-header">
+                    <h2>Facebook Posts</h2>
+                    <button class="modal-close-btn" id="close-fb-posts-modal">&times;</button>
+                </div>
+                <div style="display: flex; flex: 1; overflow: hidden;">
+                    <!-- Master Pane (Left) - Resizable -->
+                    <div id="fb-posts-master-pane" style="width: 350px; min-width: 200px; max-width: 600px; border-right: 1px solid #dee2e6; display: flex; flex-direction: column; background-color: #f8f9fa; position: relative;">
+                        <div style="padding: 1rem; border-bottom: 1px solid #dee2e6; box-sizing: border-box;">
+                            <input type="text" id="fb-posts-search" placeholder="Search posts..." style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da; font-size: 14px; box-sizing: border-box;">
+                        </div>
+                        <div id="fb-posts-list" style="flex: 1; overflow-y: auto; padding: 0.5rem;">
+                            <div style="text-align: center; padding: 2rem; color: #666;">Loading posts...</div>
+                        </div>
+                        <!-- Resize handle -->
+                        <div id="fb-posts-resize-handle" style="position: absolute; right: 0; top: 0; bottom: 0; width: 4px; cursor: col-resize; background-color: transparent; z-index: 5;"></div>
+                    </div>
+                    <!-- Slave Pane (Right) -->
+                    <div id="fb-posts-slave-pane" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                        <div id="fb-posts-post-header" style="padding: 1rem; border-bottom: 1px solid #dee2e6; background-color: #f8f9fa;">
+                            <h3 id="fb-posts-post-date" style="margin: 0; color: #233366; font-size: 1.1em;">Select a post</h3>
+                            <p id="fb-posts-post-text" style="margin: 0.5rem 0 0 0; color: #333; font-size: 0.95em; white-space: pre-wrap;"></p>
+                            <a id="fb-posts-post-link" href="#" target="_blank" rel="noopener noreferrer" style="display: none; margin-top: 0.5rem; font-size: 0.85em; color: #0066cc; word-break: break-all;"></a>
+                        </div>
+                        <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 1rem;">
+                            <div id="fb-posts-images-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; align-content: start;">
+                                <div style="text-align: center; padding: 2rem; color: #666; grid-column: 1 / -1;">Select a post to view details</div>
+                            </div>
                         </div>
                     </div>
                 </div>

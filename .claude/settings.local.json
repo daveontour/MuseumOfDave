@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(go build ./...)",
+      "Bash(python -c \"from src.database.models import FacebookPost, PostMedia; print\\(''Models OK:'', FacebookPost.__tablename__, PostMedia.__tablename__\\)\")",
+      "Bash(python -c \"from src.api.routers.media import import_facebook_all_background_subprocess; print\\(''OK''\\)\")"
     ]
   }
 }

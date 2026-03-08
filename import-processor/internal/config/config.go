@@ -21,6 +21,8 @@ type Config struct {
 	FacebookAlbumsDirectoryPath string
 	// FacebookPlacesPath is required for facebook-places subcommand (file or directory)
 	FacebookPlacesPath string
+	// FacebookPostsPath is required for facebook-posts subcommand (file or directory)
+	FacebookPostsPath string
 	// InstagramDirectoryPath is required for instagram subcommand
 	InstagramDirectoryPath string
 	// FilesystemImportDirectories is comma-separated list for filesystem subcommand
@@ -66,6 +68,7 @@ func Load() (*Config, error) {
 	cfg.FacebookDirectoryPath = os.Getenv("FACEBOOK_DIRECTORY_PATH")
 	cfg.FacebookAlbumsDirectoryPath = os.Getenv("FACEBOOK_ALBUMS_DIRECTORY_PATH")
 	cfg.FacebookPlacesPath = os.Getenv("FACEBOOK_PLACES_PATH")
+	cfg.FacebookPostsPath = os.Getenv("FACEBOOK_POSTS_PATH")
 	cfg.InstagramDirectoryPath = os.Getenv("INSTAGRAM_DIRECTORY_PATH")
 	cfg.FilesystemImportDirectories = os.Getenv("FILESYSTEM_IMPORT_DIRECTORIES")
 	cfg.FilesystemExcludePatterns = os.Getenv("FILESYSTEM_EXCLUDE_PATTERNS")

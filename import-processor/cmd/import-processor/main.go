@@ -21,6 +21,7 @@ import (
 	facebookimport "import-processor/internal/import/facebook"
 	facebookalbumsimport "import-processor/internal/import/facebookalbums"
 	facebookplacesimport "import-processor/internal/import/facebookplaces"
+	facebookpostsimport "import-processor/internal/import/facebookposts"
 	filesystemimport "import-processor/internal/import/filesystem"
 	imessageimport "import-processor/internal/import/imessage"
 	instagramimport "import-processor/internal/import/instagram"
@@ -39,6 +40,8 @@ Commands:
   facebook          Import Facebook Messenger messages from JSON directory
   facebook-albums   Import Facebook albums from JSON directory
   facebook-places   Import Facebook places from posts JSON file(s)
+  facebook-posts    Import Facebook posts (status, links, photos) from JSON file(s)
+  facebook-all      Import Facebook Messenger, albums, places, and posts from one export directory
   instagram        Import Instagram messages from JSON directory
   filesystem        Import images from filesystem directories
   thumbnails        Process thumbnails and EXIF for media items
@@ -66,6 +69,10 @@ func main() {
 		runFacebookAlbums()
 	case "facebook-places":
 		runFacebookPlaces()
+	case "facebook-posts":
+		runFacebookPosts()
+	case "facebook-all":
+		runFacebookAll()
 	case "instagram":
 		runInstagram()
 	case "filesystem":
@@ -664,6 +671,331 @@ func runFacebookPlaces() {
 		for _, e := range stats.Errors {
 			fmt.Printf("  - %s\n", e)
 		}
+	}
+}
+
+func runFacebookPosts() {
+	fs := flag.NewFlagSet("facebook-posts", flag.ExitOnError)
+	listFiles := fs.Bool("list", false, "List all files that would be processed without importing")
+	path := fs.String("path", "", "Path to posts JSON file or directory (overrides config)")
+	exportRoot := fs.String("export-root", "", "Optional path to Facebook export root (for resolving media URIs)")
+	fs.Parse(os.Args[2:])
+
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	pathStr := strings.TrimSpace(*path)
+	if pathStr == "" && cfg.FacebookPostsPath != "" {
+		pathStr = cfg.FacebookPostsPath
+	}
+	if pathStr == "" {
+		log.Fatalf("No path specified. Set FACEBOOK_POSTS_PATH in .env or use --path")
+	}
+
+	if *listFiles {
+		if err := facebookpostsimport.ListFilesToProcess(pathStr); err != nil {
+			log.Fatalf("Failed to list files: %v", err)
+		}
+		return
+	}
+
+	db, err := database.NewDB(cfg)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close()
+
+	fmt.Fprintln(os.Stderr, "Database connection established successfully")
+	fmt.Fprintf(os.Stderr, "Starting Facebook Posts import from: %s\n", pathStr)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	cancelled := false
+	var cancelMutex sync.Mutex
+
+	go func() {
+		<-sigChan
+		fmt.Fprintln(os.Stderr, "\nReceived interrupt signal, cancelling import...")
+		cancelMutex.Lock()
+		cancelled = true
+		cancelMutex.Unlock()
+		cancel()
+	}()
+
+	progressCallback := func(stats facebookpostsimport.ImportStats) {
+		if stats.TotalPosts > 0 {
+			fmt.Fprintf(os.Stderr, "\rProcessing post %d of %d: %s | Posts: %d new, %d updated | With media: %d | Images: %d (found: %d, missing: %d) | Errors: %d",
+				stats.PostsProcessed,
+				stats.TotalPosts,
+				stats.CurrentPost,
+				stats.PostsImported,
+				stats.PostsUpdated,
+				stats.WithMedia,
+				stats.ImagesImported,
+				stats.ImagesFound,
+				stats.ImagesMissing,
+				stats.Errors,
+			)
+		}
+	}
+
+	cancelledCheck := func() bool {
+		cancelMutex.Lock()
+		defer cancelMutex.Unlock()
+		return cancelled
+	}
+
+	stats, err := facebookpostsimport.ImportFacebookPostsFromPath(
+		ctx,
+		db,
+		pathStr,
+		strings.TrimSpace(*exportRoot),
+		progressCallback,
+		cancelledCheck,
+	)
+
+	fmt.Fprintln(os.Stderr)
+
+	if err != nil {
+		if ctx.Err() == context.Canceled {
+			fmt.Fprintln(os.Stderr, "Import cancelled by user")
+			os.Exit(1)
+		}
+		log.Fatalf("Import failed: %v", err)
+	}
+
+	fmt.Println("\nImport completed successfully")
+	fmt.Printf("Processed %d post(s)\n", stats.PostsProcessed)
+	fmt.Printf("Posts imported: %d new, %d updated\n", stats.PostsImported, stats.PostsUpdated)
+	fmt.Printf("Posts with media: %d\n", stats.WithMedia)
+	fmt.Printf("Images imported: %d (found: %d, missing: %d)\n",
+		stats.ImagesImported, stats.ImagesFound, stats.ImagesMissing)
+	if stats.Errors > 0 {
+		fmt.Printf("Errors: %d\n", stats.Errors)
+	}
+}
+
+func runFacebookAll() {
+	fs := flag.NewFlagSet("facebook-all", flag.ExitOnError)
+	path := fs.String("path", "", "Facebook export root directory (overrides config)")
+	userName := fs.String("user-name", "", "Optional user's name for Messenger classification")
+	fs.Parse(os.Args[2:])
+
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	pathStr := strings.TrimSpace(*path)
+	if pathStr == "" && cfg.FacebookDirectoryPath != "" {
+		pathStr = cfg.FacebookDirectoryPath
+	}
+	if pathStr == "" {
+		log.Fatalf("No path specified. Set FACEBOOK_DIRECTORY_PATH in .env or use --path")
+	}
+
+	db, err := database.NewDB(cfg)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close()
+
+	fmt.Fprintln(os.Stderr, "Database connection established successfully")
+	fmt.Fprintf(os.Stderr, "Starting Facebook full import from: %s\n", pathStr)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	cancelled := false
+	var cancelMu sync.Mutex
+	go func() {
+		<-sigChan
+		fmt.Fprintln(os.Stderr, "\nReceived interrupt signal, cancelling import...")
+		cancelMu.Lock()
+		cancelled = true
+		cancelMu.Unlock()
+		cancel()
+	}()
+
+	cancelledCheck := func() bool {
+		cancelMu.Lock()
+		defer cancelMu.Unlock()
+		return cancelled
+	}
+
+	// Clear all existing Facebook data before re-importing to prevent duplicates
+	fmt.Fprintln(os.Stderr, "Clearing existing Facebook data...")
+	if err := db.ClearFacebookAllData(ctx); err != nil {
+		log.Fatalf("Failed to clear Facebook data: %v", err)
+	}
+	fmt.Fprintln(os.Stderr, "Existing Facebook data cleared. Starting parallel import...")
+
+	// stderrMu serialises stderr writes from concurrent goroutines
+	var stderrMu sync.Mutex
+
+	var wg sync.WaitGroup
+	var (
+		messengerStats *facebookimport.ImportStats
+		albumsStats    *facebookalbumsimport.ImportStats
+		placesStats    *facebookplacesimport.ImportStats
+		postsStats     *facebookpostsimport.ImportStats
+		messengerErr   error
+		albumsErr      error
+		placesErr      error
+		postsErr       error
+	)
+
+	// Messenger
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		progressCallback := func(stats facebookimport.ImportStats) {
+			if stats.TotalConversations > 0 {
+				stderrMu.Lock()
+				fmt.Fprintf(os.Stderr, "[MESSAGES] conversation %d/%d: %s | msgs: %d (%d new, %d updated) | att: %d found, %d missing\n",
+					stats.ConversationsProcessed, stats.TotalConversations, stats.CurrentConversation,
+					stats.MessagesImported, stats.MessagesCreated, stats.MessagesUpdated,
+					stats.AttachmentsFound, stats.AttachmentsMissing)
+				stderrMu.Unlock()
+			}
+		}
+		messengerStats, messengerErr = facebookimport.ImportFacebookFromDirectory(
+			ctx, db, pathStr, progressCallback, cancelledCheck, pathStr, strings.TrimSpace(*userName),
+		)
+		if messengerErr != nil && ctx.Err() == nil {
+			stderrMu.Lock()
+			fmt.Fprintf(os.Stderr, "[MESSAGES] Error: %v\n", messengerErr)
+			stderrMu.Unlock()
+		}
+	}()
+
+	// Albums
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		progressCallback := func(stats facebookalbumsimport.ImportStats) {
+			if stats.TotalAlbums > 0 {
+				stderrMu.Lock()
+				fmt.Fprintf(os.Stderr, "[ALBUMS] album %d/%d: %s | albums: %d | images: %d (found: %d, missing: %d)\n",
+					stats.AlbumsProcessed, stats.TotalAlbums, stats.CurrentAlbum,
+					stats.AlbumsImported, stats.ImagesImported, stats.ImagesFound, stats.ImagesMissing)
+				stderrMu.Unlock()
+			}
+		}
+		albumsStats, albumsErr = facebookalbumsimport.ImportFacebookAlbumsFromDirectory(
+			ctx, db, pathStr, progressCallback, cancelledCheck, pathStr,
+		)
+		if albumsErr != nil && ctx.Err() == nil {
+			stderrMu.Lock()
+			fmt.Fprintf(os.Stderr, "[ALBUMS] Error: %v\n", albumsErr)
+			stderrMu.Unlock()
+		}
+	}()
+
+	// Places
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		progressCallback := func(stats facebookplacesimport.ImportStats) {
+			stderrMu.Lock()
+			fmt.Fprintf(os.Stderr, "[PLACES] places: %d (created: %d, updated: %d)\n",
+				stats.PlacesImported, stats.PlacesCreated, stats.PlacesUpdated)
+			stderrMu.Unlock()
+		}
+		placesStats, placesErr = facebookplacesimport.ImportFacebookPlacesFromDirectory(
+			ctx, db, pathStr, progressCallback, cancelledCheck,
+		)
+		if placesErr != nil && ctx.Err() == nil {
+			stderrMu.Lock()
+			fmt.Fprintf(os.Stderr, "[PLACES] Error: %v\n", placesErr)
+			stderrMu.Unlock()
+		}
+	}()
+
+	// Posts
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		progressCallback := func(stats facebookpostsimport.ImportStats) {
+			if stats.TotalPosts > 0 {
+				stderrMu.Lock()
+				fmt.Fprintf(os.Stderr, "[POSTS] post %d/%d: %s | %d new, %d updated | images: %d (found: %d, missing: %d)\n",
+					stats.PostsProcessed, stats.TotalPosts, stats.CurrentPost,
+					stats.PostsImported, stats.PostsUpdated,
+					stats.ImagesImported, stats.ImagesFound, stats.ImagesMissing)
+				stderrMu.Unlock()
+			}
+		}
+		postsStats, postsErr = facebookpostsimport.ImportFacebookPostsFromPath(
+			ctx, db, pathStr, pathStr, progressCallback, cancelledCheck,
+		)
+		if postsErr != nil && ctx.Err() == nil {
+			stderrMu.Lock()
+			fmt.Fprintf(os.Stderr, "[POSTS] Error: %v\n", postsErr)
+			stderrMu.Unlock()
+		}
+	}()
+
+	wg.Wait()
+	fmt.Fprintln(os.Stderr)
+
+	if ctx.Err() == context.Canceled {
+		fmt.Fprintln(os.Stderr, "Import cancelled by user")
+		os.Exit(1)
+	}
+
+	// Write per-importer completion lines to stdout for Python parser
+	anyError := false
+	if messengerStats != nil {
+		fmt.Printf("FACEBOOK_COMPLETE: conversations=%d messages=%d created=%d updated=%d att_found=%d att_missing=%d errors=%d\n",
+			messengerStats.ConversationsProcessed, messengerStats.MessagesImported,
+			messengerStats.MessagesCreated, messengerStats.MessagesUpdated,
+			messengerStats.AttachmentsFound, messengerStats.AttachmentsMissing, messengerStats.Errors)
+	}
+	if messengerErr != nil {
+		fmt.Fprintf(os.Stderr, "Messenger import error: %v\n", messengerErr)
+		anyError = true
+	}
+	if albumsStats != nil {
+		fmt.Printf("ALBUMS_COMPLETE: albums=%d albums_imported=%d images=%d found=%d missing=%d errors=%d\n",
+			albumsStats.AlbumsProcessed, albumsStats.AlbumsImported,
+			albumsStats.ImagesImported, albumsStats.ImagesFound, albumsStats.ImagesMissing, albumsStats.Errors)
+	}
+	if albumsErr != nil {
+		fmt.Fprintf(os.Stderr, "Albums import error: %v\n", albumsErr)
+		anyError = true
+	}
+	if placesStats != nil {
+		fmt.Printf("PLACES_COMPLETE: places=%d created=%d updated=%d errors=%d\n",
+			placesStats.PlacesImported, placesStats.PlacesCreated, placesStats.PlacesUpdated, len(placesStats.Errors))
+	}
+	if placesErr != nil {
+		fmt.Fprintf(os.Stderr, "Places import error: %v\n", placesErr)
+		anyError = true
+	}
+	if postsStats != nil {
+		fmt.Printf("POSTS_COMPLETE: posts=%d new=%d updated=%d with_media=%d images=%d found=%d missing=%d errors=%d\n",
+			postsStats.PostsProcessed, postsStats.PostsImported, postsStats.PostsUpdated,
+			postsStats.WithMedia, postsStats.ImagesImported, postsStats.ImagesFound, postsStats.ImagesMissing, postsStats.Errors)
+	}
+	if postsErr != nil {
+		fmt.Fprintf(os.Stderr, "Posts import error: %v\n", postsErr)
+		anyError = true
+	}
+
+	if anyError {
+		fmt.Println("Import completed with errors")
+	} else {
+		fmt.Println("Import completed")
 	}
 }
 

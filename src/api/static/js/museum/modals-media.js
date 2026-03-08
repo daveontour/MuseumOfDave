@@ -331,8 +331,173 @@ Modals.FBAlbums = (() => {
             openAndSelectAlbum
         };
 })();
-    
 
+
+
+Modals.FBPosts = (() => {
+    let posts = [];
+    let filteredPosts = [];
+    let selectedPostId = null;
+    let resizeStartX = 0;
+    let resizeStartWidth = 0;
+
+    function formatDate(isoStr) {
+        if (!isoStr) return '';
+        const d = new Date(isoStr);
+        const day = String(d.getDate()).padStart(2, '0');
+        const mon = String(d.getMonth() + 1).padStart(2, '0');
+        const yr = d.getFullYear();
+        const hr = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        return `${day}/${mon}/${yr} ${hr}:${min}`;
+    }
+
+    function postTypeIcon(post) {
+        if (post.post_type === 'photo' || post.post_type === 'mixed') return ' 📷';
+        if (post.post_type === 'link') return ' 🔗';
+        return '';
+    }
+
+    async function loadPosts(search = '') {
+        const container = DOM.fbPostsList;
+        if (!container) return;
+        container.innerHTML = '<div style="text-align:center;padding:2rem;color:#666;">Loading...</div>';
+        try {
+            const url = `/facebook/posts?page=1&page_size=200${search ? '&search=' + encodeURIComponent(search) : ''}`;
+            const resp = await fetch(url);
+            const data = await resp.json();
+            posts = data.posts || [];
+            filteredPosts = posts;
+            renderPosts(filteredPosts);
+            if (filteredPosts.length > 0 && !selectedPostId) {
+                selectPost(filteredPosts[0].id);
+            }
+        } catch (err) {
+            container.innerHTML = `<div style="color:#dc3545;padding:1rem;">Error loading posts: ${err.message}</div>`;
+        }
+    }
+
+    function renderPosts(list) {
+        const container = DOM.fbPostsList;
+        if (!container) return;
+        if (list.length === 0) {
+            container.innerHTML = '<div style="text-align:center;padding:2rem;color:#666;">No posts found</div>';
+            return;
+        }
+        container.innerHTML = list.map(p => {
+            const preview = (p.post_text || p.title || '(no text)').substring(0, 80) + ((p.post_text || '').length > 80 ? '…' : '');
+            const icon = postTypeIcon(p);
+            const isSelected = p.id === selectedPostId;
+            return `<div class="fb-post-list-item" data-post-id="${p.id}" style="
+                padding: 0.6rem 0.8rem; cursor: pointer; border-radius: 4px;
+                background: ${isSelected ? '#233366' : 'transparent'};
+                color: ${isSelected ? '#fff' : '#333'};
+                border-bottom: 1px solid #dee2e6; margin-bottom: 2px;">
+                <div style="font-size:0.75em;color:${isSelected ? '#ccc' : '#888'};">${formatDate(p.timestamp)}${icon}</div>
+                <div style="font-size:0.85em;margin-top:2px;">${preview}</div>
+            </div>`;
+        }).join('');
+
+        container.querySelectorAll('.fb-post-list-item').forEach(el => {
+            el.addEventListener('click', () => selectPost(parseInt(el.dataset.postId)));
+        });
+    }
+
+    async function selectPost(postId) {
+        selectedPostId = postId;
+        renderPosts(filteredPosts);
+
+        const post = filteredPosts.find(p => p.id === postId);
+        if (!post) return;
+
+        if (DOM.fbPostsPostDate) DOM.fbPostsPostDate.textContent = formatDate(post.timestamp) + (post.title ? `  —  ${post.title}` : '');
+        if (DOM.fbPostsPostText) DOM.fbPostsPostText.textContent = post.post_text || '';
+        if (DOM.fbPostsPostLink) {
+            if (post.external_url) {
+                DOM.fbPostsPostLink.href = post.external_url;
+                DOM.fbPostsPostLink.textContent = post.external_url;
+                DOM.fbPostsPostLink.style.display = 'block';
+            } else {
+                DOM.fbPostsPostLink.style.display = 'none';
+            }
+        }
+
+        const imgContainer = DOM.fbPostsImagesContainer;
+        if (!imgContainer) return;
+
+        if (post.media_count === 0) {
+            imgContainer.innerHTML = '<div style="text-align:center;padding:2rem;color:#888;grid-column:1/-1;">No media attached</div>';
+            return;
+        }
+
+        imgContainer.innerHTML = '<div style="text-align:center;padding:2rem;color:#666;grid-column:1/-1;">Loading media...</div>';
+        try {
+            const resp = await fetch(`/facebook/posts/${postId}/media`);
+            const mediaItems = await resp.json();
+            if (mediaItems.length === 0) {
+                imgContainer.innerHTML = '<div style="text-align:center;padding:2rem;color:#888;grid-column:1/-1;">No media found</div>';
+                return;
+            }
+            imgContainer.innerHTML = mediaItems.map(mi => `
+                <div style="position:relative;overflow:hidden;border-radius:8px;background:#eee;aspect-ratio:1;cursor:pointer;" onclick="Modals.SingleImageDisplay && Modals.SingleImageDisplay.showSingleImageModal('${(mi.title||'').replace(/'/g,"\\'")}','/facebook/posts/media/${mi.id}',0,0,0)">
+                    <img src="/facebook/posts/media/${mi.id}" loading="lazy" alt="${mi.title || ''}"
+                        style="width:100%;height:100%;object-fit:cover;transition:transform 0.2s;"
+                        onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform='scale(1)'">
+                    ${mi.title ? `<div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,0.6));color:#fff;font-size:0.75em;padding:0.4rem 0.5rem;">${mi.title}</div>` : ''}
+                </div>`).join('');
+        } catch (err) {
+            imgContainer.innerHTML = `<div style="color:#dc3545;padding:1rem;grid-column:1/-1;">Error loading media: ${err.message}</div>`;
+        }
+    }
+
+    function searchPosts(query) {
+        const q = query.toLowerCase().trim();
+        filteredPosts = q ? posts.filter(p =>
+            (p.post_text || '').toLowerCase().includes(q) ||
+            (p.title || '').toLowerCase().includes(q)
+        ) : posts;
+        renderPosts(filteredPosts);
+    }
+
+    function startResize(e) {
+        resizeStartX = e.clientX;
+        resizeStartWidth = DOM.fbPostsMasterPane ? DOM.fbPostsMasterPane.offsetWidth : 350;
+        document.addEventListener('mousemove', handleResize);
+        document.addEventListener('mouseup', stopResize);
+        e.preventDefault();
+    }
+
+    function handleResize(e) {
+        if (!DOM.fbPostsMasterPane) return;
+        const newWidth = Math.max(200, Math.min(600, resizeStartWidth + (e.clientX - resizeStartX)));
+        DOM.fbPostsMasterPane.style.width = newWidth + 'px';
+    }
+
+    function stopResize() {
+        document.removeEventListener('mousemove', handleResize);
+        document.removeEventListener('mouseup', stopResize);
+    }
+
+    function open() {
+        if (DOM.fbPostsModal) {
+            DOM.fbPostsModal.style.display = 'flex';
+            loadPosts();
+        }
+    }
+
+    function close() {
+        if (DOM.fbPostsModal) DOM.fbPostsModal.style.display = 'none';
+    }
+
+    function init() {
+        if (DOM.closeFBPostsModalBtn) DOM.closeFBPostsModalBtn.addEventListener('click', close);
+        if (DOM.fbPostsModal) DOM.fbPostsModal.addEventListener('click', e => { if (e.target === DOM.fbPostsModal) close(); });
+        if (DOM.fbPostsSearch) DOM.fbPostsSearch.addEventListener('input', e => searchPosts(e.target.value));
+        if (DOM.fbPostsResizeHandle) DOM.fbPostsResizeHandle.addEventListener('mousedown', startResize);
+    }
+
+    return { open, close, init };
+})();
 
 
 Modals.NewImageGallery = (() => {
@@ -1971,7 +2136,7 @@ Modals.SingleImageDisplay = (() => {
                 }
                 DOM.singleImageModalImg.style.display = 'block';
             } else {
-                if (file_id.startsWith('/getImage') || file_id.startsWith('/images/')) {
+                if (file_id.startsWith('/getImage') || file_id.startsWith('/images/') || file_id.startsWith('/facebook/')) {
                     DOM.singleImageModalImg.src = file_id;
                 } else {
                     DOM.singleImageModalImg.src = '/getImage?id=' + file_id;
