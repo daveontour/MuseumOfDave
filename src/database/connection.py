@@ -29,6 +29,7 @@ class Database:
             max_overflow=20,  # Maximum number of connections beyond pool_size
             pool_recycle=3600,  # Recycle connections after 1 hour
             pool_timeout=30,  # Timeout for getting a connection from the pool
+            connect_args={"options": "-c client_encoding=UTF8"},  # Force UTF-8 on Windows
         )
         self.SessionLocal = sessionmaker(bind=self.engine)
 

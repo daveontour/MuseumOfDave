@@ -379,7 +379,7 @@
                 </div>
                 <div class="config-tab-content" id="reference-documents-tab">
                     <section class="config-section" style="display: flex; flex-direction: column; height: 100%;">
-                        <h4>Reference Documents</h4>
+                        <h1>Reference Documents</h1>
                         <p>Reference documents are used to provide context for the AI to use when generating responses. They can be uploaded as PDF, Word, Images, Text, CSV, or JSON files.<br/>
                         You should upload at least one document that is a comprehenvie biography. <br/>
                         Other documents could provide additional context such as CV, family tree, Letters, sample of your writing, etc.</p>
@@ -512,7 +512,7 @@
                 </div>
                 <div class="config-tab-content" id="manage-keys-tab">
                     <section class="config-section">
-                        <h3>Trusted Keys</h3>
+                        <h1>Trusted Keys</h1>
                         <div class="setting-group">
                             <p style="color: #666; margin-bottom: 10px;">
                                 Create additional trusted keys or remove keys that are no longer needed. You need the master password to manage keys.<br/>
@@ -539,7 +539,7 @@
                 </div>
                 <div class="config-tab-content" id="manage-contacts-tab">
                     <section class="config-section">
-                        <h3>Email Matches</h3>
+                        <h1>Email Matches</h1>
                         <div class="setting-group">
                             <p style="color: #666; margin-bottom: 10px;">
                                 Manage email matches used to merge duplicate contacts. Each row maps an email address to a primary contact name.
@@ -573,44 +573,7 @@
                         </div>
                     </section>
                     <section class="config-section" style="margin-top: 2rem;">
-                        <h3>Email Classifications</h3>
-                        <div class="setting-group">
-                            <p style="color: #666; margin-bottom: 10px;">
-                                Manage contact classifications (friend, family, colleague, etc.) used to categorise contacts.
-                            </p>
-                            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
-                                <input type="text" id="email-classifications-filter" placeholder="Filter by name..." style="padding: 6px 10px; width: 220px; border: 1px solid #bfc9da; border-radius: 4px;">
-                                <select id="email-classifications-type-filter" style="padding: 6px 10px; border: 1px solid #bfc9da; border-radius: 4px;">
-                                    <option value="">All types</option>
-                                </select>
-                                <button type="button" id="email-classifications-refresh-btn" class="modal-btn modal-btn-secondary">
-                                    <i class="fas fa-sync-alt"></i> Refresh
-                                </button>
-                                <button type="button" id="email-classifications-create-btn" class="modal-btn modal-btn-primary">
-                                    <i class="fas fa-plus"></i> Add Classification
-                                </button>
-                            </div>
-                            <div id="email-classifications-loading" style="padding: 1em; text-align: center; color: #666; display: none;">
-                                <i class="fas fa-spinner fa-spin"></i> Loading...
-                            </div>
-                            <div id="email-classifications-table-container" style="overflow-x: auto; max-height: 50vh; overflow-y: auto;">
-                                <table class="contacts-table" id="email-classifications-table" style="width: 100%; margin-top: 0;">
-                                    <thead>
-                                        <tr style="background: #f0f4f8; border-bottom: 2px solid #bfc9da;">
-                                            <th style="padding: 8px; text-align: left;">Name</th>
-                                            <th style="padding: 8px; text-align: left;">Classification</th>
-                                            <th style="padding: 8px; text-align: center; width: 160px;">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="email-classifications-tbody">
-                                    </tbody>
-                                </table>
-                            </div>
-                            <p id="email-classifications-empty-msg" style="display: none; padding: 1em; color: #666; text-align: center;">No email classifications. Add one to assign a contact to a classification.</p>
-                        </div>
-                    </section>
-                    <section class="config-section" style="margin-top: 2rem;">
-                        <h3>Email Exclusions</h3>
+                        <h1>Email Exclusions</h1>
                         <div class="setting-group">
                             <p style="color: #666; margin-bottom: 10px;">
                                 Manage email and name exclusions used to filter out contacts during import. Email patterns exclude by email substring; name patterns by name; name+email pairs exclude a specific name when paired with a specific email.
@@ -650,6 +613,44 @@
                             <p id="email-exclusions-empty-msg" style="display: none; padding: 1em; color: #666; text-align: center;">No email exclusions. Add one to exclude emails or names during contact import.</p>
                         </div>
                     </section>
+                    <section class="config-section" style="margin-top: 2rem;">
+                        <h1>Email Classifications</h1>
+                        <div class="setting-group">
+                            <p style="color: #666; margin-bottom: 10px;">
+                                Manage contact classifications (friend, family, colleague, etc.) used to categorise contacts.
+                            </p>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
+                                <input type="text" id="email-classifications-filter" placeholder="Filter by name..." style="padding: 6px 10px; width: 220px; border: 1px solid #bfc9da; border-radius: 4px;">
+                                <select id="email-classifications-type-filter" style="padding: 6px 10px; border: 1px solid #bfc9da; border-radius: 4px;">
+                                    <option value="">All types</option>
+                                </select>
+                                <button type="button" id="email-classifications-refresh-btn" class="modal-btn modal-btn-secondary">
+                                    <i class="fas fa-sync-alt"></i> Refresh
+                                </button>
+                                <button type="button" id="email-classifications-create-btn" class="modal-btn modal-btn-primary">
+                                    <i class="fas fa-plus"></i> Add Classification
+                                </button>
+                            </div>
+                            <div id="email-classifications-loading" style="padding: 1em; text-align: center; color: #666; display: none;">
+                                <i class="fas fa-spinner fa-spin"></i> Loading...
+                            </div>
+                            <div id="email-classifications-table-container" style="overflow-x: auto; max-height: 50vh; overflow-y: auto;">
+                                <table class="contacts-table" id="email-classifications-table" style="width: 100%; margin-top: 0;">
+                                    <thead>
+                                        <tr style="background: #f0f4f8; border-bottom: 2px solid #bfc9da;">
+                                            <th style="padding: 8px; text-align: left;">Name</th>
+                                            <th style="padding: 8px; text-align: left;">Classification</th>
+                                            <th style="padding: 8px; text-align: center; width: 160px;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="email-classifications-tbody">
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p id="email-classifications-empty-msg" style="display: none; padding: 1em; color: #666; text-align: center;">No email classifications. Add one to assign a contact to a classification.</p>
+                        </div>
+                    </section>
+
                 </div>
                 <div class="config-tab-content" id="images-grid-tab">
                     <div class="images-grid-viewer">
