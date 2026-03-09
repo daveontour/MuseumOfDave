@@ -23,8 +23,6 @@ const Chat = (() => {
             const voiceImageSmall = document.createElement('img');
             voiceImageSmall.className = 'message-voice-image';
 
-            debugger;
-
             let selector = selectedVoice + '_sm';
             let imgSrc = `/static/images/${CONSTANTS.VOICE_IMAGES[selector]}`;
             voiceImageSmall.src = imgSrc;
@@ -234,7 +232,6 @@ const Chat = (() => {
         row.className = 'response-action-buttons';
 
         buttons.forEach(({ key, icon, modifier, title, action }) => {
-            debugger;
             const value = embeddedJson[key];
             if (value === undefined || value === null || (typeof value !== 'string' && typeof value !== 'number' && !Array.isArray(value))) return;
 
@@ -333,61 +330,8 @@ const Chat = (() => {
             }
         }
 
-        //The browser_action is a json object that is included in the embeddedJson. It is used to tell the browser to perform an action.
-        //The browser_action object has a functionName property that is the name of the function to perform.
-        //The browser_action object has an args property that is an array of arguments for the function.
-        // The AI may include a browser_action object in the embeddedJson to tell the browser to perform an action.
-        // The AI is told about the available browser actions in the system_instructions_chat.txt file.
-        // if (role === 'assistant') {
-        //     console.log('embeddedJson', embeddedJson);
-        //     if (embeddedJson && embeddedJson.browser_action) {
-        //         _processBrowserActions(embeddedJson.browser_action);
-        //     }
-        // }
-
-        // The above now all done by flags in the JSON structure
-        
         return messageElement;
     }
-
-    // The browser_action is a json object that is included in the embeddedJson. It is used to tell the browser to perform an action.
-    // function _processBrowserActions(browser_action) {
-    //     if (browser_action) {
-    //         console.log('browser_action', browser_action);
-    //     } else {
-    //         console.log('no browser_actions');
-    //         return;
-    //     }
-    //     switch (browser_action.functionName) {
-    //         case 'showAlert':
-    //             alert(browser_action.args[0]);
-    //             break;
-    //         case 'changeBackgroundColor':
-    //             document.body.style.backgroundColor = browser_action.args[0];
-    //             break;
-    //         case 'showContactEmailGallery':
-    //             Modals.EmailGallery.openContact(browser_action.args[0]);
-    //             break;
-    //         case 'showFacebookAlbums':
-    //             Modals.FBAlbums.open();
-    //             break;
-    //         case 'showImageGallery':
-    //             Modals.NewImageGallery.open();
-    //             break;
-    //         case 'showTaggedImages':
-    //             Modals.NewImageGallery.openTaggedImages(browser_action.args[0]);
-    //             break;
-    //         case 'showImagesFromDate':
-    //             Modals.NewImageGallery.openImagesFromDate(browser_action.args[0], browser_action.args[1]);
-    //             break;
-    //         case 'showLocationInfo':
-    //             Modals.Locations.openMapView();
-    //             break;
-    //         default:
-    //             console.log('unknown browser_action', browser_action);
-    //             break;
-    //     }
-    // }
 
     function addEmail(email, messageId = null, embeddedJson = null) {
         const messageElement = _createMessageElement('email', messageId);

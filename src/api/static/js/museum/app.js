@@ -74,7 +74,6 @@ const App = (() => {
                 
                 // Non-streaming JSON response handling (original code commented out streaming)
                 const data = await response.json();
-                debugger;
                 UI.hideLoadingIndicator(); // Hide after getting response, before adding message
                 if (data.error) UI.displayError(data.error);
                 else Chat.addMessage('assistant', data.response, true, null, data.embedded_json);
