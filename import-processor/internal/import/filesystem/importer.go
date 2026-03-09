@@ -181,6 +181,20 @@ func ImportImagesFromDirectories(
 		return stats, nil
 	}
 
+	// Switch tables to UNLOGGED for faster bulk inserts; restore to LOGGED when done
+	if _, err := db.Pool.Exec(ctx, "ALTER TABLE media_blob SET UNLOGGED"); err != nil {
+		return nil, fmt.Errorf("failed to set media_blob UNLOGGED: %w", err)
+	}
+	if _, err := db.Pool.Exec(ctx, "ALTER TABLE media_items SET UNLOGGED"); err != nil {
+		db.Pool.Exec(ctx, "ALTER TABLE media_blob SET LOGGED") // best-effort restore
+		return nil, fmt.Errorf("failed to set media_items UNLOGGED: %w", err)
+	}
+	defer func() {
+		restoreCtx := context.Background()
+		db.Pool.Exec(restoreCtx, "ALTER TABLE media_blob SET LOGGED")
+		db.Pool.Exec(restoreCtx, "ALTER TABLE media_items SET LOGGED")
+	}()
+
 	// Worker pool
 	numWorkers := runtime.NumCPU()
 	if numWorkers < 1 {
