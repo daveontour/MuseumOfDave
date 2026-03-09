@@ -39,6 +39,10 @@ func (s *ImageStorage) SaveImage(ctx context.Context, sourceRef string, imageDat
 	}
 	defer tx.Rollback(ctx)
 
+	if _, err = tx.Exec(ctx, "SET LOCAL synchronous_commit = off"); err != nil {
+		return 0, false, fmt.Errorf("failed to set synchronous_commit: %w", err)
+	}
+
 	var existingID int64
 	var existingBlobID int64
 	checkQuery := `SELECT id, media_blob_id FROM media_items WHERE source = $1 AND source_reference = $2 LIMIT 1`
@@ -134,6 +138,10 @@ func (s *ImageStorage) SaveImagesBatch(ctx context.Context, items []BatchImageIt
 		return 0, 0, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
+
+	if _, err = tx.Exec(ctx, "SET LOCAL synchronous_commit = off"); err != nil {
+		return 0, 0, fmt.Errorf("failed to set synchronous_commit: %w", err)
+	}
 
 	sourceRefs := make([]string, len(items))
 	for i := range items {

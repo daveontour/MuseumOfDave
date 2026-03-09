@@ -1152,10 +1152,10 @@ func runContactsNormalise() {
 	}
 
 	// File input takes precedence over database when positional arg is provided
-	useDB := cfg.ContactsQuery != "" && positionalArg == ""
-	if !useDB && positionalArg == "" {
-		log.Fatalf("No input specified. Provide input.json or set CONTACTS_QUERY in .env for database mode")
-	}
+	// useDB := cfg.ContactsQuery != "" && positionalArg == ""
+	// if !useDB && positionalArg == "" {
+	// 	log.Fatalf("No input specified. Provide input.json or set CONTACTS_QUERY in .env for database mode")
+	// }
 
 	// Always connect to DB (we always write to contacts table)
 	db, err := database.NewDB(cfg)
@@ -1164,17 +1164,12 @@ func runContactsNormalise() {
 	}
 	defer db.Close()
 
-	contactsQuery := ""
-	if useDB {
-		contactsQuery = cfg.ContactsQuery
-	}
 	opts := contactsimport.RunOptions{
 		Workers:             *workers,
 		InputFile:           positionalArg,
 		EmailMatchesFile:    strings.TrimSpace(*emailMatchesFile),
 		ExclusionsFile:      strings.TrimSpace(*exclusionsFile),
 		ClassificationsFile: strings.TrimSpace(*classificationsFile),
-		ContactsQuery:       contactsQuery,
 		RelationshipQuery:   cfg.ContactsRelationshipQuery,
 		ContactsDB:          db,
 	}

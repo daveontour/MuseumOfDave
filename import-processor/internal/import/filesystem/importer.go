@@ -92,7 +92,7 @@ func (s *ImportStats) copyStats() ImportStats {
 type ProgressCallback func(ImportStats)
 
 const progressCallbackInterval = 25 // call progress callback every N items
-const imageBatchSize = 25           // batch size for SaveImagesBatch
+const imageBatchSize = 100          // batch size for SaveImagesBatch
 
 // CancelledCheck returns true if the import should be cancelled
 type CancelledCheck func() bool
@@ -180,20 +180,6 @@ func ImportImagesFromDirectories(
 	if len(workItems) == 0 {
 		return stats, nil
 	}
-
-	// Switch tables to UNLOGGED for faster bulk inserts; restore to LOGGED when done
-	if _, err := db.Pool.Exec(ctx, "ALTER TABLE media_blob SET UNLOGGED"); err != nil {
-		return nil, fmt.Errorf("failed to set media_blob UNLOGGED: %w", err)
-	}
-	if _, err := db.Pool.Exec(ctx, "ALTER TABLE media_items SET UNLOGGED"); err != nil {
-		db.Pool.Exec(ctx, "ALTER TABLE media_blob SET LOGGED") // best-effort restore
-		return nil, fmt.Errorf("failed to set media_items UNLOGGED: %w", err)
-	}
-	defer func() {
-		restoreCtx := context.Background()
-		db.Pool.Exec(restoreCtx, "ALTER TABLE media_blob SET LOGGED")
-		db.Pool.Exec(restoreCtx, "ALTER TABLE media_items SET LOGGED")
-	}()
 
 	// Worker pool
 	numWorkers := runtime.NumCPU()

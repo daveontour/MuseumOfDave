@@ -56,7 +56,6 @@ type RunOptions struct {
 	EmailMatchesFile    string
 	ExclusionsFile      string
 	ClassificationsFile string // JSON file for rel_type mappings (applied after DB write)
-	ContactsQuery       string
 	RelationshipQuery   string
 	ContactsDB          *database.DB // DB for contacts and relationships; used for ReadFromDatabase, WriteContactsToDatabase, findRelationships
 }

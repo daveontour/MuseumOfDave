@@ -93,6 +93,10 @@ func (s *FacebookAlbumStorage) SaveAlbumImage(ctx context.Context, albumID int64
 	}
 	defer tx.Rollback(ctx)
 
+	if _, err = tx.Exec(ctx, "SET LOCAL synchronous_commit = off"); err != nil {
+		return 0, fmt.Errorf("failed to set synchronous_commit: %w", err)
+	}
+
 	var blobID int64
 	if len(imageData) > 0 {
 		err = tx.QueryRow(ctx, `INSERT INTO media_blob (image_data, thumbnail_data) VALUES ($1, $2) RETURNING id`,
@@ -166,6 +170,10 @@ func (s *FacebookAlbumStorage) SaveAlbumImagesBatch(ctx context.Context, items [
 		return 0, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
+
+	if _, err = tx.Exec(ctx, "SET LOCAL synchronous_commit = off"); err != nil {
+		return 0, fmt.Errorf("failed to set synchronous_commit: %w", err)
+	}
 
 	imported := 0
 	for _, item := range items {

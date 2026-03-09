@@ -12,14 +12,9 @@ import (
 
 // RunContactsNormalise runs the contact normalisation process
 func RunContactsNormalise(ctx context.Context, opts RunOptions) error {
-	if opts.ExclusionsFile != "" {
-		if err := LoadExclusions(opts.ExclusionsFile); err != nil {
-			return fmt.Errorf("load exclusions: %w", err)
-		}
-	} else if opts.ContactsDB != nil {
-		if err := LoadExclusionsFromDB(ctx, opts.ContactsDB); err != nil {
-			return fmt.Errorf("load exclusions from db: %w", err)
-		}
+
+	if err := LoadExclusionsFromDB(ctx, opts.ContactsDB); err != nil {
+		return fmt.Errorf("load exclusions from db: %w", err)
 	}
 
 	var emailMatchMap map[string]string
@@ -35,19 +30,16 @@ func RunContactsNormalise(ctx context.Context, opts RunOptions) error {
 	var records []InputRecord
 	var err error
 
-	if opts.ContactsQuery != "" {
-		if opts.ContactsDB == nil {
-			return fmt.Errorf("database required for CONTACTS_QUERY mode")
-		}
-		fmt.Fprintf(os.Stderr, "Reading contacts from database\n")
-		records, err = ReadFromDatabase(ctx, opts.ContactsDB, opts.ContactsQuery)
-		if err != nil {
-			return fmt.Errorf("read from database: %w", err)
-		}
-		fmt.Fprintf(os.Stderr, "Read %d contacts from database\n", len(records))
-	} else {
-		return fmt.Errorf("database required for CONTACTS_QUERY mode")
+	// if opts.ContactsQuery != "" {
+	if opts.ContactsDB == nil {
+		return fmt.Errorf("Database required for CONTACTS_QUERY mode")
 	}
+	fmt.Fprintf(os.Stderr, "Reading contacts from database\n")
+	records, err = ReadFromDatabase(ctx, opts.ContactsDB, "SELECT from_address FROM emails UNION SELECT to_addresses FROM emails")
+	if err != nil {
+		return fmt.Errorf("read from database: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "Read %d contacts from database\n", len(records))
 
 	fmt.Fprintf(os.Stderr, "Merging contacts\n")
 	groups := runMerge(records, emailMatchMap, emailPrimaryNameMap, opts.Workers)

@@ -59,6 +59,10 @@ func (s *MessageStorage) SaveIMessage(ctx context.Context, data MessageData, att
 	}
 	defer tx.Rollback(ctx)
 
+	if _, err = tx.Exec(ctx, "SET LOCAL synchronous_commit = off"); err != nil {
+		return 0, false, fmt.Errorf("failed to set synchronous_commit: %w", err)
+	}
+
 	// Check if message already exists
 	var existingID int64
 	var isUpdate bool
@@ -327,6 +331,10 @@ func (s *MessageStorage) SaveMessagesBatch(ctx context.Context, messages []Messa
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
+
+	if _, err = tx.Exec(ctx, "SET LOCAL synchronous_commit = off"); err != nil {
+		return nil, fmt.Errorf("failed to set synchronous_commit: %w", err)
+	}
 
 	// Build a map to check for existing messages efficiently
 	type messageKey struct {

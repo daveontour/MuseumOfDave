@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -65,6 +66,48 @@ type ProgressCallback func(ImportStats)
 // CancelledCheck returns true if the import should be cancelled
 type CancelledCheck func() bool
 
+// findConversationDirs walks the directory tree and returns relative paths (from rootPath)
+// of all directories that directly contain message_*.json files.
+func findConversationDirs(rootPath string) ([]string, error) {
+	rootAbs, err := filepath.Abs(rootPath)
+	if err != nil {
+		return nil, err
+	}
+	var dirs []string
+	err = filepath.WalkDir(rootAbs, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			return nil
+		}
+		hasMessageJSON := false
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasPrefix(e.Name(), "message_") && strings.HasSuffix(e.Name(), ".json") {
+				hasMessageJSON = true
+				break
+			}
+		}
+		if hasMessageJSON {
+			rel, err := filepath.Rel(rootAbs, path)
+			if err != nil {
+				return nil
+			}
+			dirs = append(dirs, rel)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(dirs)
+	return dirs, nil
+}
+
 // ImportInstagramFromDirectory imports Instagram messages from a directory structure.
 // Each subdirectory is a conversation containing message_1.json, message_2.json, etc.
 func ImportInstagramFromDirectory(
@@ -87,20 +130,13 @@ func ImportInstagramFromDirectory(
 	storage := database.NewMessageStorage(db)
 	subjectService := services.NewSubjectConfigurationService(db)
 
-	entries, err := os.ReadDir(directoryPath)
+	conversationDirs, err := findConversationDirs(directoryPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read directory: %w", err)
-	}
-
-	totalConversations := 0
-	for _, entry := range entries {
-		if entry.IsDir() {
-			totalConversations++
-		}
+		return nil, fmt.Errorf("failed to find conversation directories: %w", err)
 	}
 
 	stats := &ImportStats{
-		TotalConversations:         totalConversations,
+		TotalConversations:         len(conversationDirs),
 		MissingAttachmentFilenames: []string{},
 		AttachmentErrors:           []string{},
 	}
@@ -118,13 +154,6 @@ func ImportInstagramFromDirectory(
 		if root, ok := DetectInstagramExportRoot(directoryPath, ""); ok {
 			exportRoot = root
 			fmt.Fprintf(os.Stderr, "Auto-detected Instagram export root: %s\n", exportRoot)
-		}
-	}
-
-	var conversationDirs []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			conversationDirs = append(conversationDirs, entry.Name())
 		}
 	}
 
@@ -225,18 +254,10 @@ func ListFilesToProcess(directoryPath string) error {
 		return fmt.Errorf("path is not a directory: %s", directoryPath)
 	}
 
-	entries, err := os.ReadDir(directoryPath)
+	conversationDirs, err := findConversationDirs(directoryPath)
 	if err != nil {
-		return fmt.Errorf("failed to read directory: %w", err)
+		return fmt.Errorf("failed to find conversation directories: %w", err)
 	}
-
-	var conversationDirs []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			conversationDirs = append(conversationDirs, entry.Name())
-		}
-	}
-	sort.Strings(conversationDirs)
 
 	fmt.Printf("\nFound %d conversation directory(ies)\n\n", len(conversationDirs))
 
