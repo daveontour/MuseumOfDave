@@ -858,12 +858,16 @@ async def search_emails(
             filters.append(Email.subject.ilike(f"%{subject}%"))
 
         if to_from:
-            filters.append(
+            to_from_addresses = [a.strip() for a in to_from.split(',') if a.strip()]
+            address_filters = [
                 or_(
-                    Email.to_addresses.ilike(f"%{to_from}%"),
-                    Email.from_address.ilike(f"%{to_from}%")
+                    Email.to_addresses.ilike(f"%{address}%"),
+                    Email.from_address.ilike(f"%{address}%")
                 )
-            )
+                for address in to_from_addresses
+            ]
+            if address_filters:
+                filters.append(or_(*address_filters))
 
         if has_attachments is not None:
             filters.append(Email.has_attachments == has_attachments)

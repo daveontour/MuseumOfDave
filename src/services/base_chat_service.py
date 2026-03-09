@@ -9,7 +9,7 @@ from sqlalchemy import or_
 from pympler import asizeof
 
 from ..database import Database
-from ..database.models import Message, Email, CompleteProfile, MediaMetadata, Artefact, FacebookAlbum
+from ..database.models import Message, Email, CompleteProfile, MediaMetadata, Artefact, FacebookAlbum, FacebookPost
 
 try:
     from tavily import TavilyClient
@@ -333,6 +333,35 @@ class BaseChatService:
             finally:
                 session.close()
 
+    def _get_all_facebook_posts(self) -> Dict[str, Any]:
+        """Return all Facebook posts with their complete data."""
+        if not self.db:
+            return {"error": "Database not configured", "posts": [], "count": 0}
+        session = self.db.get_session()
+        try:
+            posts = session.query(FacebookPost).order_by(FacebookPost.timestamp.desc()).all()
+            result = [{"id": p.id, "timestamp": p.timestamp.isoformat() if p.timestamp else None,
+                       "title": p.title or "", "description": p.post_text or "",
+                       "external_url": p.external_url or "", "post_type": p.post_type or ""} for p in posts]
+            return {"count": len(result), "posts": result}
+        finally:
+            session.close()
+
+    def _search_facebook_posts(self, description: str) -> Dict[str, Any]:
+        """Search Facebook posts by partial match on post description (post_text)."""
+        if not self.db:
+            return {"error": "Database not configured", "posts": [], "count": 0}
+        session = self.db.get_session()
+        try:
+            pattern = f"%{description}%"
+            posts = session.query(FacebookPost).filter(
+                FacebookPost.post_text.ilike(pattern)
+            ).order_by(FacebookPost.timestamp.desc()).all()
+            result = [{"id": p.id, "title": p.title or "", "description": p.post_text or ""} for p in posts]
+            return {"description": description, "count": len(result), "posts": result}
+        finally:
+            session.close()
+
     def _search_facebook_albums(self, keyword: str) -> Dict[str, Any]:
         """Search Facebook albums by partial keyword match on name or description."""
         if not self.db:
@@ -381,6 +410,8 @@ class BaseChatService:
             "get_all_messages_by_contact": self._get_all_messages_by_contact,
             "get_unique_tags_count": self._get_unique_tags_count,
             "search_facebook_albums": self._search_facebook_albums,
+            "search_facebook_posts": self._search_facebook_posts,
+            "get_all_facebook_posts": self._get_all_facebook_posts,
         }
         if function_name not in function_handlers:
             raise ValueError(f"Unknown function: {function_name}")

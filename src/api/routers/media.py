@@ -2317,10 +2317,11 @@ async def get_facebook_all_import_status():
 @router.get("/facebook/posts")
 async def get_facebook_posts(
     search: Optional[str] = Query(None, description="Search post text or title"),
+    post_ids: Optional[str] = Query(None, description="Comma-separated post IDs to filter to"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ):
-    """List Facebook posts sorted newest-first, with optional search and pagination."""
+    """List Facebook posts sorted newest-first, with optional search, post_ids filter, and pagination."""
     session = db.get_session()
     try:
         query = session.query(
@@ -2343,6 +2344,11 @@ async def get_facebook_posts(
                     FacebookPost.title.ilike(pattern),
                 )
             )
+
+        if post_ids:
+            ids = [int(x.strip()) for x in post_ids.split(",") if x.strip()]
+            if ids:
+                query = query.filter(FacebookPost.id.in_(ids))
 
         query = query.order_by(FacebookPost.timestamp.desc().nullslast())
         total = query.count()

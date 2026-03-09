@@ -110,7 +110,7 @@ const App = (() => {
         DOM.hamburgerMenu.addEventListener('click', () => {
             DOM.configPage.style.display = 'flex';
             loadControlDefaults();
-            loadDashboard();
+            if (Modals.AppConfig && Modals.AppConfig.load) Modals.AppConfig.load();
         });
         DOM.closeConfigBtn.addEventListener('click', () => {
             DOM.configPage.style.display = 'none';
@@ -118,6 +118,23 @@ const App = (() => {
         if (DOM.configPage) {
             DOM.configPage.addEventListener('click', (e) => {
                 if (e.target === DOM.configPage) DOM.configPage.style.display = 'none';
+            });
+        }
+
+        // Voice settings modal (opened by clicking voice image)
+        if (DOM.voiceSettingsTrigger) {
+            DOM.voiceSettingsTrigger.addEventListener('click', () => {
+                if (DOM.voiceSettingsModal) DOM.voiceSettingsModal.style.display = 'flex';
+            });
+        }
+        if (DOM.closeVoiceSettingsBtn) {
+            DOM.closeVoiceSettingsBtn.addEventListener('click', () => {
+                if (DOM.voiceSettingsModal) DOM.voiceSettingsModal.style.display = 'none';
+            });
+        }
+        if (DOM.voiceSettingsModal) {
+            DOM.voiceSettingsModal.addEventListener('click', (e) => {
+                if (e.target === DOM.voiceSettingsModal) DOM.voiceSettingsModal.style.display = 'none';
             });
         }
 
@@ -408,7 +425,7 @@ const App = (() => {
                 }
                 
                 // Load control defaults when any control tab is opened (if not already loaded)
-                const controlTabs = ['import-messages-controls', 'import-images-controls'];
+                const controlTabs = ['import-messages-controls', 'import-images-controls', 'facebook-instagram-whatsapp-controls'];
                 if (controlTabs.includes(targetTab) && Object.keys(controlDefaults).length === 0) {
                     loadControlDefaults();
                 } else if (controlTabs.includes(targetTab)) {
@@ -425,13 +442,27 @@ const App = (() => {
                     if (Modals.EmailClassifications && Modals.EmailClassifications.load) Modals.EmailClassifications.load();
                     if (Modals.EmailExclusions && Modals.EmailExclusions.load) Modals.EmailExclusions.load();
                 }
-                // Load configuration when Configuration tab is opened
-                if (targetTab === 'app-configuration') {
+                // Load configuration when Settings tab is opened (Application Configuration is in Settings)
+                if (targetTab === 'settings') {
                     if (Modals.AppConfig && Modals.AppConfig.load) Modals.AppConfig.load();
                 }
-                // Load dashboard when Dashboard tab is opened
-                if (targetTab === 'dashboard') {
-                    loadDashboard();
+                // Load subject configuration when Subject Configuration tab is opened
+                if (targetTab === 'subject-configuration') {
+                    if (Modals.SubjectConfiguration && Modals.SubjectConfiguration.loadAndPopulateForm) {
+                        Modals.SubjectConfiguration.loadAndPopulateForm();
+                    }
+                }
+                // Load system instructions when System Instructions tab is opened
+                if (targetTab === 'system-instructions') {
+                    if (Modals.SubjectConfiguration && Modals.SubjectConfiguration.loadAndPopulateForm) {
+                        Modals.SubjectConfiguration.loadAndPopulateForm();
+                    }
+                }
+                // Load reference documents when Reference Documents tab is opened
+                if (targetTab === 'reference-documents') {
+                    if (Modals.ReferenceDocuments && Modals.ReferenceDocuments.loadDocuments) {
+                        Modals.ReferenceDocuments.loadDocuments();
+                    }
                 }
             });
         });
@@ -680,10 +711,6 @@ const App = (() => {
             }).join('');
         }
 
-        const dashboardRefreshBtn = document.getElementById('dashboard-refresh-btn');
-        if (dashboardRefreshBtn) {
-            dashboardRefreshBtn.addEventListener('click', loadDashboard);
-        }
 
         // Format date/time in local timezone, 24-hour format (dd/mm/yyyy HH:mm)
         function formatImportLastRunLocal(isoString) {
@@ -709,32 +736,18 @@ const App = (() => {
                 const response = await fetch('/api/import-control-last-run');
                 if (!response.ok) return;
                 const data = await response.json();
-                const mapping = {
-                    email_processing: 'import-last-run-email_processing',
-                    whatsapp: 'import-last-run-whatsapp',
-                    facebook: 'import-last-run-facebook',
-                    instagram: 'import-last-run-instagram',
-                    imessage: 'import-last-run-imessage',
-                    facebook_albums: 'import-last-run-facebook_albums',
-                    facebook_places: 'import-last-run-facebook_places',
-                    filesystem: 'import-last-run-filesystem',
-                    reference_import: 'import-last-run-reference_import',
-                    image_export: 'import-last-run-image_export',
-                    thumbnails: 'import-last-run-thumbnails',
-                    contacts: 'import-last-run-contacts'
-                };
-                for (const [importType, elementId] of Object.entries(mapping)) {
-                    const el = document.getElementById(elementId);
-                    if (!el) continue;
+                const importTypes = ['email_processing', 'imap_processing', 'whatsapp', 'facebook', 'instagram', 'imessage', 'facebook_albums', 'facebook_posts', 'facebook_all', 'facebook_places', 'filesystem', 'reference_import', 'image_export', 'thumbnails', 'contacts'];
+                for (const importType of importTypes) {
+                    const els = document.querySelectorAll(`[data-import-last-run="${importType}"]`);
                     const info = data[importType];
-                    if (!info || !info.last_run_at) {
-                        el.textContent = '';
-                        continue;
-                    }
-                    const formatted = formatImportLastRunLocal(info.last_run_at);
-                    const resultLabel = (info.result === 'success' || info.result === 'completed') ? 'success' : (info.result === 'cancelled' ? 'cancelled' : 'error');
-                    el.textContent = `Last run: ${formatted} (${resultLabel})`;
-                    el.title = info.result_message || '';
+                    const formatted = (info && info.last_run_at) ? formatImportLastRunLocal(info.last_run_at) : null;
+                    const resultLabel = (info && info.result) ? ((info.result === 'success' || info.result === 'completed') ? 'success' : (info.result === 'cancelled' ? 'cancelled' : 'error')) : null;
+                    const text = (formatted && resultLabel) ? `Last run: ${formatted} (${resultLabel})` : '';
+                    const title = (info && info.result_message) ? info.result_message : '';
+                    els.forEach(el => {
+                        el.textContent = text;
+                        el.title = title;
+                    });
                 }
             } catch (e) {
                 console.warn('Failed to load import control last run:', e);
@@ -1787,12 +1800,6 @@ const App = (() => {
         //         Modals.HaveYourSay.open();
         //     });
         // }
-
-        if (DOM.referenceDocumentsSidebarBtn) {
-            DOM.referenceDocumentsSidebarBtn.addEventListener('click', () => {
-                Modals.ReferenceDocuments.open();
-            });
-        }
 
         const contactsSidebarBtn = document.getElementById('contacts-sidebar-btn');
         if (contactsSidebarBtn) {

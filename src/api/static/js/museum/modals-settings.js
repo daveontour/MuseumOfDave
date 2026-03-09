@@ -281,16 +281,6 @@ Modals.ReferenceDocuments = (() => {
         }
 
         function init() {
-            if (DOM.closeReferenceDocumentsModalBtn) {
-                DOM.closeReferenceDocumentsModalBtn.addEventListener('click', close);
-            }
-            
-            if (DOM.referenceDocumentsModal) {
-                DOM.referenceDocumentsModal.addEventListener('click', (e) => {
-                    if (e.target === DOM.referenceDocumentsModal) close();
-                });
-            }
-            
             if (DOM.referenceDocumentsSearch) {
                 let searchTimeout;
                 DOM.referenceDocumentsSearch.addEventListener('input', () => {
@@ -428,16 +418,7 @@ Modals.ReferenceDocuments = (() => {
             }
         }
 
-        function open() {
-            Modals._openModal(DOM.referenceDocumentsModal);
-            loadDocuments();
-        }
-
-        function close() {
-            Modals._closeModal(DOM.referenceDocumentsModal);
-        }
-
-        return { init, open, close };
+        return { init, loadDocuments };
 })();
 
 
@@ -1120,10 +1101,11 @@ Modals.SubjectConfiguration = (() => {
                 tab.classList.remove('active');
             });
 
-            // Show selected tab content
+            // Show selected tab content (use flex for system-instructions tab so textarea fills space)
             const selectedContent = document.getElementById(`${tabName}-tab-content`);
             if (selectedContent) {
-                selectedContent.style.display = 'block';
+                const parent = selectedContent.closest('#system-instructions-tab');
+                selectedContent.style.display = parent ? 'flex' : 'block';
             }
 
             // Add active class to selected tab
@@ -1256,93 +1238,53 @@ Modals.SubjectConfiguration = (() => {
         }
 
 
-        async function checkAndShow() {
-            // if (configurationLoaded && currentSubjectName) {
-            //     updatePageReferences(currentSubjectName, currentGender);
-            //     return;
-            // }
-
-            const config = await loadConfiguration();
-            if (!config) {
-                // No configuration exists, show modal
-                showModal();
-            } else {
-                // Configuration exists, update references
-                //updatePageReferences(config.subject_name, config.gender || 'Male');
+        async function populateFormFromConfig(config) {
+            if (!config) return;
+            if (DOM.subjectNameInput) DOM.subjectNameInput.value = config.subject_name || '';
+            if (DOM.subjectGenderSelect) DOM.subjectGenderSelect.value = config.gender || 'Male';
+            if (DOM.familyNameInput) DOM.familyNameInput.value = config.family_name || '';
+            if (DOM.otherNamesInput) DOM.otherNamesInput.value = config.other_names || '';
+            if (DOM.emailAddressesInput) DOM.emailAddressesInput.value = config.email_addresses || '';
+            if (DOM.phoneNumbersInput) DOM.phoneNumbersInput.value = config.phone_numbers || '';
+            if (DOM.whatsappHandleInput) DOM.whatsappHandleInput.value = config.whatsapp_handle || '';
+            if (DOM.instagramHandleInput) DOM.instagramHandleInput.value = config.instagram_handle || '';
+            if (DOM.writingStyleDisplay) _renderWritingStyleMarkdown(config.writing_style_ai || '');
+            if (DOM.psychologicalProfileDisplay) _renderPsychologicalProfileMarkdown(config.psychological_profile_ai || '');
+            if (DOM.systemInstructionsTextarea) DOM.systemInstructionsTextarea.value = config.system_instructions || '';
+            if (DOM.coreSystemInstructionsTextarea) {
+                const coreVal = config.core_system_instructions || '';
+                DOM.coreSystemInstructionsTextarea.value = coreVal;
+                loadedCoreSystemInstructions = coreVal;
             }
         }
 
-        let isInitialSetup = false;
-
-        async function showModal(loadExisting = false) {
-            if (!DOM.subjectConfigurationModal) {
-                console.error('Subject configuration modal not found');
-                return;
-            }
-
-            // Track if this is initial setup (non-dismissible) or editing (dismissible)
-            isInitialSetup = !loadExisting;
-
-            // Load existing configuration if requested (for editing)
-            if (loadExisting) {
-                try {
-                    const config = await loadConfiguration();
-                    if (config) {
-                        if (DOM.subjectNameInput) {
-                            DOM.subjectNameInput.value = config.subject_name || '';
-                        }
-                        if (DOM.subjectGenderSelect) {
-                            DOM.subjectGenderSelect.value = config.gender || 'Male';
-                        }
-                        if (DOM.familyNameInput) {
-                            DOM.familyNameInput.value = config.family_name || '';
-                        }
-                        if (DOM.otherNamesInput) {
-                            DOM.otherNamesInput.value = config.other_names || '';
-                        }
-                        if (DOM.emailAddressesInput) {
-                            DOM.emailAddressesInput.value = config.email_addresses || '';
-                        }
-                        if (DOM.phoneNumbersInput) {
-                            DOM.phoneNumbersInput.value = config.phone_numbers || '';
-                        }
-                        if (DOM.whatsappHandleInput) {
-                            DOM.whatsappHandleInput.value = config.whatsapp_handle || '';
-                        }
-                        if (DOM.instagramHandleInput) {
-                            DOM.instagramHandleInput.value = config.instagram_handle || '';
-                        }
-                        if (DOM.writingStyleDisplay) {
-                            _renderWritingStyleMarkdown(config.writing_style_ai || '');
-                        }
-                        if (DOM.psychologicalProfileDisplay) {
-                            _renderPsychologicalProfileMarkdown(config.psychological_profile_ai || '');
-                        }
-                        if (DOM.systemInstructionsTextarea) {
-                            DOM.systemInstructionsTextarea.value = config.system_instructions || '';
-                        }
-                        if (DOM.coreSystemInstructionsTextarea) {
-                            const coreVal = config.core_system_instructions || '';
-                            DOM.coreSystemInstructionsTextarea.value = coreVal;
-                            loadedCoreSystemInstructions = coreVal;
-                        }
-                    } else {
-                        // No config exists, load default from file
-                        await loadDefaultInstructions();
-                    }
-                } catch (error) {
-                    console.error('Error loading configuration:', error);
+        async function loadAndPopulateForm() {
+            try {
+                const config = await loadConfiguration();
+                if (config) {
+                    await populateFormFromConfig(config);
+                } else {
+                    populateFormFromConfig({});
                     await loadDefaultInstructions();
                 }
-            } else {
-                // First time setup - load default instructions from file
+            } catch (error) {
+                console.error('Error loading configuration:', error);
+                populateFormFromConfig({});
                 await loadDefaultInstructions();
             }
-
-            // Reset to first tab
             switchTab('system-instructions');
-            
-            Modals._openModal(DOM.subjectConfigurationModal);
+        }
+
+        async function checkAndShow() {
+            const config = await loadConfiguration();
+            if (!config) {
+                // No configuration exists - open config overlay and switch to Subject Configuration tab
+                if (DOM.configPage) {
+                    DOM.configPage.style.display = 'flex';
+                    const subjectTabBtn = document.querySelector('.config-tab-button[data-tab="subject-configuration"]');
+                    if (subjectTabBtn) subjectTabBtn.click();
+                }
+            }
         }
 
         async function loadDefaultInstructions() {
@@ -1401,12 +1343,6 @@ Modals.SubjectConfiguration = (() => {
             }
         }
 
-        function closeModal() {
-            if (DOM.subjectConfigurationModal) {
-                Modals._closeModal(DOM.subjectConfigurationModal);
-            }
-        }
-
         let loadedCoreSystemInstructions = null;
 
         async function handleSave() {
@@ -1451,7 +1387,6 @@ Modals.SubjectConfiguration = (() => {
 
             try {
                 await saveConfiguration(subjectName, systemInstructions, coreSystemInstructions, gender, familyName, otherNames, emailAddresses, phoneNumbers, whatsappHandle, instagramHandle);
-                closeModal();
 
                 alert('Subject configuration saved successfully!');
 
@@ -1469,19 +1404,16 @@ Modals.SubjectConfiguration = (() => {
 
             if (DOM.cancelSubjectConfigBtn) {
                 DOM.cancelSubjectConfigBtn.addEventListener('click', () => {
-                    if (!isInitialSetup) {
-                        // Only allow cancel if not initial setup
-                        closeModal();
-                    }
+                    loadAndPopulateForm();
                 });
             }
 
-            if (DOM.closeSubjectConfigModalBtn) {
-                DOM.closeSubjectConfigModalBtn.addEventListener('click', () => {
-                    if (!isInitialSetup) {
-                        // Only allow close if not initial setup
-                        closeModal();
-                    }
+            if (DOM.saveSystemInstructionsBtn) {
+                DOM.saveSystemInstructionsBtn.addEventListener('click', handleSave);
+            }
+            if (DOM.cancelSystemInstructionsBtn) {
+                DOM.cancelSystemInstructionsBtn.addEventListener('click', () => {
+                    loadAndPopulateForm();
                 });
             }
 
@@ -1505,28 +1437,7 @@ Modals.SubjectConfiguration = (() => {
                 DOM.requestPsychologicalProfileBtn.addEventListener('click', () => requestPsychologicalProfile());
             }
 
-            // Button in Settings tab to edit configuration
-            const editSubjectConfigBtn = document.getElementById('edit-subject-config-btn');
-            if (editSubjectConfigBtn) {
-                editSubjectConfigBtn.addEventListener('click', () => {
-                    showModal(true); // Load existing configuration
-                });
-            }
-
-            // Prevent closing modal by clicking outside only during initial setup
-            if (DOM.subjectConfigurationModal) {
-                DOM.subjectConfigurationModal.addEventListener('click', (e) => {
-                    if (e.target === DOM.subjectConfigurationModal && isInitialSetup) {
-                        // Don't close - modal is non-dismissible during initial setup
-                        e.stopPropagation();
-                    } else if (e.target === DOM.subjectConfigurationModal && !isInitialSetup) {
-                        // Allow closing when editing
-                        closeModal();
-                    }
-                });
-            }
-
-            // Check and show modal on page load if needed
+            // Check and show config with Subject Configuration tab on page load if no config exists
             checkAndShow();
         }
 
@@ -1534,11 +1445,9 @@ Modals.SubjectConfiguration = (() => {
             init,
             checkAndShow,
             loadConfiguration,
+            loadAndPopulateForm,
             saveConfiguration,
-            getSubjectName,
-           // updatePageReferences,
-            showModal,
-            close: closeModal
+            getSubjectName
         };
 })();
 
@@ -1902,10 +1811,6 @@ Modals.closeAll = () => {
         try {
             if (Modals.AddInterviewee && Modals.AddInterviewee.close) Modals.AddInterviewee.close();
         } catch (e) { console.debug('Error closing AddInterviewee modal:', e); }
-        
-        try {
-            if (Modals.ReferenceDocuments && Modals.ReferenceDocuments.close) Modals.ReferenceDocuments.close();
-        } catch (e) { console.debug('Error closing ReferenceDocuments modal:', e); }
         
         try {
             if (Modals.Contacts && Modals.Contacts.close) Modals.Contacts.close();

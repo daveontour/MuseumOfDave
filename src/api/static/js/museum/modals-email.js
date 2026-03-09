@@ -1477,7 +1477,18 @@ Modals.EmailEditor = (() => {
             if (DOM.emailEditorBulkDeleteBtn) {
                 DOM.emailEditorBulkDeleteBtn.addEventListener('click', _handleBulkDelete);
             }
+            if (DOM.emailEditorSelectAllBtn) {
+                DOM.emailEditorSelectAllBtn.addEventListener('click', _handleSelectAll);
+            }
             _setupFilters();
+        }
+
+        let _emailEditorLoadingCount = 0;
+        function _setEmailEditorLoading(loading) {
+            if (!DOM.emailEditorViewer) return;
+            _emailEditorLoadingCount += loading ? 1 : -1;
+            _emailEditorLoadingCount = Math.max(0, _emailEditorLoadingCount);
+            DOM.emailEditorViewer.classList.toggle('loading', _emailEditorLoadingCount > 0);
         }
 
         function _handleSearch() {
@@ -1493,8 +1504,12 @@ Modals.EmailEditor = (() => {
             DOM.emailEditorYearFilter.value = '0';
             DOM.emailEditorMonthFilter.value = '0';
             DOM.emailEditorAttachmentsFilter.checked = false;
+            emailData = [];
+            selectedEmailIds.clear();
             currentPage = 1;
-            _loadEmails();
+            _renderTable();
+            _renderPagination();
+            _updateBulkDeleteButton();
         }
 
         function _loadEmails() {
@@ -1529,6 +1544,7 @@ Modals.EmailEditor = (() => {
                 params.append('has_attachments', 'true');
             }
 
+            _setEmailEditorLoading(true);
             fetch('/emails/search?' + params.toString())
                 .then(r => r.json())
                 .then(data => {
@@ -1552,6 +1568,9 @@ Modals.EmailEditor = (() => {
                     emailData = [];
                     _renderTable();
                     _renderPagination();
+                })
+                .finally(() => {
+                    _setEmailEditorLoading(false);
                 });
         }
 
@@ -1729,6 +1748,7 @@ Modals.EmailEditor = (() => {
             }
 
             // Update on server
+            _setEmailEditorLoading(true);
             fetch(`/emails/${emailId}`, {
                 method: 'PUT',
                 headers: {
@@ -1764,7 +1784,19 @@ Modals.EmailEditor = (() => {
                 }
                 _renderTable();
                 alert('Failed to update email. Please try again.');
+            })
+            .finally(() => {
+                _setEmailEditorLoading(false);
             });
+        }
+
+        function _handleSelectAll() {
+            const startIndex = (currentPage - 1) * pageSize;
+            const endIndex = startIndex + pageSize;
+            const emailsOnPage = emailData.slice(startIndex, endIndex);
+            emailsOnPage.forEach(email => selectedEmailIds.add(email.id));
+            _renderTable();
+            _updateBulkDeleteButton();
         }
 
         function _updateBulkDeleteButton() {
@@ -1804,6 +1836,7 @@ Modals.EmailEditor = (() => {
         }
 
         function _bulkDeleteEmails(emailIds) {
+            _setEmailEditorLoading(true);
             fetch('/emails/bulk-delete', {
                 method: 'DELETE',
                 headers: {
@@ -1845,6 +1878,9 @@ Modals.EmailEditor = (() => {
             .catch(error => {
                 console.error('Error bulk deleting emails:', error);
                 alert('Failed to delete emails. Please try again.');
+            })
+            .finally(() => {
+                _setEmailEditorLoading(false);
             });
         }
 
@@ -1867,6 +1903,7 @@ Modals.EmailEditor = (() => {
         }
 
         function _deleteEmail(emailId) {
+            _setEmailEditorLoading(true);
             fetch(`/emails/${emailId}`, {
                 method: 'DELETE'
             })
@@ -1894,6 +1931,9 @@ Modals.EmailEditor = (() => {
             .catch(error => {
                 console.error('Error deleting email:', error);
                 alert('Failed to delete email. Please try again.');
+            })
+            .finally(() => {
+                _setEmailEditorLoading(false);
             });
         }
 

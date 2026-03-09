@@ -53,6 +53,15 @@ body {
 
 .top-bar-voice-image {
     flex-shrink: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.top-bar-voice-image .voice-settings-arrow {
+    font-size: 0.75em;
+    color: rgba(255, 255, 255, 0.9);
 }
 
 .top-bar-voice-image img {
@@ -64,41 +73,58 @@ body {
 
 .top-bar-voice-controls {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: 4px;
     min-width: 0;
 }
 
 .top-bar-voice-controls #voice-select,
-.top-bar-voice-controls #owner-mood {
+.top-bar-voice-controls #owner-mood,
+.voice-settings-controls #voice-select,
+.voice-settings-controls #owner-mood {
     width: 100%;
     max-width: 280px;
     min-width: 180px;
     padding: 6px 10px;
     border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid #dee2e6;
+    background: #fff;
     font-size: 13px;
+    color: #333;
 }
 
-.top-bar-llm select {
+.top-bar-llm select,
+.top-bar #llm-provider-select {
     min-width: 120px;
     padding: 6px 10px;
     border-radius: 6px;
     border: 1px solid rgba(255, 255, 255, 0.3);
     background: rgba(255, 255, 255, 0.95);
     font-size: 13px;
+    color: #333;
+}
+
+.top-bar-llm select:hover,
+.top-bar #llm-provider-select:hover {
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.top-bar-llm select:focus,
+.top-bar #llm-provider-select:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.6);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
 }
 
 .top-bar-label {
-    font-size: 11px;
+    font-size: 12pt;
     color: rgba(255, 255, 255, 0.8);
     margin: 0;
 }
 
 .top-bar-llm {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: 4px;
 }
 
@@ -754,6 +780,10 @@ body {
     background: linear-gradient(135deg, #1877f2 0%, #0d65d9 100%);
 }
 
+.response-action-btn--facebook-post {
+    background: linear-gradient(135deg, #1877f2 0%, #42b72a 100%);
+}
+
 /* Audio tag visibility (JS toggles 'hide-audio-tags' class on body) */
 .hide-audio-tags .message-content audio,
 .hide-audio-tags .audio-status { /* Also hide status if audio tags are hidden */
@@ -776,6 +806,7 @@ body {
     display: flex;
     padding: 10px;
     padding-bottom: 5px;
+    padding-right: 0px;
     background-color: #f8f8f8;
     position: relative; /* Ensure proper positioning context for dropup */
     overflow: visible; /* Allow dropup to extend outside form */
@@ -1322,7 +1353,7 @@ body {
     gap: 8px;
     cursor: pointer;
     color: #333;
-    font-size: 0.95em;
+    font-size: 12pt;
 }
 .work-mode-label input[type="checkbox"] {
     margin: 0;
@@ -1353,6 +1384,82 @@ body {
     box-sizing: border-box;
 }
 
+/* Voice Settings Modal */
+.voice-settings-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1001;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-sizing: border-box;
+}
+
+.voice-settings-modal-content {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    max-width: 420px;
+    width: 90%;
+    overflow: hidden;
+}
+
+.voice-settings-modal-content .modal-header {
+    border-radius: 12px 12px 0 0;
+}
+
+.voice-settings-modal-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.voice-settings-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.voice-settings-controls .top-bar-label {
+    color: #333;
+    font-size: 21px;
+}
+
+.voice-settings-controls #voice-select,
+.voice-settings-controls #owner-mood {
+    font-size: 21px;
+}
+
+.voice-settings-modal .work-mode-label {
+    color: #333;
+    font-size: 21px;
+}
+
+.voice-settings-slider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.voice-settings-slider label {
+    color: #333;
+    font-size: 21px;
+}
+
+.voice-settings-slider .value-display {
+    color: #333;
+    min-width: 28px;
+    font-size: 21px;
+}
+
+.voice-settings-slider input[type="range"] {
+    width: 120px;
+}
+
 .config-modal-content {
     width: 90vw;
     height: 90vh;
@@ -1377,8 +1484,8 @@ body {
 .config-tabs-sidebar {
     display: flex;
     flex-direction: column;
-    width: 200px;
-    min-width: 200px;
+    width: 240px;
+    min-width: 240px;
     flex-shrink: 0;
     border-right: 1px solid #dee2e6;
     background: #f8f9fa;
@@ -1951,8 +2058,8 @@ body {
     background: #fff;
     border-radius: 12px; /* Default radius */
     box-shadow: 0 8px 32px rgba(0,0,0,0.18);
-    padding: 2rem; /* Default padding */
-    padding-top: 16px;
+    padding: 0px; /* Default padding */
+    padding-top: 0px;
     position: relative;
     font-family: 'Segoe UI', Arial, sans-serif;
     display: flex;
@@ -2092,6 +2199,31 @@ body {
 
 .subject-config-tab-content:first-of-type {
     display: block;
+}
+
+/* System Instructions tab: textarea fills available vertical space */
+#system-instructions-tab .subject-config-tab-content:first-of-type {
+    display: flex;
+}
+#system-instructions-tab .config-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+#system-instructions-tab .subject-config-tab-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+#system-instructions-tab #system-instructions-textarea,
+#system-instructions-tab #core-system-instructions-textarea {
+    flex: 1;
+    min-height: 120px;
+    resize: vertical;
 }
 
 /* Read-only textarea styling */
@@ -3364,6 +3496,20 @@ body {
     overflow: hidden;
 }
 
+.email-editor-viewer.loading {
+    position: relative;
+}
+
+.email-editor-viewer.loading::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1000;
+    cursor: wait;
+    pointer-events: auto;
+    background: rgba(255, 255, 255, 0.4);
+}
+
 .email-editor-viewer .container {
     max-width: 100%;
     margin: 0;
@@ -3376,8 +3522,19 @@ body {
     flex-direction: column;
 }
 
-.email-editor-viewer .header {
+.email-editor-header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    flex-shrink: 0;
     padding: 10px 20px;
+    background-color: white;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.email-editor-viewer .header {
+    padding: 0;
     text-align: left;
     flex-shrink: 0;
 }
@@ -3406,12 +3563,15 @@ body {
     margin-bottom: 15px;
 }
 
-/* Search Criteria Pane */
+/* Search Criteria Pane - aligned to the right of the tab */
 .email-editor-search-pane {
     flex-shrink: 0;
-    padding: 1em;
+    min-width: 655px;
+    max-width: 936px;
+    padding: 1.56em;
     background-color: aliceblue;
-    border-bottom: 1px solid #e9ecef;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
 }
 
 /* Lower Pane: Email Table */
@@ -3515,12 +3675,20 @@ body {
     border-bottom: 1px solid #e9ecef;
 }
 
+.email-editor-table tbody tr:nth-child(odd) {
+    background-color: #ffffff;
+}
+
+.email-editor-table tbody tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+
 .email-editor-table tbody tr:hover {
     background-color: #f8fbff;
 }
 
 .email-editor-table tbody tr.selected {
-    background-color: #e3f2fd;
+    background-color: #e3f2fd !important;
     border-left: 3px solid #2196F3;
 }
 
@@ -3547,6 +3715,8 @@ body {
 .email-editor-pagination {
     flex-shrink: 0;
     padding: 1em;
+    padding-top: 4px;
+    padding-bottom: 4px;
     background-color: #f8f9fa;
     border-top: 1px solid #e9ecef;
     display: flex;

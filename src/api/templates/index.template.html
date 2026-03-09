@@ -26,66 +26,87 @@
             <div class="top-bar-title">
                 <h2 id="top-bar-page-title">{{ page_title }}</h2>
             </div>
-            <div class="top-bar-voice voice-selector">
-                <div class="top-bar-voice-image">
+            <div class="top-bar-voice voice-selector" style="display: flex; flex-direction: row; gap: 10px; margin-left: 25px;">
+                <label for="voice-select" class="top-bar-label">Answer in the Voice Of:</label>
+                <div class="top-bar-voice-image" id="voice-settings-trigger" title="Voice settings">
                     <img id="selected-voice-image" src="/static/images/expert.png" alt="Selected Voice" class="selected-voice-img">
+                    <i class="fas fa-chevron-down voice-settings-arrow"></i>
                 </div>
-                <div class="top-bar-voice-controls">
-                    <label for="voice-select" class="top-bar-label">Answer in the Voice Of:</label>
-                    <select id="voice-select" name="voice">
-                        <option value="owner">{{ owners }} own voice</option>
-                        <option value="expert" selected>A dispassionate expert</option>
-                        <option value="male_friend">{{ owners }} best male friend</option>
-                        <option value="female_friend">{{ owners }} best female friend</option>
-                        <option value="psychologist">A psychologist</option>
-                        <option value="after_death">A friend speaking after {{ owners }} death</option>
-                        <option value="irish">A Irish limmerick poet</option>
-                        <option value="secret_admirer">A admirer who remained anonymous to {{ owner }}</option>
-                        <option value="haiku">A Japanese haiku master</option>
-                        <option value="insult">An insult commedian</option>
-                        <option value="earthchild">A hippy earthchild</option>
-                        <option value="bar_girl">A Thai bar girl that knows {{ owners }} complete story</option>
-                        <option value="parents">{{owner}}'s mother and father</option>
-                        <option value="preacher">A fire and brimstone preacher who disapproves of all aspects of {{owner}}'s lif</option>
+            
+                <div class="top-bar-llm" style="margin-left: 25px;">
+                    <label for="llm-provider-select" class="top-bar-label" style="margin-right: 10px;align-content: center;">AI Provider:</label>
+                    <select id="llm-provider-select">
+                        <option value="gemini" selected>Gemini</option>
+                        <option value="claude">Claude</option>
                     </select>
-                    <div id="mood-selector" style="display: none; margin-top: 6px;">
-                        <select id="owner-mood" name="owner-mood">
-                            <option value="neutral">Neutral - Just Regular</option>
-                            <option value="reflective">Reflective - Thoughtful and Contemplative</option>
-                            <option value="excited">Excited - Enthusiastic and Energetic</option>
-                            <option value="melancholic">Melancholic - Wistful and Nostalgic</option>
-                            <option value="depressed">Depressed - Hopeless and Dispondent</option>
-                            <option value="philosophical">Philosophical - Deep and Analytical</option>
-                            <option value="humorous">Humorous - Witty and Playful</option>
-                            <option value="cynical">Cynical - Skeptical and Sardonic</option>
-                            <option value="optimistic">Optimistic - Hopeful and Positive</option>
-                            <option value="analytical">Analytical - Factual and Detached</option>
-                            <option value="angry">Angry - Aggressive and Resentful</option>
-                            <option value="sad">Sad - Mournful and Melancholic</option>
-                            <option value="anxious">Anxious - Nervous and Worried</option>
-                            <option value="content">Content - Satisfied and Content</option>
-                            <option value="grateful">Grateful - Appreciative and Thankful</option>
-                        </select>
-                    </div>
-                </div>
-                <label class="work-mode-label">
-                    <input type="checkbox" id="companion-mode" name="companion-mode">
-                    <span>Companion Mode</span>
-                    <i class="fas fa-heart"></i>
-                </label>
-                <div class="slider-container top-bar-slider">
-                    <label for="creativity-level">Creativity</label>
-                    <input type="range" id="creativity-level" min="0" max="2" step="0.1" value="0">
-                    <span class="value-display">0</span>
                 </div>
             </div>
-            <div class="top-bar-llm">
+
+            <!-- Voice Settings Modal -->
+            <div id="voice-settings-modal" class="voice-settings-modal" style="display: none;">
+                <div class="voice-settings-modal-content" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h2>Voice Settings</h2>
+                        <button id="close-voice-settings" class="modal-close-btn">&times;</button>
+                    </div>
+                    <div class="voice-settings-modal-body">
+                        <div class="voice-settings-controls">
+                            <label for="voice-select" class="top-bar-label">Answer in the Voice Of:</label>
+                            <select id="voice-select" name="voice">
+                                <option value="owner">{{ owners }} own voice</option>
+                                <option value="expert" selected>A dispassionate expert</option>
+                                <option value="male_friend">{{ owners }} best male friend</option>
+                                <option value="female_friend">{{ owners }} best female friend</option>
+                                <option value="psychologist">A psychologist</option>
+                                <option value="after_death">A friend speaking after {{ owners }} death</option>
+                                <option value="irish">A Irish limmerick poet</option>
+                                <option value="secret_admirer">A admirer who remained anonymous to {{ owner }}</option>
+                                <option value="haiku">A Japanese haiku master</option>
+                                <option value="insult">An insult commedian</option>
+                                <option value="earthchild">A hippy earthchild</option>
+                                <option value="bar_girl">A Thai bar girl that knows {{ owners }} complete story</option>
+                                <option value="parents">{{owner}}'s mother and father</option>
+                                <option value="preacher">A fire and brimstone preacher who disapproves of all aspects of {{owner}}'s lif</option>
+                            </select>
+                            <div id="mood-selector" style="display: none; margin-top: 6px;">
+                                <select id="owner-mood" name="owner-mood">
+                                    <option value="neutral">Neutral - Just Regular</option>
+                                    <option value="reflective">Reflective - Thoughtful and Contemplative</option>
+                                    <option value="excited">Excited - Enthusiastic and Energetic</option>
+                                    <option value="melancholic">Melancholic - Wistful and Nostalgic</option>
+                                    <option value="depressed">Depressed - Hopeless and Dispondent</option>
+                                    <option value="philosophical">Philosophical - Deep and Analytical</option>
+                                    <option value="humorous">Humorous - Witty and Playful</option>
+                                    <option value="cynical">Cynical - Skeptical and Sardonic</option>
+                                    <option value="optimistic">Optimistic - Hopeful and Positive</option>
+                                    <option value="analytical">Analytical - Factual and Detached</option>
+                                    <option value="angry">Angry - Aggressive and Resentful</option>
+                                    <option value="sad">Sad - Mournful and Melancholic</option>
+                                    <option value="anxious">Anxious - Nervous and Worried</option>
+                                    <option value="content">Content - Satisfied and Content</option>
+                                    <option value="grateful">Grateful - Appreciative and Thankful</option>
+                                </select>
+                            </div>
+                        </div>
+                        <label class="work-mode-label">
+                            <input type="checkbox" id="companion-mode" name="companion-mode">
+                            <span>Companion Mode</span>
+                        </label>
+                        <div class="slider-container voice-settings-slider">
+                            <label for="creativity-level">Creativity</label>
+                            <input type="range" id="creativity-level" min="0" max="2" step="0.1" value="0">
+                            <span class="value-display">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- <div class="top-bar-llm">
                 <label for="llm-provider-select" class="top-bar-label">LLM Provider</label>
                 <select id="llm-provider-select">
                     <option value="gemini" selected>Gemini</option>
                     <option value="claude">Claude</option>
                 </select>
-            </div>
+            </div> -->
             <button id="hamburger-menu" class="hamburger-btn">
                 <i class="fas fa-cog"></i>
             </button>
@@ -223,95 +244,51 @@
                 </div>
                 <div class="config-modal-body">
                     <div class="config-tabs-sidebar">
-                        <button class="config-tab-button active" data-tab="dashboard">
-                            <i class="fas fa-tachometer-alt"></i> Dashboard
-                        </button>
-                        <button class="config-tab-button" data-tab="settings">
+                        <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;">App & Subject Settings</label>
+                        <button class="config-tab-button active" data-tab="settings">
                             <i class="fas fa-cog"></i> Settings
                         </button>
+                        <button class="config-tab-button" data-tab="subject-configuration">
+                            <i class="fas fa-user"></i> Subject Configuration
+                        </button>
+                        <button class="config-tab-button" data-tab="system-instructions">
+                            <i class="fas fa-file-alt"></i> System Instructions
+                        </button>
+                        <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;">Subject Data</label>
+                        <button class="config-tab-button" data-tab="reference-documents">
+                            <i class="fas fa-folder-open"></i> Reference Documents
+                        </button>
                         <button class="config-tab-button" data-tab="import-messages-controls">
-                            <i class="fas fa-download"></i> Import Messages Controls
+                            <i class="fas fa-envelope"></i> Emails and Messages
+                        </button>
+                        <button class="config-tab-button" data-tab="facebook-instagram-whatsapp-controls">
+                            <i class="fas fa-comments"></i> Facebook and Instagram
                         </button>
                         <button class="config-tab-button" data-tab="import-images-controls">
-                            <i class="fas fa-image"></i> Import Images Controls
+                            <i class="fas fa-image"></i> Import Images
                         </button>
+                        <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;">Manage Emails & Contacts</label>
                         <button class="config-tab-button" data-tab="images-grid">
                             <i class="fas fa-images"></i> Email Attachments
                         </button>
                         <button class="config-tab-button" data-tab="email-editor">
                             <i class="fas fa-edit"></i> Email Editor
                         </button>
-                        <button class="config-tab-button" data-tab="api-docs">
-                            <i class="fas fa-book"></i> API Docs
-                        </button>
-                        <button class="config-tab-button" data-tab="manage-keys">
-                            <i class="fas fa-key"></i> Manage Keys
-                        </button>
                         <button class="config-tab-button" data-tab="manage-contacts">
                             <i class="fas fa-address-book"></i> Manage Contacts
                         </button>
-                        <button class="config-tab-button" data-tab="app-configuration">
-                            <i class="fas fa-sliders-h"></i> Configuration
+                        <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;">Manage Secure Data Access</label>
+                        <button class="config-tab-button" data-tab="manage-keys">
+                            <i class="fas fa-key"></i> Manage Keys
+                        </button>
+                        <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;">API Reference</label>
+                        <button class="config-tab-button" data-tab="api-docs">
+                            <i class="fas fa-book"></i> API Docs
                         </button>
                     </div>
                     <div class="config-content">
-                <div class="config-tab-content active" id="dashboard-tab">
-                    <section class="config-section">
-                        <h3>Dashboard</h3>
-                        <div class="setting-group">
-                            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px;">
-                                <button type="button" id="dashboard-refresh-btn" class="modal-btn modal-btn-secondary">
-                                    <i class="fas fa-sync-alt"></i> Refresh
-                                </button>
-                                <span id="dashboard-loading" style="color: #666; display: none;">
-                                    <i class="fas fa-spinner fa-spin"></i> Loading...
-                                </span>
-                            </div>
-                            <div id="dashboard-load-error" style="display: none; padding: 10px; background: #fee; color: #c00; border-radius: 4px; margin-bottom: 12px;"></div>
-                            <div id="dashboard-stats" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;">
-                                <!-- Populated by JS -->
-                            </div>
-                            <div id="dashboard-messages-by-year-chart" style="margin-top: 24px;">
-                                <!-- Bar graph: messages by year -->
-                            </div>
-                            <div id="dashboard-emails-by-year-chart" style="margin-top: 24px;">
-                                <!-- Bar graph: emails by year -->
-                            </div>
-                            <div id="dashboard-contacts-by-category-chart" style="margin-top: 24px;">
-                                <!-- Bar graph: contacts by category -->
-                            </div>
-                            <div id="dashboard-messages-by-contact-chart" style="margin-top: 24px;">
-                                <!-- Bar graph: messages by contact (top 20) -->
-                            </div>
-                            <div id="dashboard-images-by-region-chart" style="margin-top: 24px;">
-                                <!-- Bar graph: images by region -->
-                            </div>
-                        </div>
-                    </section>
-                </div>
-                <div class="config-tab-content" id="settings-tab">
-                    <section class="config-section">
-                        <h3>Subject Configuration</h3>
-                        <div class="setting-group">
-                            <p style="color: #666; margin-bottom: 10px;">
-                                Configure the subject name and system instructions used for chat conversations.
-                            </p>
-                            <button type="button" id="edit-subject-config-btn" class="modal-btn modal-btn-primary">
-                                <i class="fas fa-edit"></i> Edit Subject Configuration
-                            </button>
-                        </div>
-                    </section>
-                    <section class="config-section">
-                        <h3>Reference Documents</h3>
-                        <div class="setting-group">
-                            <p style="color: #666; margin-bottom: 10px;">
-                                Upload and manage reference documents used by the chat system.
-                            </p>
-                            <button type="button" id="reference-documents-sidebar-btn" class="modal-btn modal-btn-primary">
-                                <i class="fas fa-folder-open"></i> Open Reference Documents
-                            </button>
-                        </div>
-                    </section>
+                <div class="config-tab-content active" id="settings-tab">
+                    <div style="display: flex; gap: 2em; flex-wrap: wrap;background-color: #f8f9fa">
                     <section class="config-section">
                         <h3>Chat Settings</h3>
                         <div class="setting-group">
@@ -347,6 +324,39 @@
                             </label>
                         </div>
                     </section>
+                    </div>
+                    <section class="config-section">
+                        <h3>Application Configuration</h3>
+                        <p style="color:#666; margin-bottom:16px">
+                            Key-value pairs stored in the database. Values here override the <code>.env</code> file.
+                            Delete a key to revert to the <code>.env</code> value.
+                        </p>
+                        <div style="display:flex; gap:8px; margin-bottom:16px; align-items:flex-end; flex-wrap:wrap">
+                            <input id="cfg-new-key" class="modal-input" placeholder="Key" style="flex:1; min-width:180px">
+                            <input id="cfg-new-value" class="modal-input" placeholder="Value" style="flex:2; min-width:200px">
+                            <label style="display:flex;align-items:center;gap:4px;font-size:13px">
+                                <input type="checkbox" id="cfg-new-mandatory"> Mandatory
+                            </label>
+                            <button class="modal-btn modal-btn-primary" onclick="AppConfig.save()">Save</button>
+                            <button class="modal-btn modal-btn-secondary" onclick="AppConfig.seed()">Seed from .env</button>
+                        </div>
+                        <table id="cfg-table" style="width:100%; border-collapse:collapse; font-size:13px">
+                            <thead>
+                                <tr style="background:#e9ecef; text-align:left">
+                                    <th style="padding:8px">Key</th>
+                                    <th style="padding:8px">Value</th>
+                                    <th style="padding:8px; text-align:center">Mandatory</th>
+                                    <th style="padding:8px">Description</th>
+                                    <th style="padding:8px">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cfg-table-body"></tbody>
+                        </table>
+                        <p id="cfg-status" style="margin-top:10px; font-size:13px; color:#666"></p>
+                        <p style="margin-top:16px; font-size:12px; color:#666; font-style:italic">
+                            Note: Either the Gemini API key or the Anthropic API key, or both, must be set to use the AI features of the system.
+                        </p>
+                    </section>
                     <!-- <section class="config-section">
                         <h3>Database Maintenance</h3>
                         <div class="setting-group">
@@ -367,6 +377,136 @@
                         </div>
                     </section> -->
                 </div>
+                <div class="config-tab-content" id="reference-documents-tab">
+                    <section class="config-section" style="display: flex; flex-direction: column; height: 100%;">
+                        <h4>Reference Documents</h4>
+                        <p>Reference documents are used to provide context for the AI to use when generating responses. They can be uploaded as PDF, Word, Images, Text, CSV, or JSON files.<br/>
+                        You should upload at least one document that is a comprehenvie biography. <br/>
+                        Other documents could provide additional context such as CV, family tree, Letters, sample of your writing, etc.</p>
+                         <div class="reference-documents-filters">
+                            <div class="reference-documents-search-row">
+                                <input type="text" id="reference-documents-search" placeholder="Search documents..." class="reference-documents-input">
+                                <button id="reference-documents-upload-btn" class="modal-btn modal-btn-primary">
+                                    <i class="fas fa-upload"></i> Upload Document
+                                </button>
+                            </div>
+                            <div class="reference-documents-filter-row">
+                                <select id="reference-documents-category-filter" class="reference-documents-select">
+                                    <option value="">All Categories</option>
+                                </select>
+                                <select id="reference-documents-content-type-filter" class="reference-documents-select">
+                                    <option value="">All Types</option>
+                                    <option value="application/pdf">PDF</option>
+                                    <option value="application/msword">Word (DOC)</option>
+                                    <option value="application/vnd.openxmlformats-officedocument.wordprocessingml.document">Word (DOCX)</option>
+                                    <option value="image">Images</option>
+                                    <option value="text">Text Files</option>
+                                    <option value="text/csv">CSV</option>
+                                    <option value="application/json">JSON</option>
+                                </select>
+                                <label class="reference-documents-checkbox-label">
+                                    <input type="checkbox" id="reference-documents-task-filter">
+                                    Available for Task
+                                </label>
+                            </div>
+                        </div>
+                        <div class="reference-documents-list" id="reference-documents-list"></div>
+                    </section>
+                </div>
+                <div class="config-tab-content" id="subject-configuration-tab">
+                    <section class="config-section">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; row-gap: 1.5em; column-gap: 5px; margin-bottom: 1.5em;">
+                            <div style="min-width: 0;">
+                                <label for="subject-name-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Subject Name:</label>
+                                <input id="subject-name-input" type="text" placeholder="Enter subject name..." style="width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" required />
+                            </div>
+                            <div style="min-width: 0;">
+                                <label for="family-name-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Family Name:</label>
+                                <input id="family-name-input" type="text" placeholder="Enter family name..." style="width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
+                            </div>
+                            <div style="min-width: 0;">
+                                <label for="other-names-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Other Names (comma-separated):</label>
+                                <input id="other-names-input" type="text" placeholder="Enter other names, separated by commas..." style="width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
+                            </div>
+                            <div style="min-width: 0;">
+                                <label for="subject-gender-select" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Gender:</label>
+                                <select id="subject-gender-select" style="width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;">
+                                    <option value="Male">Male</option>
+                                    <option value="Female">Female</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 1.5em;">
+                            <label for="email-addresses-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Email Addresses (comma-separated):</label>
+                            <input id="email-addresses-input" type="text" placeholder="Enter email addresses, separated by commas..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
+                        </div>
+                        <div style="margin-bottom: 1.5em;">
+                            <label for="phone-numbers-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Phone Numbers (comma-separated):</label>
+                            <input id="phone-numbers-input" type="text" placeholder="Enter phone numbers, separated by commas..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; row-gap: 1.5em; column-gap: 5px; margin-bottom: 1.5em;">
+                            <div style="margin-bottom: 1.5em; min-width: 0;">
+                                <label for="whatsapp-handle-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">WhatsApp Handle:</label>
+                                <input id="whatsapp-handle-input" type="text" placeholder="Enter WhatsApp handle..." style="width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
+                            </div>
+                            <div style="margin-bottom: 1.5em; min-width: 0;">
+                                <label for="instagram-handle-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Instagram Handle:</label>
+                                <input id="instagram-handle-input" type="text" placeholder="Enter Instagram handle..." style="width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 1.5em;">
+                            <label style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Writing Style (AI-generated):</label>
+                            <p style="color: #666; font-size: 0.9em; margin-bottom: 0.5em;">Analyzes a random sample of 5000 messages from {{owner}} to summarize writing style.</p>
+                            <button type="button" id="request-writing-style-btn" class="modal-btn modal-btn-primary" style="margin-bottom: 0.7em;">
+                                <i class="fas fa-magic"></i> Generate Writing Style
+                            </button>
+                            <div id="writing-style-loading" style="display: none; color: #666; margin-bottom: 0.5em;">
+                                <i class="fas fa-spinner fa-spin"></i> Analyzing messages...
+                            </div>
+                            <div id="writing-style-display" class="writing-style-markdown" style="max-height: 300px; overflow-y: auto; padding: 0.7em; border-radius: 6px; border: 1px solid #bfc9da; background-color: #f9f9f9; font-size: 0.95em;"></div>
+                        </div>
+                        <div style="margin-bottom: 1.5em;">
+                            <label style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Psychological Profile (AI-generated):</label>
+                            <p style="color: #666; font-size: 0.9em; margin-bottom: 0.5em;">Analyzes a random sample of 5000 messages from {{owner}} to generate a psychological profile.</p>
+                            <button type="button" id="request-psychological-profile-btn" class="modal-btn modal-btn-primary" style="margin-bottom: 0.7em;">
+                                <i class="fas fa-brain"></i> Generate Psychological Profile
+                            </button>
+                            <div id="psychological-profile-loading" style="display: none; color: #666; margin-bottom: 0.5em;">
+                                <i class="fas fa-spinner fa-spin"></i> Analyzing messages...
+                            </div>
+                            <div id="psychological-profile-display" class="writing-style-markdown" style="max-height: 300px; overflow-y: auto; padding: 0.7em; border-radius: 6px; border: 1px solid #bfc9da; background-color: #f9f9f9; font-size: 0.95em;"></div>
+                        </div>
+                        <div style="display: flex; justify-content: flex-end; gap: 0.7em;">
+                            <button type="button" id="cancel-subject-config-btn" class="modal-btn modal-btn-secondary">Cancel</button>
+                            <button type="button" id="save-subject-config-btn" class="modal-btn modal-btn-primary">Save</button>
+                        </div>
+                    </section>
+                </div>
+                <div class="config-tab-content" id="system-instructions-tab">
+                    <section class="config-section">
+                        <div class="subject-config-tabs" style="display: flex; border-bottom: 2px solid #bfc9da; margin-bottom: 0.5em;">
+                            <button type="button" class="subject-config-tab active" data-tab="system-instructions" style="flex: 1; padding: 0.7em 1em; background: none; border: none; border-bottom: 3px solid transparent; cursor: pointer; font-size: 1em; color: #666; transition: all 0.2s;">System Instructions</button>
+                            <button type="button" class="subject-config-tab" data-tab="core-instructions" style="flex: 1; padding: 0.7em 1em; background: none; border: none; border-bottom: 3px solid transparent; cursor: pointer; font-size: 1em; color: #666; transition: all 0.2s;">Core System Instructions</button>
+                        </div>
+                        <div id="system-instructions-tab-content" class="subject-config-tab-content">
+                            <textarea id="system-instructions-textarea" placeholder="Enter system instructions..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em; font-family: monospace; resize: vertical;" required></textarea>
+                            <small style="color: #666; display: block; margin-top: 0.5em;">You can use {SUBJECT_NAME} as a placeholder for the subject name.</small>
+                            <small style="color: #666; display: block; margin-top: 0.5em;">{he}, {his} and {him} are placeholders for the subject's gender, which will be substituted in.</small><br/>
+
+                        </div>
+                        <div id="core-instructions-tab-content" class="subject-config-tab-content">
+                            <div style="padding: 0.5em 0.7em; margin-bottom: 0.5em; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; color: #856404;">
+                                <strong>Warning:</strong> Editing Core System Instructions can break chat functionality. Only modify if you understand the impact. Changes require double confirmation to save.
+                            </div>
+                            <textarea id="core-system-instructions-textarea" style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em; font-family: monospace; resize: vertical;"></textarea>
+                            <small style="color: #666; display: block; margin-top: 0.5em;">Core instructions define fundamental chat behaviour. Originally loaded from system_instructions_core.txt.</small>
+                        </div>
+                        <div style="display: flex; justify-content: flex-end; gap: 0.7em; margin-top: 1em;">
+                            <button type="button" id="cancel-system-instructions-btn" class="modal-btn modal-btn-secondary">Cancel</button>
+                            <button type="button" id="save-system-instructions-btn" class="modal-btn modal-btn-primary">Save</button>
+                        </div>
+                    </section>
+                </div>
                 <div class="config-tab-content" id="api-docs-tab">
                     <iframe id="api-docs-iframe" src="/docs"></iframe>
                 </div>
@@ -375,7 +515,12 @@
                         <h3>Trusted Keys</h3>
                         <div class="setting-group">
                             <p style="color: #666; margin-bottom: 10px;">
-                                Create additional trusted keys or remove keys that are no longer needed. You need the master password to manage keys.
+                                Create additional trusted keys or remove keys that are no longer needed. You need the master password to manage keys.<br/>
+                                The master key is used to encrypt and decrypt the sensitive data in the database.<br/>
+                                Trusted keys are used by people you trust to access the sensitive data.<br/>
+                                When creating a trusted key, leave a hint for the user that they will uniquely know, such as:<br/>
+                                "Your wifi password featuring a dog"<br/>
+                                The user doesn't need to be given the password, but they will know it when they see the hint.<br/>
                             </p>
                             <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
                                 <button type="button" id="create-trusted-key-btn" class="modal-btn modal-btn-primary">
@@ -506,40 +651,6 @@
                         </div>
                     </section>
                 </div>
-                <div class="config-tab-content" id="app-configuration-tab">
-                    <section class="config-section">
-                        <h3>Application Configuration</h3>
-                        <p style="color:#666; margin-bottom:16px">
-                            Key-value pairs stored in the database. Values here override the <code>.env</code> file.
-                            Delete a key to revert to the <code>.env</code> value.
-                        </p>
-                        <div style="display:flex; gap:8px; margin-bottom:16px; align-items:flex-end; flex-wrap:wrap">
-                            <input id="cfg-new-key" class="modal-input" placeholder="Key" style="flex:1; min-width:180px">
-                            <input id="cfg-new-value" class="modal-input" placeholder="Value" style="flex:2; min-width:200px">
-                            <label style="display:flex;align-items:center;gap:4px;font-size:13px">
-                                <input type="checkbox" id="cfg-new-mandatory"> Mandatory
-                            </label>
-                            <button class="modal-btn modal-btn-primary" onclick="AppConfig.save()">Save</button>
-                            <button class="modal-btn modal-btn-secondary" onclick="AppConfig.seed()">Seed from .env</button>
-                        </div>
-                        <table id="cfg-table" style="width:100%; border-collapse:collapse; font-size:13px">
-                            <thead>
-                                <tr style="background:#e9ecef; text-align:left">
-                                    <th style="padding:8px">Key</th>
-                                    <th style="padding:8px">Value</th>
-                                    <th style="padding:8px; text-align:center">Mandatory</th>
-                                    <th style="padding:8px">Description</th>
-                                    <th style="padding:8px">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="cfg-table-body"></tbody>
-                        </table>
-                        <p id="cfg-status" style="margin-top:10px; font-size:13px; color:#666"></p>
-                        <p style="margin-top:16px; font-size:12px; color:#666; font-style:italic">
-                            Note: Either the Gemini API key or the Anthropic API key, or both, must be set to use the AI features of the system.
-                        </p>
-                    </section>
-                </div>
                 <div class="config-tab-content" id="images-grid-tab">
                     <div class="images-grid-viewer">
                         <div class="container">
@@ -550,18 +661,18 @@
                             <div class="content">
                                 <div class="controls">
                                     <div class="sort-controls">
-                                        <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.9em; color: #555;">
-                                            <input type="checkbox" id="show-all-types-checkbox" onchange="syncTopControls(); changeSortOrder();" style="cursor: pointer;">
+                                        <label>
+                                            <input type="checkbox" id="show-all-types-checkbox" onchange="syncTopControls(); changeSortOrder();">
                                             <span>Show all file types</span>
                                         </label>
-                                        <label style="font-size: 0.9em; color: #555;">Sort by:</label>
+                                        <label>Sort by:</label>
                                         <select id="sort-order-select" onchange="syncTopControls(); changeSortOrder();">
                                             <option value="id">ID</option>
-                                            <option value="size">Size</option>
+                                            <option value="size" selected>Size</option>
                                             <option value="date">Date</option>
                                         </select>
                                         <select id="sort-direction-select" onchange="syncTopControls(); changeSortOrder();">
-                                            <option value="asc">Ascending</option>
+                                            <option value="asc" selected>Ascending</option>
                                             <option value="desc">Descending</option>
                                         </select>
                                     </div>
@@ -570,6 +681,7 @@
                                         <span id="page-info">Page 1 of 1</span>
                                         <button id="next-page-btn" onclick="nextPage()">Next</button>
                                     </div>
+                                    <button class="select-all-btn" id="select-all-btn" onclick="selectAll()">Select All</button>
                                     <button class="delete-selected-btn" id="delete-selected-btn" onclick="deleteSelected()" disabled>Delete Selected</button>
                                 </div>
                                 
@@ -577,18 +689,18 @@
                                 
                                 <div class="controls" id="bottom-controls">
                                     <div class="sort-controls">
-                                        <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.9em; color: #555;">
-                                            <input type="checkbox" id="show-all-types-checkbox-bottom" onchange="syncBottomControls(); changeSortOrder();" style="cursor: pointer;">
+                                        <label>
+                                            <input type="checkbox" id="show-all-types-checkbox-bottom" onchange="syncBottomControls(); changeSortOrder();">
                                             <span>Show all file types</span>
                                         </label>
-                                        <label style="font-size: 0.9em; color: #555;">Sort by:</label>
+                                        <label>Sort by:</label>
                                         <select id="sort-order-select-bottom" onchange="syncBottomControls(); changeSortOrder();">
                                             <option value="id">ID</option>
-                                            <option value="size">Size</option>
+                                            <option value="size" selected>Size</option>
                                             <option value="date">Date</option>
                                         </select>
                                         <select id="sort-direction-select-bottom" onchange="syncBottomControls(); changeSortOrder();">
-                                            <option value="asc">Ascending</option>
+                                            <option value="asc" selected>Ascending</option>
                                             <option value="desc">Descending</option>
                                         </select>
                                     </div>
@@ -597,6 +709,7 @@
                                         <span id="page-info-bottom">Page 1 of 1</span>
                                         <button id="next-page-btn-bottom" onclick="nextPage()">Next</button>
                                     </div>
+                                    <button class="select-all-btn" id="select-all-btn-bottom" onclick="selectAll()">Select All</button>
                                     <button class="delete-selected-btn" id="delete-selected-btn-bottom" onclick="deleteSelected()" disabled>Delete Selected</button>
                                 </div>
                                 
@@ -629,15 +742,26 @@
                     </div>
                 </div>
                 <div class="config-tab-content" id="email-editor-tab">
-                    <div class="email-editor-viewer">
+                    <div id="email-editor-viewer" class="email-editor-viewer">
                         <div class="container">
-                            <div class="header">
-                                <h1>Email Editor</h1>
-                                <p>Search and edit email metadata (50 per page)</p>
-                            </div>
-                            <div class="content">
-                                <div class="controls">
-                                    <div class="email-editor-search-pane">
+                            <div class="email-editor-header-row">
+                                <div class="header">
+                                    <h1>Email Editor</h1>
+                                    <p><h4>Search and edit email metadata (50 per page)</h4></p>
+                                
+                                    <p>Use the search and filter options to find the email you want to edit.
+                                    <br/>
+                                    Deleting and classifying emails improves the quality of the AI's responses.
+                                    <br/>
+                                    Use the "Use by AI" column to select emails for that can be used the AI to generate responses.
+                                    <br/><br/>
+                                    Use the "Delete" column to delete emails from the database.
+                                    <br/>
+                                    Use the "Personal" and "Business" columns to classify emails as personal or business.
+                                    <br/>
+                                    Use the "Important" column to mark emails as important.</p>
+                                </div>
+                                <div class="email-editor-search-pane">
                                         <div class="email-metadata-filters">
                                             <div class="email-gallery-search-row">
                                                 <input type="text" id="email-editor-search" placeholder="Search emails..." class="email-gallery-input">
@@ -664,13 +788,17 @@
                                                 <button id="email-editor-clear-btn" class="modal-btn modal-btn-secondary">
                                                     <i class="fas fa-times"></i> Clear
                                                 </button>
+                                                <button id="email-editor-select-all-btn" class="modal-btn modal-btn-secondary">
+                                                    <i class="fas fa-check-double"></i> Select All
+                                                </button>
                                                 <button id="email-editor-bulk-delete-btn" class="modal-btn modal-btn-danger" style="display: none; margin-left: auto;">
                                                     <i class="fas fa-trash"></i> Delete Selected
                                                 </button>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
+                            </div>
+                            <div class="content" style="padding-bottom: 0px;">
                                 <div class="email-editor-table-pane">
                                     <div class="email-editor-table-container">
                                         <table class="email-editor-table">
@@ -706,58 +834,77 @@
                             <div class="import-messages-tiles" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
                                 <div class="import-control-tile" data-import="email_processing" title="Click to run">
                                     <div class="import-tile-title">Import Emails from GMail</div>
-                                    <div id="import-last-run-email_processing" class="import-tile-last-run"></div>
+                                    <div id="import-last-run-email_processing" data-import-last-run="email_processing" class="import-tile-last-run"></div>
                                     <div class="import-tile-explanation">Import emails from <strong></strong>Gmail</strong>. Choose folders or process all, and optionally import only new messages.</div>
                                 </div>
                                 <div class="import-control-tile" data-import="imap_processing" title="Click to run">
                                     <div class="import-tile-title">Import Emails from other IMAP sources</div>
-                                    <div id="import-last-run-imap_processing" class="import-tile-last-run"></div>
+                                    <div id="import-last-run-imap_processing" data-import-last-run="imap_processing" class="import-tile-last-run"></div>
                                     <div class="import-tile-explanation">Import emails from other IMAP sources. Choose folders or process all, and optionally import only new messages.</div>
-                                </div>
-                                <div class="import-control-tile" data-import="whatsapp" title="Click to run">
-                                    <div class="import-tile-title">WhatsApp Import</div>
-                                    <div id="import-last-run-whatsapp" class="import-tile-last-run"></div>
-                                    <div class="import-tile-explanation">Import messages from a WhatsApp export directory (e.g. from iMazing or Android backup).</div>
-                                </div>
-                                <div class="import-control-tile" data-import="facebook" title="Click to run">
-                                    <div class="import-tile-title">Facebook Messenger Import</div>
-                                    <div id="import-last-run-facebook" class="import-tile-last-run"></div>
-                                    <div class="import-tile-explanation">Import Facebook Messenger conversations from a Meta data export directory.</div>
-                                </div>
-                                <div class="import-control-tile" data-import="instagram" title="Click to run">
-                                    <div class="import-tile-title">Instagram Import</div>
-                                    <div id="import-last-run-instagram" class="import-tile-last-run"></div>
-                                    <div class="import-tile-explanation">Import Instagram direct messages from a Meta data export directory.</div>
                                 </div>
                                 <div class="import-control-tile" data-import="imessage" title="Click to run">
                                     <div class="import-tile-title">iMessage and SMS Import</div>
-                                    <div id="import-last-run-imessage" class="import-tile-last-run"></div>
+                                    <div id="import-last-run-imessage" data-import-last-run="imessage" class="import-tile-last-run"></div>
                                     <div class="import-tile-explanation">Import iMessage and SMS conversations from a directory containing conversation subdirectories created by iMazing or Android backup.</div>
                                 </div>
+                                <div class="import-control-tile" data-import="whatsapp" title="Click to run">
+                                    <div class="import-tile-title">WhatsApp Import</div>
+                                    <div id="import-last-run-whatsapp" data-import-last-run="whatsapp" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import messages from a WhatsApp export directory (e.g. from iMazing or Android backup).</div>
+                                </div>
+                                <div class="import-control-tile" data-import="contacts" title="Click to run">
+                                    <div class="import-tile-title">Contacts Merge</div>
+                                    <div id="import-last-run-contacts" data-import-last-run="contacts" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Merge and normalise contacts from the database using the import-processor.</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 15px; display: flex; align-items: stretch; gap: 10px;">
+                            <div class="import-controls-status-box" style="flex: 1; padding: 12px 15px; background-color: #2d3748; border-radius: 6px; border: 1px solid #4a5568; font-size: 0.95em; line-height: 1.5; height: 4.5em; overflow-y: auto; color: #fff;">
+                                <span class="import-controls-status-text" style="color: #fff;">Idle</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;">
+                                <button type="button" class="import-controls-reset-btn modal-btn modal-btn-secondary" title="Reset Import Controls to initial state"><i class="fas fa-undo"></i> Reset</button>
+                                <button type="button" class="import-controls-cancel-btn modal-btn modal-btn-secondary" disabled title="Cancel running import"><i class="fas fa-stop"></i> Cancel</button>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+                <div class="config-tab-content" id="facebook-instagram-whatsapp-controls-tab">
+                    <section class="config-section" style="display: flex; flex-direction: column; height: 100%;">
+                        <div style="flex: 1; overflow: auto;">
+                            <div class="import-messages-tiles" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
+                                <div class="import-control-tile" data-import="facebook_all" title="Click to run">
+                                    <div class="import-tile-title">Facebook Archive Import</div>
+                                    <div data-import-last-run="facebook_all" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import Messenger, albums, places, and posts in parallel from a single Facebook export directory.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="instagram" title="Click to run">
+                                    <div class="import-tile-title">Instagram Archive Import</div>
+                                    <div data-import-last-run="instagram" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import Instagram direct messages from a Instagram data export directory.</div>
+                                </div>
+                                <div style="grid-column: 1 / -1; height: 15px;"></div>
+                                <div class="import-control-tile" data-import="facebook" title="Click to run">
+                                    <div class="import-tile-title">Facebook Messenger Import</div>
+                                    <div data-import-last-run="facebook" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import Facebook Messenger conversations from a Meta data export directory.</div>
+                                </div>
+
                                 <div class="import-control-tile" data-import="facebook_albums" title="Click to run">
                                     <div class="import-tile-title">Facebook Albums Import</div>
-                                    <div id="import-last-run-facebook_albums" class="import-tile-last-run"></div>
+                                    <div data-import-last-run="facebook_albums" class="import-tile-last-run"></div>
                                     <div class="import-tile-explanation">Import photos from Facebook albums in a Meta data export (posts folder).</div>
                                 </div>
                                 <div class="import-control-tile" data-import="facebook_posts" title="Click to run">
                                     <div class="import-tile-title">Facebook Posts Import</div>
-                                    <div id="import-last-run-facebook_posts" class="import-tile-last-run"></div>
-                                    <div class="import-tile-explanation">Import Facebook status updates, shared links, and attached photos/videos from your_posts__check_ins__photos_and_videos_*.json.</div>
-                                </div>
-                                <div class="import-control-tile" data-import="facebook_all" title="Click to run">
-                                    <div class="import-tile-title">Facebook Full Import</div>
-                                    <div id="import-last-run-facebook_all" class="import-tile-last-run"></div>
-                                    <div class="import-tile-explanation">Import Messenger, albums, places, and posts in parallel from a single Facebook export directory.</div>
+                                    <div data-import-last-run="facebook_posts" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import Facebook status updates, shared links, and attached photos/videos</div>
                                 </div>
                                 <div class="import-control-tile" data-import="facebook_places" title="Click to run">
                                     <div class="import-tile-title">Facebook Places Import</div>
-                                    <div id="import-last-run-facebook_places" class="import-tile-last-run"></div>
+                                    <div data-import-last-run="facebook_places" class="import-tile-last-run"></div>
                                     <div class="import-tile-explanation">Import check-ins and place data from a Facebook posts JSON file.</div>
-                                </div>
-                                <div class="import-control-tile" data-import="contacts" title="Click to run">
-                                    <div class="import-tile-title">Contacts Merge</div>
-                                    <div id="import-last-run-contacts" class="import-tile-last-run"></div>
-                                    <div class="import-tile-explanation">Merge and normalise contacts from the database using the import-processor.</div>
                                 </div>
                             </div>
                         </div>
@@ -778,28 +925,29 @@
                             <div class="import-images-tiles" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
                                 <div class="import-control-tile" data-import="filesystem" title="Click to run">
                                     <div class="import-tile-title">Filesystem Image Import</div>
-                                    <div id="import-last-run-filesystem" class="import-tile-last-run"></div>
+                                    <div id="import-last-run-filesystem" data-import-last-run="filesystem" class="import-tile-last-run"></div>
                                     <div class="import-tile-explanation">Scan directories for images and add them to the media library. Choose reference-only to leave files on disk, or full import to copy into the database.</div>
                                 </div>
+                                <div style="grid-column: 1 / -1; height: 15px;"></div>
+                                <div class="import-control-tile" data-import="reference_import" title="Click to run">
+                                    <div class="import-tile-title">Import referenced images to Database</div>
+                                    <div id="import-last-run-reference_import" data-import-last-run="reference_import" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Copy referenced image files into the database so they can be displayed without the original files on disk.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="image_export" title="Click to run">
+                                    <div class="import-tile-title">Export Images to Filesystem</div>
+                                    <div id="import-last-run-image_export" data-import-last-run="image_export" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Export images from the database to a target directory on disk.</div>
+                                </div>
+                                <div style="grid-column: 1 / -1; height: 15px;"></div>
                                 <div class="import-control-tile" data-import="thumbnails" title="Click to run">
                                     <div class="import-tile-title">Image Processing (Thumbnails and Location)</div>
-                                    <div id="import-last-run-thumbnails" class="import-tile-last-run"></div>
+                                    <div id="import-last-run-thumbnails" data-import-last-run="thumbnails" class="import-tile-last-run"></div>
                                     <div class="import-tile-explanation">Generate thumbnails and extract location metadata from images.</div>
                                 </div>
                                 <div class="import-control-tile" data-import="thumbnails_async" title="Click to run">
                                     <div class="import-tile-title">Image Processing (Async)</div>
                                     <div class="import-tile-explanation">Start thumbnail processing in the background. No progress reporting.</div>
-                                </div>
-                                <div style="grid-column: 1 / -1; height: 15px;"></div>
-                                <div class="import-control-tile" data-import="reference_import" title="Click to run">
-                                    <div class="import-tile-title">Import referenced images to Database</div>
-                                    <div id="import-last-run-reference_import" class="import-tile-last-run"></div>
-                                    <div class="import-tile-explanation">Copy referenced image files into the database so they can be displayed without the original files on disk.</div>
-                                </div>
-                                <div class="import-control-tile" data-import="image_export" title="Click to run">
-                                    <div class="import-tile-title">Export Images to Filesystem</div>
-                                    <div id="import-last-run-image_export" class="import-tile-last-run"></div>
-                                    <div class="import-tile-explanation">Export images from the database to a target directory on disk.</div>
                                 </div>
 
                             </div>
@@ -915,8 +1063,9 @@
                 <div style="display: flex; flex: 1; overflow: hidden;">
                     <!-- Master Pane (Left) - Resizable -->
                     <div id="fb-posts-master-pane" style="width: 350px; min-width: 200px; max-width: 600px; border-right: 1px solid #dee2e6; display: flex; flex-direction: column; background-color: #f8f9fa; position: relative;">
-                        <div style="padding: 1rem; border-bottom: 1px solid #dee2e6; box-sizing: border-box;">
-                            <input type="text" id="fb-posts-search" placeholder="Search posts..." style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da; font-size: 14px; box-sizing: border-box;">
+                        <div style="padding: 1rem; border-bottom: 1px solid #dee2e6; box-sizing: border-box; display: flex; gap: 8px; align-items: center;">
+                            <input type="text" id="fb-posts-search" placeholder="Search posts..." style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da; font-size: 14px; box-sizing: border-box;">
+                            <button type="button" id="fb-posts-clear-btn" class="modal-btn modal-btn-secondary" style="flex-shrink: 0;">Clear</button>
                         </div>
                         <div id="fb-posts-list" style="flex: 1; overflow-y: auto; padding: 0.5rem;">
                             <div style="text-align: center; padding: 2rem; color: #666;">Loading posts...</div>
@@ -1644,48 +1793,6 @@
         </div>
         </div>
 
-        <!-- Reference Documents Modal -->
-        <div id="reference-documents-modal" class="modal">
-            <div class="modal-content reference-documents-modal-content">
-                <div class="reference-documents-header">
-                    <h2>Reference Documents</h2>
-                    <button id="close-reference-documents-modal" class="modal-close-btn">&times;</button>
-                </div>
-                <div class="reference-documents-body">
-                    <!-- Search and Filters -->
-                    <div class="reference-documents-filters">
-                        <div class="reference-documents-search-row">
-                            <input type="text" id="reference-documents-search" placeholder="Search documents..." class="reference-documents-input">
-                            <button id="reference-documents-upload-btn" class="modal-btn modal-btn-primary">
-                                <i class="fas fa-upload"></i> Upload Document
-                            </button>
-                        </div>
-                        <div class="reference-documents-filter-row">
-                            <select id="reference-documents-category-filter" class="reference-documents-select">
-                                <option value="">All Categories</option>
-                            </select>
-                            <select id="reference-documents-content-type-filter" class="reference-documents-select">
-                                <option value="">All Types</option>
-                                <option value="application/pdf">PDF</option>
-                                <option value="application/msword">Word (DOC)</option>
-                                <option value="application/vnd.openxmlformats-officedocument.wordprocessingml.document">Word (DOCX)</option>
-                                <option value="image">Images</option>
-                                <option value="text">Text Files</option>
-                                <option value="text/csv">CSV</option>
-                                <option value="application/json">JSON</option>
-                            </select>
-                            <label class="reference-documents-checkbox-label">
-                                <input type="checkbox" id="reference-documents-task-filter">
-                                Available for Task
-                            </label>
-                        </div>
-                    </div>
-                    <!-- Document List -->
-                    <div class="reference-documents-list" id="reference-documents-list"></div>
-                </div>
-            </div>
-        </div>
-
         <!-- Relationships Modal -->
         <div id="relationships-modal" class="modal">
             <div class="modal-content relationships-modal-content">
@@ -2251,108 +2358,6 @@
 
     </div>
 
-    <!-- Subject Configuration Modal -->
-    <div id="subject-configuration-modal" class="modal" style="z-index: 10000;">
-        <div class="modal-content" style="max-width: 800px; width: 90vw; padding: 0; max-height: 90vh; overflow-y: auto; display: flex; flex-direction: column;">
-            <div class="modal-header">
-                <h2>Subject Configuration</h2>
-                <button class="modal-close-btn" id="close-subject-config-modal">&times;</button>
-            </div>
-            <div class="modal-body">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; row-gap: 1.5em; column-gap: 5px; margin-bottom: 1.5em;">
-                <div style="min-width: 0;">
-                    <label for="subject-name-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Subject Name:</label>
-                    <input id="subject-name-input" type="text" placeholder="Enter subject name..." style="width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" required />
-                </div>
-                <div style="min-width: 0;">
-                    <label for="family-name-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Family Name:</label>
-                    <input id="family-name-input" type="text" placeholder="Enter family name..." style="width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
-                </div>
-                <div style="min-width: 0;">
-                    <label for="other-names-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Other Names (comma-separated):</label>
-                    <input id="other-names-input" type="text" placeholder="Enter other names, separated by commas..." style="width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
-                </div>
-                <div style="min-width: 0;">
-                    <label for="subject-gender-select" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Gender:</label>
-                    <select id="subject-gender-select" style="width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;">
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                    </select>
-                </div>
-            </div>
-            <div style="margin-bottom: 1.5em;">
-                <label for="email-addresses-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Email Addresses (comma-separated):</label>
-                <input id="email-addresses-input" type="text" placeholder="Enter email addresses, separated by commas..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
-            </div>
-            <div style="margin-bottom: 1.5em;">
-                <label for="phone-numbers-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Phone Numbers (comma-separated):</label>
-                <input id="phone-numbers-input" type="text" placeholder="Enter phone numbers, separated by commas..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; row-gap: 1.5em; column-gap: 5px; margin-bottom: 1.5em;">
- 
-            <div style="margin-bottom: 1.5em;min-width: 0;">
-                <label for="whatsapp-handle-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">WhatsApp Handle:</label>
-                <input id="whatsapp-handle-input" type="text" placeholder="Enter WhatsApp handle..." style="width: 100%;box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
-            </div>
-            <div style="margin-bottom: 1.5em;"min-width: 0;">
-                <label for="instagram-handle-input" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Instagram Handle:</label>
-                <input id="instagram-handle-input" type="text" placeholder="Enter Instagram handle..." style="width: 100%;box-sizing: border-box; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;" />
-            </div>
-            </div>
-            <div style="margin-bottom: 1.5em;">
-                <label style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Writing Style (AI-generated):</label>
-                <p style="color: #666; font-size: 0.9em; margin-bottom: 0.5em;">Analyzes a random sample of 5000 messages from {{owner}} to summarize writing style.</p>
-                <button type="button" id="request-writing-style-btn" class="modal-btn modal-btn-primary" style="margin-bottom: 0.7em;">
-                    <i class="fas fa-magic"></i> Generate Writing Style
-                </button>
-                <div id="writing-style-loading" style="display: none; color: #666; margin-bottom: 0.5em;">
-                    <i class="fas fa-spinner fa-spin"></i> Analyzing messages...
-                </div>
-                <div id="writing-style-display" class="writing-style-markdown" style="max-height: 300px; overflow-y: auto; padding: 0.7em; border-radius: 6px; border: 1px solid #bfc9da; background-color: #f9f9f9; font-size: 0.95em;"></div>
-            </div>
-            <div style="margin-bottom: 1.5em;">
-                <label style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Psychological Profile (AI-generated):</label>
-                <p style="color: #666; font-size: 0.9em; margin-bottom: 0.5em;">Analyzes a random sample of 5000 messages from {{owner}} to generate a psychological profile.</p>
-                <button type="button" id="request-psychological-profile-btn" class="modal-btn modal-btn-primary" style="margin-bottom: 0.7em;">
-                    <i class="fas fa-brain"></i> Generate Psychological Profile
-                </button>
-                <div id="psychological-profile-loading" style="display: none; color: #666; margin-bottom: 0.5em;">
-                    <i class="fas fa-spinner fa-spin"></i> Analyzing messages...
-                </div>
-                <div id="psychological-profile-display" class="writing-style-markdown" style="max-height: 300px; overflow-y: auto; padding: 0.7em; border-radius: 6px; border: 1px solid #bfc9da; background-color: #f9f9f9; font-size: 0.95em;"></div>
-            </div>
-            <div style="margin-bottom: 1.5em;">
-                <label style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">System Instructions:</label>
-                
-                <!-- Tab buttons -->
-                <div class="subject-config-tabs" style="display: flex; border-bottom: 2px solid #bfc9da; margin-bottom: 0.5em;">
-                    <button type="button" class="subject-config-tab active" data-tab="system-instructions" style="flex: 1; padding: 0.7em 1em; background: none; border: none; border-bottom: 3px solid transparent; cursor: pointer; font-size: 1em; color: #666; transition: all 0.2s;">System Instructions</button>
-                    <button type="button" class="subject-config-tab" data-tab="core-instructions" style="flex: 1; padding: 0.7em 1em; background: none; border: none; border-bottom: 3px solid transparent; cursor: pointer; font-size: 1em; color: #666; transition: all 0.2s;">Core System Instructions</button>
-                </div>
-                
-                <!-- Tab content: System Instructions (editable) -->
-                <div id="system-instructions-tab-content" class="subject-config-tab-content" style="display: block;">
-                    <textarea id="system-instructions-textarea" rows="20" placeholder="Enter system instructions..." style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em; font-family: monospace; resize: vertical;" required></textarea>
-                    <small style="color: #666; display: block; margin-top: 0.5em;">You can use {SUBJECT_NAME} as a placeholder for the subject name.</small>
-                </div>
-                
-                <!-- Tab content: Core System Instructions (editable with warning) -->
-                <div id="core-instructions-tab-content" class="subject-config-tab-content" style="display: none;">
-                    <div style="padding: 0.5em 0.7em; margin-bottom: 0.5em; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; color: #856404;">
-                        <strong>Warning:</strong> Editing Core System Instructions can break chat functionality. Only modify if you understand the impact. Changes require double confirmation to save.
-                    </div>
-                    <textarea id="core-system-instructions-textarea" rows="20" style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em; font-family: monospace; resize: vertical;"></textarea>
-                    <small style="color: #666; display: block; margin-top: 0.5em;">Core instructions define fundamental chat behaviour. Originally loaded from system_instructions_core.txt.</small>
-                </div>
-            </div>
-            <div style="display: flex; justify-content: flex-end; gap: 0.7em;">
-                <button type="button" id="cancel-subject-config-btn" class="modal-btn modal-btn-secondary">Cancel</button>
-                <button type="button" id="save-subject-config-btn" class="modal-btn modal-btn-primary">Save</button>
-            </div>
-            </div><!-- end modal-body -->
-        </div>
-    </div>
-
     <script src="/static/js/museum/foundation.js" defer></script>
     <script src="/static/js/museum/chat.js" defer></script>
     <script src="/static/js/museum/modals-core.js" defer></script>
@@ -2686,7 +2691,7 @@
 
     <!-- Info box modal at body level for reliable overlay and event handling -->
     <div id="info-box-modal" class="modal info-box-modal"  onclick="if(event.target===this) window.closeInfoBoxModal && window.closeInfoBoxModal()">
-        <div id="info-box" class="info-box modal-content" style="width:1000px" onclick="event.stopPropagation()">
+        <div id="info-box" class="info-box modal-content" style="width:1000px;padding-left: 2rem;" onclick="event.stopPropagation()">
             <button type="button" id="info-box-close-btn" class="info-box-close-btn" title="Close" onclick="window.closeInfoBoxModal && window.closeInfoBoxModal()">&times;</button>
             <div class="info-box-content-wrapper" style="display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start; gap: 2rem;height:280px">
                 <div class="info-content" style="width: 50%;">

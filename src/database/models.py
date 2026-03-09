@@ -317,6 +317,7 @@ class MediaBlob(Base):
     """Media Blob model."""
 
     __tablename__ = "media_blob"
+    __mapper_args__ = {"confirm_deleted_rows": False}
 
     id = Column(Integer, primary_key=True)
     image_data = Column(LargeBinary, nullable=True)

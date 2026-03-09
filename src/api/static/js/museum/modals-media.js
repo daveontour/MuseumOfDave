@@ -358,12 +358,14 @@ Modals.FBPosts = (() => {
         return '';
     }
 
-    async function loadPosts(search = '') {
+    async function loadPosts(search = '', postIds = null) {
         const container = DOM.fbPostsList;
         if (!container) return;
         container.innerHTML = '<div style="text-align:center;padding:2rem;color:#666;">Loading...</div>';
         try {
-            const url = `/facebook/posts?page=1&page_size=200${search ? '&search=' + encodeURIComponent(search) : ''}`;
+            let url = `/facebook/posts?page=1&page_size=200`;
+            if (search) url += '&search=' + encodeURIComponent(search);
+            if (postIds && postIds.length > 0) url += '&post_ids=' + postIds.join(',');
             const resp = await fetch(url);
             const data = await resp.json();
             posts = data.posts || [];
@@ -484,6 +486,19 @@ Modals.FBPosts = (() => {
             loadPosts();
         }
     }
+    async function openAndFilterOnPosts(postIds) {
+        if (!DOM.fbPostsModal || !postIds || postIds.length === 0) return;
+        const ids = Array.isArray(postIds)
+            ? postIds.map(id => Number(id))
+            : String(postIds).split(',').map(id => parseInt(id, 10));
+        if (ids.length === 0) return;
+        DOM.fbPostsModal.style.display = 'flex';
+        selectedPostId = null;
+        await loadPosts('', ids);
+        if (filteredPosts.length > 0) {
+            selectPost(filteredPosts[0].id);
+        }
+    }
 
     function close() {
         if (DOM.fbPostsModal) DOM.fbPostsModal.style.display = 'none';
@@ -493,10 +508,16 @@ Modals.FBPosts = (() => {
         if (DOM.closeFBPostsModalBtn) DOM.closeFBPostsModalBtn.addEventListener('click', close);
         if (DOM.fbPostsModal) DOM.fbPostsModal.addEventListener('click', e => { if (e.target === DOM.fbPostsModal) close(); });
         if (DOM.fbPostsSearch) DOM.fbPostsSearch.addEventListener('input', e => searchPosts(e.target.value));
+        if (DOM.fbPostsClearBtn) DOM.fbPostsClearBtn.addEventListener('click', async () => {
+            if (DOM.fbPostsSearch) DOM.fbPostsSearch.value = '';
+            selectedPostId = null;
+            await loadPosts();
+            if (filteredPosts.length > 0) selectPost(filteredPosts[0].id);
+        });
         if (DOM.fbPostsResizeHandle) DOM.fbPostsResizeHandle.addEventListener('mousedown', startResize);
     }
 
-    return { open, close, init };
+    return { open, close, init, openAndFilterOnPosts };
 })();
 
 

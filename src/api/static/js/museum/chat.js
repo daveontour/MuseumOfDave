@@ -220,6 +220,13 @@ const Chat = (() => {
                 modifier: 'facebook-album',
                 title: () => `Open Facebook album`,
                 action: (v) => Modals.FBAlbums?.openAndSelectAlbum?.(Number(v))
+            },
+            {
+                key: 'showFacebookPost',
+                icon: 'fa-newspaper',
+                modifier: 'facebook-post',
+                title: () => `Open Facebook posts`,
+                action: (v) => Modals.FBPosts?.openAndFilterOnPosts?.(v)
             }
         ];
 
@@ -229,7 +236,7 @@ const Chat = (() => {
         buttons.forEach(({ key, icon, modifier, title, action }) => {
             debugger;
             const value = embeddedJson[key];
-            if (value === undefined || value === null || (typeof value !== 'string' && typeof value !== 'number')) return;
+            if (value === undefined || value === null || (typeof value !== 'string' && typeof value !== 'number' && !Array.isArray(value))) return;
 
             const btn = document.createElement('button');
             btn.className = `response-action-btn response-action-btn--${modifier}`;

@@ -15,7 +15,7 @@ from .routers import admin, emails, attachments, messages, media, chat, relation
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="Museum of Dave API",
+    title="Museum API",
     description="API server for email processing and retrieval",
     version="1.0.0",
 )

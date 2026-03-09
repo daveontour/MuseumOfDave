@@ -111,6 +111,22 @@ class ClaudeChatService(BaseChatService):
                 },
             },
             {
+                "name": "get_all_facebook_posts",
+                "description": "Retrieve the complete set of all Facebook posts with full data including timestamp, title, description, URL, and post type. Use this when the user wants a comprehensive view of all Facebook posts or activity.",
+                "input_schema": {"type": "object", "properties": {}, "required": []},
+            },
+            {
+                "name": "search_facebook_posts",
+                "description": "Search Facebook posts where the post description (text content) partially matches the input. Use this when the user asks about Facebook posts, status updates, or wants to find posts related to a topic or event.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "description": {"type": "string", "description": "Partial text to search for within Facebook post descriptions"}
+                    },
+                    "required": ["description"],
+                },
+            },
+            {
                 "name": "get_unique_tags_count",
                 "description": "Get the unique tags used in the media items (photos/videos) library and the artefacts collection, along with counts. Use this when the user asks what tags exist, how many tags there are, or wants a summary of tagging across the museum collections.",
                 "input_schema": {"type": "object", "properties": {}, "required": []},

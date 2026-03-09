@@ -11,7 +11,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from PIL import Image
 
-from sqlalchemy import and_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from ..database import Database
@@ -70,7 +70,10 @@ class ImageService:
                 filter_list.append(MediaMetadata.author.ilike(f"%{filters.author}%"))
             
             if filters.tags:
-                filter_list.append(MediaMetadata.tags.ilike(f"%{filters.tags}%"))
+                tags_list = [t.strip() for t in filters.tags.split(',') if t.strip()]
+                tag_filters = [MediaMetadata.tags.ilike(f"%{tag}%") for tag in tags_list]
+                if tag_filters:
+                    filter_list.append(or_(*tag_filters))
             
             if filters.categories:
                 filter_list.append(MediaMetadata.categories.ilike(f"%{filters.categories}%"))

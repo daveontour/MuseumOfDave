@@ -1,7 +1,7 @@
 let currentPage = 1;
 const pageSize = 50;
 let totalPages = 1;
-let currentSortOrder = 'id';
+let currentSortOrder = 'size';
 let currentSortDirection = 'asc';
 const API_BASE = window.location.origin;
 const selectedImages = new Set();
@@ -149,6 +149,20 @@ function toggleSelection(imageId) {
         item.classList.remove('selected');
     }
     
+    updateDeleteButton();
+}
+
+function selectAll() {
+    const items = document.querySelectorAll('#images-grid .image-item');
+    items.forEach(item => {
+        const id = parseInt(item.dataset.id, 10);
+        const checkbox = item.querySelector('input[type="checkbox"]');
+        if (checkbox) {
+            checkbox.checked = true;
+            selectedImages.add(id);
+            item.classList.add('selected');
+        }
+    });
     updateDeleteButton();
 }
 

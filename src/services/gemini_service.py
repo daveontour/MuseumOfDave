@@ -637,6 +637,31 @@ class ChatService(BaseChatService):
             }
         )
 
+        get_all_facebook_posts_declaration = types.FunctionDeclaration(
+            name="get_all_facebook_posts",
+            description="Retrieve the complete set of all Facebook posts with full data including timestamp, title, description, URL, and post type. Use this when the user wants a comprehensive view of all Facebook posts or activity.",
+            parameters={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        )
+
+        search_facebook_posts_declaration = types.FunctionDeclaration(
+            name="search_facebook_posts",
+            description="Search Facebook posts where the post description (text content) partially matches the input. Use this when the user asks about Facebook posts, status updates, or wants to find posts related to a topic or event.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "description": {
+                        "type": "string",
+                        "description": "Partial text to search for within Facebook post descriptions"
+                    }
+                },
+                "required": ["description"]
+            }
+        )
+
         get_unique_tags_count_declaration = types.FunctionDeclaration(
             name="get_unique_tags_count",
             description="Get the unique tags used in the media items (photos/videos) library and the artefacts collection, along with counts. Use this when the user asks what tags exist, how many tags there are, or wants a summary of tagging across the museum collections.",
@@ -673,6 +698,8 @@ class ChatService(BaseChatService):
                 get_all_messages_by_contact_declaration,
                 get_unique_tags_count_declaration,
                 search_facebook_albums_declaration,
+                search_facebook_posts_declaration,
+                get_all_facebook_posts_declaration,
                 get_reference_document_declaration,
             ],
             google_search=types.GoogleSearch()
