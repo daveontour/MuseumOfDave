@@ -165,6 +165,10 @@ const App = (() => {
         }
         const closeGuideModal = () => {
             guideModal.style.display = 'none';
+            const gsOverlay = document.getElementById('getting-started-overlay');
+            const gsDialog = document.getElementById('getting-started-dialog');
+            if (gsOverlay) gsOverlay.style.display = 'none';
+            if (gsDialog) gsDialog.style.display = 'none';
             document.getElementById('guide-explanation-overlay').style.display = 'none';
             document.getElementById('guide-explanation-dialog').style.display = 'none';
             document.querySelectorAll('.guide-topic-btn').forEach(b => b.classList.remove('guide-topic-glow'));

@@ -1871,6 +1871,112 @@ body {
     position: relative;
 }
 
+/* --- Getting Started dialog (distinct from other modals) --- */
+.getting-started-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 2990;
+    cursor: default;
+}
+
+.getting-started-dialog {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(840px, 92vw);
+    max-height: 85vh;
+    background: linear-gradient(165deg, #0f172a 0%, #1e293b 50%);
+    border-radius: 16px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(148, 163, 184, 0.1);
+    z-index: 2991;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.getting-started-close-btn {
+    position: absolute;
+    top: 16px;
+    right: 20px;
+    font-size: 1.6rem;
+    background: rgba(248, 250, 252, 0.08);
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transition: color 0.2s, background 0.2s;
+}
+
+.getting-started-close-btn:hover {
+    color: #f1f5f9;
+    background: rgba(248, 250, 252, 0.15);
+}
+
+.getting-started-content {
+    padding: 28px 32px 32px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.getting-started-title {
+    margin: 0 0 12px;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #f8fafc;
+    letter-spacing: -0.02em;
+}
+
+.getting-started-intro {
+    margin: 0 0 24px;
+    color: #94a3b8;
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+.getting-started-section {
+    margin-bottom: 20px;
+    padding: 16px 18px;
+    background: rgba(30, 41, 59, 0.6);
+    border-radius: 12px;
+    border-left: 3px solid #38bdf8;
+}
+
+.getting-started-section h2 {
+    margin: 0 0 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.getting-started-section h2 i {
+    margin-right: 8px;
+    color: #38bdf8;
+}
+
+.getting-started-section p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #cbd5e1;
+    line-height: 1.55;
+}
+
+.getting-started-footer {
+    margin: 24px 0 0;
+    padding-top: 16px;
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
 .guide-explanation-overlay {
     position: fixed;
     top: 0;
@@ -1904,6 +2010,14 @@ body {
     font-size: 14pt;
     font-weight: 400;
     line-height: 1.5;
+}
+
+.guide-explanation-image {
+    max-width: 100%;
+    max-height: 300px;
+    margin-top: 12px;
+    border-radius: 6px;
+    object-fit: contain;
 }
 
 .guide-explanation-next-btn {

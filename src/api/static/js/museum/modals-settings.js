@@ -527,6 +527,8 @@ Modals.ReferenceDocumentsNotification = (() => {
         }
 
         async function checkAndShow(callback) {
+
+           // if (callback) callback();
          
             proceedCallback = callback;
             

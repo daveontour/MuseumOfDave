@@ -5,11 +5,31 @@ const Guide = {
     _currentStep: 0,
 
     topics: {
-        'Getting started': [
-            { text: 'Use the chat box to ask questions about the museum. Try asking about photos, messages, or contacts.' }
+        'GettingStarted': [
+            {
+                navigate() {
+                    Guide._showGettingStartedDialog();
+                }
+            }
         ],
-        'Asking questions': [
-            { text: 'Type your question in the chat box and press Send. The AI can search your emails, messages, photos, and more.' }
+        'AskingQuestions': [
+            { text: 'Type your question or comment in the chat box and press Send. The AI can search your emails, messages, photos, social media posts, and more.\nTry "Show me photos from last summer" or "Who have I emailed most?", or "Tell me about my relationship with John"',
+              glow: '#user-input'
+             },
+             {
+                text: 'You can select the personality of the AI in the voice settings. The AI will respond in the style of the selected personality.\nIf you select your own voice, then you\'ll also be able to select the mood of the AI\'s response.',
+                glow: '#voice-settings-trigger',
+                position: 'top-center'
+             },
+             {
+                text: 'You can use the "Who\'s Asking?" switch in the top bar to select the person who is asking the question. If you select yourself then you can frame question from your own perspective',
+                glow: '#its-me-visitor-switch',
+                position: 'middle-right',
+                image: '/static/images/stats.png'
+             },{
+                text:'The AI will respond based on the your question or comment, what you\'ve been discussing, and what information you have made availabler to it. Consider providing reference documents to the AI to help it answer your question.',
+                position: 'middle-center'
+             }              
         ],
         'Browsing images': [
             { text: 'Open Image Gallery or Facebook Albums from the left sidebar to browse and search your photo collection.' }
@@ -109,15 +129,42 @@ const Guide = {
         if (el) el.classList.add('guide-glow');
     },
 
+    _showGettingStartedDialog() {
+        const overlay  = document.getElementById('getting-started-overlay');
+        const dialog   = document.getElementById('getting-started-dialog');
+        const closeBtn = document.getElementById('getting-started-close-btn');
+        if (!overlay || !dialog) return;
+
+        const close = () => {
+            overlay.style.display = 'none';
+            dialog.style.display = 'none';
+            overlay.onclick = null;
+            if (closeBtn) closeBtn.onclick = null;
+            this._closeExplanation();
+        };
+
+        overlay.style.display = 'block';
+        dialog.style.display = 'flex';
+        overlay.onclick = close;
+        if (closeBtn) closeBtn.onclick = close;
+    },
+
     _closeExplanation() {
+        const gsOverlay  = document.getElementById('getting-started-overlay');
+        const gsDialog   = document.getElementById('getting-started-dialog');
+        if (gsOverlay)  { gsOverlay.style.display = 'none'; gsOverlay.onclick = null; }
+        if (gsDialog)   { gsDialog.style.display = 'none'; }
+
         const overlay  = document.getElementById('guide-explanation-overlay');
         const dialog   = document.getElementById('guide-explanation-dialog');
         const nextBtn  = document.getElementById('guide-explanation-next-btn');
         const closeBtn = document.getElementById('guide-explanation-close-btn');
+        const imgEl   = document.getElementById('guide-explanation-image');
         if (overlay)  { overlay.style.display  = 'none'; overlay.onclick  = null; }
         if (dialog)   { dialog.style.display   = 'none'; dialog.classList.remove('guide-explanation-dialog-has-close'); }
         if (nextBtn)  { nextBtn.style.display  = 'none'; nextBtn.onclick  = null; }
         if (closeBtn) { closeBtn.style.display = 'none'; closeBtn.onclick = null; }
+        if (imgEl)    { imgEl.style.display    = 'none'; imgEl.src        = ''; }
         this._clearGlows();
         this._currentTopic = null;
         this._currentStep  = 0;
@@ -132,6 +179,7 @@ const Guide = {
         const overlay  = document.getElementById('guide-explanation-overlay');
         const dialog   = document.getElementById('guide-explanation-dialog');
         const textEl   = document.getElementById('guide-explanation-text');
+        const imgEl    = document.getElementById('guide-explanation-image');
         const nextBtn  = document.getElementById('guide-explanation-next-btn');
         const closeBtn = document.getElementById('guide-explanation-close-btn');
         if (!overlay || !dialog || !textEl) return;
@@ -143,6 +191,16 @@ const Guide = {
             this._applyGlow(step.glow);
 
             textEl.textContent = step.text;
+
+            if (imgEl) {
+                if (step.image) {
+                    imgEl.src = step.image;
+                    imgEl.style.display = 'block';
+                } else {
+                    imgEl.src = '';
+                    imgEl.style.display = 'none';
+                }
+            }
 
             nextBtn.style.display  = isLast ? 'none'  : 'block';
             nextBtn.onclick        = isLast ? null     : () => this._showStep(stepIndex + 1);
@@ -160,9 +218,14 @@ const Guide = {
             overlay.style.display = 'none';
             dialog.style.display  = 'none';
             step.navigate();
-            setTimeout(applyGlowAndShow, 100);
+            if (step.text) {
+                setTimeout(applyGlowAndShow, 100);
+            } 
         } else {
-            applyGlowAndShow();
+            if (step.text) {
+                applyGlowAndShow()
+            }
+           
         }
     },
 
