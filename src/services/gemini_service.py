@@ -672,6 +672,16 @@ class ChatService(BaseChatService):
             }
         )
 
+        get_user_interests_declaration = types.FunctionDeclaration(
+            name="get_user_interests",
+            description="Get the user's list of interests. Use this when the user asks about their interests, hobbies, or things they care about, or when you need to know what topics or activities the user has marked as interests.",
+            parameters={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        )
+
         get_reference_document_declaration = types.FunctionDeclaration(
             name="get_reference_document",
             description="Retrieve the full content of one or more reference documents by their IDs. Call this when the user's question is best answered using a specific reference document listed in the system prompt.",
@@ -697,6 +707,7 @@ class ChatService(BaseChatService):
                 search_tavily_declaration,
                 get_all_messages_by_contact_declaration,
                 get_unique_tags_count_declaration,
+                get_user_interests_declaration,
                 search_facebook_albums_declaration,
                 search_facebook_posts_declaration,
                 get_all_facebook_posts_declaration,
@@ -705,7 +716,7 @@ class ChatService(BaseChatService):
             google_search=types.GoogleSearch()
         )]
 
-    def generate_response(self, user_input: str, temperature: float = 0.0, voice: str = "expert", mood: str = "neutral", psychological_profile: str = None, writing_style: str = None, conversation_id: Optional[int] = None, db: Optional[Database] = None, companionMode: Optional[bool] = False) -> str:
+    def generate_response(self, user_input: str, temperature: float = 0.0, voice: str = "expert", mood: str = "neutral", psychological_profile: str = None, writing_style: str = None, conversation_id: Optional[int] = None, db: Optional[Database] = None, companionMode: Optional[bool] = False, whos_asking: str = "visitor") -> str:
         """Generates a response to the prompt using the Gemini LLM API.
         
         Args:
@@ -788,7 +799,8 @@ class ChatService(BaseChatService):
             voice_instructions = voice_instructions.replace('{him}', "her")
             voice_instructions = voice_instructions.replace('{his}', "her")
 
-        system_prompt = core_instructions + "\n\n **Your Personae:**\n" + voice_instructions + "\n\n **Additional Information:**\n" + system_instructions
+        whos_asking_text = f"The person asking is {subject_name} themselves." if whos_asking == "its-me" else f"The person asking is a visitor (not the subject {subject_name})."
+        system_prompt = core_instructions + "\n\n **Your Personae:**\n" + voice_instructions + "\n\n **Additional Information:**\n" + system_instructions + "\n\n **Who is asking:** " + whos_asking_text
 
         manifest_text, available_docs = self._build_reference_manifest(db) if db else ("", [])
         if manifest_text:

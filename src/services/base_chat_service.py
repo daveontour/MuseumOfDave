@@ -9,7 +9,7 @@ from sqlalchemy import or_
 from pympler import asizeof
 
 from ..database import Database
-from ..database.models import Message, Email, CompleteProfile, MediaMetadata, Artefact, FacebookAlbum, FacebookPost
+from ..database.models import Message, Email, CompleteProfile, MediaMetadata, Artefact, FacebookAlbum, FacebookPost, Interest
 
 try:
     from tavily import TavilyClient
@@ -380,6 +380,18 @@ class BaseChatService:
         finally:
             session.close()
 
+    def _get_user_interests(self) -> Dict[str, Any]:
+        """Return the user's list of interests from the interests table."""
+        if not self.db:
+            return {"error": "Database not configured", "interests": []}
+        session = self.db.get_session()
+        try:
+            rows = session.query(Interest).order_by(Interest.name).all()
+            interests = [r.name for r in rows if r.name]
+            return {"interests": interests, "count": len(interests)}
+        finally:
+            session.close()
+
     def _get_unique_tags_count(self) -> Dict[str, Any]:
         """Return the unique tags in the media_items and artefacts tables, with counts."""
         if not self.db:
@@ -412,6 +424,7 @@ class BaseChatService:
             "search_facebook_albums": self._search_facebook_albums,
             "search_facebook_posts": self._search_facebook_posts,
             "get_all_facebook_posts": self._get_all_facebook_posts,
+            "get_user_interests": self._get_user_interests,
         }
         if function_name not in function_handlers:
             raise ValueError(f"Unknown function: {function_name}")

@@ -160,12 +160,39 @@ body {
     flex: none;
 }
 
+.its-me-visitor-switch {
+    display: flex;
+    align-items: center;
+    background-color: rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    padding: 2px;
+    margin-left: auto;
+    margin-right: 8px;
+}
+
+.its-me-visitor-option {
+    padding: 6px 14px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.its-me-visitor-option:hover {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.its-me-visitor-option.active {
+    background-color: rgba(255, 255, 255, 0.95);
+    color: #19264d;
+}
+
 .top-bar .hamburger-btn {
     background-color: rgba(255, 255, 255, 0.2);
     color: #fff;
     padding: 6px 12px;
     border-radius: 6px;
-    margin-left: auto;
 }
 
 .top-bar .hamburger-btn:hover {
@@ -209,6 +236,30 @@ body {
     margin-top: 0;
 }
 
+/* Right sidebar: buffer takes space, tiles stay natural size, bottom tile pinned */
+.sidebar-right .sidebar-right-main {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-right .sidebar-spacer {
+    flex-grow: 1;
+    min-height: 10px;
+}
+
+.sidebar-right .sidebar-bottom-tile {
+    padding-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.sidebar-right .sidebar-bottom-tile .sidebar-settings-btn {
+    width: 100%;
+    box-sizing: border-box;
+}
+
 .sidebar h2 {
     margin-top: -15px;
     color: #333;
@@ -227,6 +278,39 @@ body {
 
 .sidebar button:hover {
     color: white;
+}
+
+/* Left sidebar: buffer takes space, tiles stay natural size, bottom tile pinned */
+.sidebar-left .sidebar-left-main {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-left .sidebar-spacer {
+    flex-grow: 1;
+    min-height: 10px;
+}
+
+.sidebar-left .sidebar-bottom-tile {
+    padding-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.sidebar-left .sidebar-bottom-tile .sidebar-settings-btn {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.sidebar-settings-btn {
+    background-color: #19264d !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.sidebar-settings-btn:hover {
+    background-color: #253a6d !important;
 }
 
 .header-container {

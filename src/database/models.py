@@ -644,3 +644,14 @@ class AppConfiguration(Base):
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class Interest(Base):
+    """User interest - simple list of interests."""
+
+    __tablename__ = "interests"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(500), nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

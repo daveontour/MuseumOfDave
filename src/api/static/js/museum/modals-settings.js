@@ -1769,6 +1769,7 @@ Modals.initAll = () => {
         Modals.Profiles.init();
         if (Modals.EmailMatches && Modals.EmailMatches.init) Modals.EmailMatches.init();
         if (Modals.EmailClassifications && Modals.EmailClassifications.init) Modals.EmailClassifications.init();
+        if (Modals.Interests && Modals.Interests.init) Modals.Interests.init();
         if (Modals.EmailExclusions && Modals.EmailExclusions.init) Modals.EmailExclusions.init();
         if (Modals.PreviousResponses && Modals.PreviousResponses.init) Modals.PreviousResponses.init();
         if (Modals.SaveResponseTitle && Modals.SaveResponseTitle.init) Modals.SaveResponseTitle.init();
@@ -2074,6 +2075,196 @@ Modals.EmailMatches = (() => {
 
     return {
         load: loadEmailMatches,
+        init: init
+    };
+})();
+
+
+// --- Interests (Settings and Data Import) ---
+Modals.Interests = (() => {
+    let editingId = null;
+
+    function getEl(id) {
+        return document.getElementById(id);
+    }
+
+    function escapeHtml(s) {
+        if (s == null) return '';
+        const div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+    }
+
+    async function loadInterests() {
+        const tbody = getEl('interests-tbody');
+        const loading = getEl('interests-loading');
+        const tableContainer = getEl('interests-table-container');
+        const emptyMsg = getEl('interests-empty-msg');
+        if (!tbody || !loading) return;
+
+        loading.style.display = 'block';
+        if (tableContainer) tableContainer.style.display = 'none';
+        if (emptyMsg) emptyMsg.style.display = 'none';
+
+        try {
+            const response = await fetch('/api/interests');
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+
+            loading.style.display = 'none';
+            if (tableContainer) tableContainer.style.display = 'block';
+
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '';
+                if (emptyMsg) emptyMsg.style.display = 'block';
+                return;
+            }
+            if (emptyMsg) emptyMsg.style.display = 'none';
+
+            tbody.innerHTML = data.map(row => `
+                <tr style="border-bottom: 1px solid #e9ecef;">
+                    <td style="padding: 8px;">${escapeHtml(row.name)}</td>
+                    <td style="padding: 8px; text-align: center;">
+                        <button type="button" class="interest-edit-btn modal-btn modal-btn-secondary" data-id="${row.id}" style="padding: 4px 8px; font-size: 0.85em;">
+                            <i class="fas fa-edit"></i> Edit
+                        </button>
+                        <button type="button" class="interest-delete-btn modal-btn" data-id="${row.id}" style="padding: 4px 8px; font-size: 0.85em; background: #dc3545; color: white; margin-left: 4px;">
+                            <i class="fas fa-trash-alt"></i> Delete
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+
+            tbody.querySelectorAll('.interest-edit-btn').forEach(btn => {
+                btn.addEventListener('click', () => openEditModal(parseInt(btn.dataset.id, 10)));
+            });
+            tbody.querySelectorAll('.interest-delete-btn').forEach(btn => {
+                btn.addEventListener('click', () => deleteInterest(parseInt(btn.dataset.id, 10)));
+            });
+        } catch (err) {
+            loading.style.display = 'none';
+            if (tableContainer) tableContainer.style.display = 'block';
+            tbody.innerHTML = `<tr><td colspan="2" style="padding: 1em; color: #c00;">Failed to load: ${escapeHtml(err.message)}</td></tr>`;
+        }
+    }
+
+    function openCreateModal() {
+        editingId = null;
+        const modal = getEl('interest-modal');
+        const title = getEl('interest-modal-title');
+        const nameInput = getEl('interest-name');
+        const errEl = getEl('interest-modal-error');
+        if (!modal || !title || !nameInput) return;
+        title.textContent = 'Add Interest';
+        nameInput.value = '';
+        if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+        modal.style.display = 'flex';
+    }
+
+    async function openEditModal(id) {
+        editingId = id;
+        const modal = getEl('interest-modal');
+        const title = getEl('interest-modal-title');
+        const nameInput = getEl('interest-name');
+        const errEl = getEl('interest-modal-error');
+        if (!modal || !title || !nameInput) return;
+
+        try {
+            const res = await fetch(`/api/interests/${id}`);
+            if (!res.ok) throw new Error(res.statusText);
+            const row = await res.json();
+            title.textContent = 'Edit Interest';
+            nameInput.value = row.name;
+            if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+            modal.style.display = 'flex';
+        } catch (err) {
+            if (errEl) { errEl.textContent = 'Failed to load: ' + err.message; errEl.style.display = 'block'; }
+        }
+    }
+
+    function closeModal() {
+        const modal = getEl('interest-modal');
+        if (modal) modal.style.display = 'none';
+        editingId = null;
+    }
+
+    async function saveInterest() {
+        const nameInput = getEl('interest-name');
+        const errEl = getEl('interest-modal-error');
+        if (!nameInput || !errEl) return;
+
+        const name = nameInput.value.trim();
+        if (!name) {
+            errEl.textContent = 'Name is required';
+            errEl.style.display = 'block';
+            return;
+        }
+        errEl.style.display = 'none';
+
+        try {
+            if (editingId !== null) {
+                const res = await fetch(`/api/interests/${editingId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                if (!res.ok) {
+                    const d = await res.json().catch(() => ({}));
+                    const msg = typeof d.detail === 'string' ? d.detail : (Array.isArray(d.detail) && d.detail[0]?.msg ? d.detail[0].msg : JSON.stringify(d.detail || res.statusText));
+                    throw new Error(msg);
+                }
+            } else {
+                const res = await fetch('/api/interests', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                if (!res.ok) {
+                    const d = await res.json().catch(() => ({}));
+                    const msg = typeof d.detail === 'string' ? d.detail : (Array.isArray(d.detail) && d.detail[0]?.msg ? d.detail[0].msg : JSON.stringify(d.detail || res.statusText));
+                    throw new Error(msg);
+                }
+            }
+            closeModal();
+            loadInterests();
+        } catch (err) {
+            errEl.textContent = err.message;
+            errEl.style.display = 'block';
+        }
+    }
+
+    async function deleteInterest(id) {
+        if (!confirm('Are you sure you want to delete this interest?')) return;
+        try {
+            const res = await fetch(`/api/interests/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(res.statusText);
+            loadInterests();
+        } catch (err) {
+            alert('Failed to delete: ' + err.message);
+        }
+    }
+
+    function init() {
+        const createBtn = getEl('interests-create-btn');
+        const refreshBtn = getEl('interests-refresh-btn');
+        const closeBtn = getEl('close-interest-modal');
+        const cancelBtn = getEl('interest-modal-cancel');
+        const saveBtn = getEl('interest-modal-save');
+
+        if (createBtn) createBtn.addEventListener('click', openCreateModal);
+        if (refreshBtn) refreshBtn.addEventListener('click', () => loadInterests());
+        if (closeBtn) closeBtn.addEventListener('click', closeModal);
+        if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+        if (saveBtn) saveBtn.addEventListener('click', saveInterest);
+
+        const modal = getEl('interest-modal');
+        if (modal) {
+            modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+        }
+    }
+
+    return {
+        load: loadInterests,
         init: init
     };
 })();

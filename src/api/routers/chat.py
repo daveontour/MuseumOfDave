@@ -39,6 +39,7 @@ class ChatRequest(BaseModel):
     mood: Optional[str] = None
     companionMode: Optional[bool] = False
     provider: Optional[str] = "gemini"  # "gemini" or "claude"
+    whos_asking: Optional[str] = "visitor"  # "its-me" or "visitor"
 
 
 class ChatResponse(BaseModel):
@@ -145,6 +146,7 @@ async def generate_chat_response(request: ChatRequest):
 
         # Route to the requested provider
         service = claude_chat_service if request.provider == "claude" else chat_service
+        whos_asking = request.whos_asking if request.whos_asking else "visitor"
         response_text, metadata_json_str = service.generate_response(
             request.prompt,
             temperature=temperature,
@@ -152,7 +154,8 @@ async def generate_chat_response(request: ChatRequest):
             mood=mood,
             conversation_id=request.conversation_id,
             db=db,
-            companionMode=request.companionMode
+            companionMode=request.companionMode,
+            whos_asking=whos_asking
         )
 
         # Parse response to extract embedded JSON from markdown code blocks

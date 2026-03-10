@@ -132,6 +132,11 @@ class ClaudeChatService(BaseChatService):
                 "input_schema": {"type": "object", "properties": {}, "required": []},
             },
             {
+                "name": "get_user_interests",
+                "description": "Get the user's list of interests. Use this when the user asks about their interests, hobbies, or things they care about, or when you need to know what topics or activities the user has marked as interests.",
+                "input_schema": {"type": "object", "properties": {}, "required": []},
+            },
+            {
                 "name": "get_reference_document",
                 "description": "Retrieve the full content of one or more reference documents by their IDs. Call this when the user's question is best answered using a specific reference document listed in the system prompt.",
                 "input_schema": {
@@ -293,6 +298,7 @@ class ClaudeChatService(BaseChatService):
         conversation_id: Optional[int] = None,
         db: Optional[Database] = None,
         companionMode: Optional[bool] = False,
+        whos_asking: str = "visitor",
     ):
         """Generate a chat response using the Claude API with tool calling.
 
@@ -347,7 +353,8 @@ class ClaudeChatService(BaseChatService):
                          ("{his}", "his" if subject_gender == "Male" else "her")]:
             voice_instructions_text = voice_instructions_text.replace(src, dst)
 
-        system_prompt = core_instructions + "\n\n**Your Personae:**\n" + voice_instructions_text + "\n\n**Additional Information:**\n" + system_instructions
+        whos_asking_text = f"The person asking is {subject_name} themselves. They are asking questions about their own history and life." if whos_asking == "its-me" else f"The person asking is a visitor (not the subject {subject_name}). They are asking questions about the subject's life and history."
+        system_prompt = core_instructions + "\n\n**Your Personae:**\n" + voice_instructions_text + "\n\n**Additional Information:**\n" + system_instructions + "\n\n**Who is asking:** " + whos_asking_text
 
         manifest_text, available_docs = self._build_reference_manifest(db) if db else ("", [])
         if manifest_text:

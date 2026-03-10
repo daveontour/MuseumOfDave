@@ -59,6 +59,9 @@ const App = (() => {
                 // Get current conversation ID if available
                 const conversationId = Modals.ConversationManager ? Modals.ConversationManager.getCurrentConversationId() : null;
                 
+                const itsMeVisitorSwitch = document.getElementById('its-me-visitor-switch');
+                const whosAsking = itsMeVisitorSwitch?.querySelector('.its-me-visitor-option.active')?.dataset?.value || 'visitor';
+
                 const response = await ApiService.fetchChat({
                     prompt: finalMessage,
                     voice: selectedVoice,
@@ -70,6 +73,7 @@ const App = (() => {
                     clientId: AppState.clientId,
                     userId:currentUserId,
                     provider: DOM.llmProviderSelect ? DOM.llmProviderSelect.value : 'gemini',
+                    whos_asking: whosAsking,
                 });
                 
                 // Non-streaming JSON response handling (original code commented out streaming)
@@ -104,6 +108,18 @@ const App = (() => {
                 DOM.chatForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
             }
         });
+
+        // It's Me / Visitor switch - visual toggle only (no mode-change handler yet)
+        const itsMeVisitorSwitch = document.getElementById('its-me-visitor-switch');
+        if (itsMeVisitorSwitch) {
+            itsMeVisitorSwitch.querySelectorAll('.its-me-visitor-option').forEach(opt => {
+                opt.addEventListener('click', () => {
+                    itsMeVisitorSwitch.querySelectorAll('.its-me-visitor-option').forEach(o => o.classList.remove('active'));
+                    opt.classList.add('active');
+                    itsMeVisitorSwitch.setAttribute('aria-checked', opt.dataset.value === 'its-me');
+                });
+            });
+        }
 
         // Hamburger menu for config page
         DOM.hamburgerMenu.addEventListener('click', () => {
@@ -450,6 +466,9 @@ const App = (() => {
                     if (Modals.SubjectConfiguration && Modals.SubjectConfiguration.loadAndPopulateForm) {
                         Modals.SubjectConfiguration.loadAndPopulateForm();
                     }
+                }
+                if (targetTab === 'interests') {
+                    if (Modals.Interests && Modals.Interests.load) Modals.Interests.load();
                 }
                 // Load system instructions when System Instructions tab is opened
                 if (targetTab === 'system-instructions') {
@@ -1830,6 +1849,93 @@ const App = (() => {
         if (DOM.sensitiveSidebarBtn) {
             DOM.sensitiveSidebarBtn.addEventListener('click', () => {
                 Modals.SensitiveData.open();
+            });
+        }
+
+        const settingsDataImportSidebarBtn = document.getElementById('settings-data-import-sidebar-btn');
+        if (settingsDataImportSidebarBtn && DOM.configPage) {
+            settingsDataImportSidebarBtn.addEventListener('click', () => {
+                DOM.configPage.style.display = 'flex';
+                loadControlDefaults();
+                if (Modals.AppConfig && Modals.AppConfig.load) Modals.AppConfig.load();
+            });
+        }
+
+        const todaysThingSidebarBtn = document.getElementById('todays-thing-sidebar-btn');
+        const todaysThingAddInterestModal = document.getElementById('todays-thing-add-interest-modal');
+        const todaysThingAddInterestInput = document.getElementById('todays-thing-add-interest-input');
+        const todaysThingAddInterestError = document.getElementById('todays-thing-add-interest-error');
+        const todaysThingAddInterestSave = document.getElementById('todays-thing-add-interest-save');
+        const todaysThingAddInterestCancel = document.getElementById('todays-thing-add-interest-cancel');
+        const closeTodaysThingAddInterest = document.getElementById('close-todays-thing-add-interest-modal');
+
+        const runTodaysThing = () => App.processFormSubmit(
+            "What's today's things of interest? Suggest something interesting for today based on my interests.",
+            "Today's Things of Interest",
+            "What's going on today?"
+        );
+
+        if (todaysThingAddInterestModal && todaysThingAddInterestSave) {
+            const closeTodaysThingModal = () => { todaysThingAddInterestModal.style.display = 'none'; };
+            todaysThingAddInterestSave.addEventListener('click', async () => {
+                const name = (todaysThingAddInterestInput?.value || '').trim();
+                if (!name) {
+                    if (todaysThingAddInterestError) {
+                        todaysThingAddInterestError.textContent = 'Please enter at least one topic.';
+                        todaysThingAddInterestError.style.display = 'block';
+                    }
+                    return;
+                }
+                if (todaysThingAddInterestError) todaysThingAddInterestError.style.display = 'none';
+                try {
+                    const postRes = await fetch('/api/interests', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name })
+                    });
+                    if (!postRes.ok) {
+                        const d = await postRes.json().catch(() => ({}));
+                        const msg = typeof d.detail === 'string' ? d.detail : 'Failed to save';
+                        if (todaysThingAddInterestError) {
+                            todaysThingAddInterestError.textContent = msg;
+                            todaysThingAddInterestError.style.display = 'block';
+                        }
+                        return;
+                    }
+                    closeTodaysThingModal();
+                    runTodaysThing();
+                } catch (e) {
+                    if (todaysThingAddInterestError) {
+                        todaysThingAddInterestError.textContent = 'Failed to save: ' + e.message;
+                        todaysThingAddInterestError.style.display = 'block';
+                    }
+                }
+            });
+            if (todaysThingAddInterestCancel) todaysThingAddInterestCancel.addEventListener('click', closeTodaysThingModal);
+            if (closeTodaysThingAddInterest) closeTodaysThingAddInterest.addEventListener('click', closeTodaysThingModal);
+            todaysThingAddInterestModal.addEventListener('click', (e) => { if (e.target === todaysThingAddInterestModal) closeTodaysThingModal(); });
+        }
+
+        if (todaysThingSidebarBtn) {
+            todaysThingSidebarBtn.addEventListener('click', async () => {
+                try {
+                    const res = await fetch('/api/interests');
+                    if (!res.ok) { runTodaysThing(); return; }
+                    const data = await res.json();
+                    if (data && data.length > 0) {
+                        runTodaysThing();
+                        return;
+                    }
+                    if (todaysThingAddInterestModal && todaysThingAddInterestInput) {
+                        todaysThingAddInterestInput.value = '';
+                        if (todaysThingAddInterestError) { todaysThingAddInterestError.style.display = 'none'; todaysThingAddInterestError.textContent = ''; }
+                        todaysThingAddInterestModal.style.display = 'flex';
+                    } else {
+                        runTodaysThing();
+                    }
+                } catch (e) {
+                    runTodaysThing();
+                }
             });
         }
 
