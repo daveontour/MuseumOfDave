@@ -8,6 +8,8 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from src.api.routers.admin import get_subject_template_context
+
 from ..deps import db
 from ...database.models import CustomVoice
 
@@ -77,8 +79,11 @@ async def list_voices():
     followed by custom voices ordered alphabetically by name.
     """
     builtin = _load_builtin_voices()
+    subject_context = get_subject_template_context()
     result = []
     for key, info in builtin.items():
+        if key == "owner":
+            info["name"] = info["name"].replace("{SUBJECT_NAME}", subject_context["owner"])
         result.append({
             "key": key,
             "name": info.get("name", key),

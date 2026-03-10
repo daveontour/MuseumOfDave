@@ -25,7 +25,7 @@ body {
     display: flex;
     align-items: center;
     gap: 24px;
-    padding: 10px 20px;
+    padding: 12.5px 20px;
     flex-shrink: 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
     box-sizing: border-box;
@@ -1224,11 +1224,6 @@ body {
     border-radius: 50%;
     border: 3px solid #4a90e2;
     transition: transform 0.2s ease, border-color 0.2s ease;
-}
-
-.selected-voice-img:hover {
-    transform: scale(1.05);
-    border-color: #357abd;
 }
 
 /* Voice Dropdown Container */
