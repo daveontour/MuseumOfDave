@@ -79,7 +79,11 @@ const CONSTANTS = {
     LLM_PROVIDERS: {
         GEMINI: "{{gemini_configured}}",
         CLAUDE: "{{claude_configured}}"
-    }
+    },
+    OWNER_NAME: "{{owner}}",
+    OWNER_GENDER: "{{owner_gender}}",
+    RANDOM_QUESTION_PROMPT: "Generate a random question about {{owner}}'s life. It could be about any aspect of his biography, people he's known, travels, work, hobbies, relationships, psychology, interest, anything. The objective is that by answering the question it would provide insight into him or reveal hidden or understated aspects of him or amusing facts. Do not answer the question, just generate it.",
+    TODAYS_THING_PROMPT: "{{todays_thing_prompt}}",
 };
 
 // --- DOM Element Cache ---

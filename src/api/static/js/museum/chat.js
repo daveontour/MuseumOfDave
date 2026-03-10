@@ -253,6 +253,23 @@ const Chat = (() => {
             row.appendChild(btn);
         });
 
+        if (embeddedJson.randomQuestion === true && embeddedJson.randomQuestionText) {
+            const spacer = document.createElement('span');
+            spacer.className = 'response-action-spacer';
+            spacer.style.flex = '1';
+            row.appendChild(spacer);
+
+            const answerBtn = document.createElement('button');
+            answerBtn.className = 'response-action-btn response-action-btn--answer';
+            answerBtn.textContent = 'Answer';
+            answerBtn.addEventListener('click', () => {
+                if (typeof App !== 'undefined' && App.processFormSubmit) {
+                    App.processFormSubmit(embeddedJson.randomQuestionText, 'Random Question', 'Answer');
+                }
+            });
+            row.appendChild(answerBtn);
+        }
+
         if (row.children.length > 0) {
             messageElement.appendChild(row);
         }

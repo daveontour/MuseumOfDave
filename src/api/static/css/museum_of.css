@@ -884,6 +884,21 @@ body {
     background: linear-gradient(135deg, #1877f2 0%, #42b72a 100%);
 }
 
+.response-action-btn--answer {
+    width: auto;
+    height: 44px;
+    padding: 0 16px;
+    border-radius: 22px;
+    font-size: 14px;
+    font-weight: 600;
+    background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+    color: #fff;
+}
+
+.response-action-btn--answer:hover {
+    transform: scale(1.05);
+}
+
 /* Audio tag visibility (JS toggles 'hide-audio-tags' class on body) */
 .hide-audio-tags .message-content audio,
 .hide-audio-tags .audio-status { /* Also hide status if audio tags are hidden */

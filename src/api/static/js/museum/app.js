@@ -1905,6 +1905,17 @@ const App = (() => {
             });
         }
 
+        const randomQuestionSidebarBtn = document.getElementById('random-question-sidebar-btn');
+        if (randomQuestionSidebarBtn) {
+            randomQuestionSidebarBtn.addEventListener('click', () => {
+                App.processFormSubmit(
+                    CONSTANTS.RANDOM_QUESTION_PROMPT,
+                    "Random Question",
+                    "Generate a random question about " + CONSTANTS.OWNER_NAME + "'s life."
+                );
+            });
+        }
+
         const todaysThingSidebarBtn = document.getElementById('todays-thing-sidebar-btn');
         const todaysThingAddInterestModal = document.getElementById('todays-thing-add-interest-modal');
         const todaysThingAddInterestInput = document.getElementById('todays-thing-add-interest-input');

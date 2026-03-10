@@ -46,7 +46,9 @@ Every response must end with a JSON block in this format:
   "keyObjects": [],           // array of key objects/things
   "browser_action": null,     // always include, null if unused
   "attachments": [],          // full paths/URIs of any images used
-  "showHelp": null            // or help topic string if triggered
+  "showHelp": null,           // or help topic string if triggered
+  "randomQuestion": false,    // or true if you have been asked to generate a random question
+  "randomQuestionText": null  // or the text of the generated random question
 }
 ```
 Note: If a specific person is mentioned, include their name in `showImages`, `showEmails`, and `showMessages`.
