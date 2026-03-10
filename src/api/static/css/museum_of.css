@@ -1826,6 +1826,126 @@ body {
 .hamburger-btn:hover { color: #007bff; }
 
 
+.guide-topics-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.guide-topics-list li {
+    margin-bottom: 8px;
+}
+
+.guide-topic-btn {
+    width: 100%;
+    padding: 10px 14px;
+    text-align: left;
+    background: #f0f4f8;
+    border: 1px solid #bfc9da;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #233366;
+    transition: background-color 0.2s;
+}
+
+.guide-topic-btn:hover {
+    background: #e3eaf2;
+}
+
+@keyframes guide-glow-pulse {
+    0%, 100% {
+        box-shadow: 0 0 12px 3px rgba(255, 193, 7, 0.8);
+    }
+    50% {
+        box-shadow: 0 0 20px 8px rgba(255, 0, 0, 0.9);
+    }
+}
+
+.guide-topic-btn.guide-topic-glow,
+.guide-glow {
+    animation: guide-glow-pulse 1.5s ease-in-out infinite;
+}
+
+.guide-modal-content {
+    position: relative;
+}
+
+.guide-explanation-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: transparent;
+    z-index: 3000;
+    cursor: default;
+}
+
+.guide-explanation-dialog {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    padding-bottom: 48px;
+    padding: 16px 20px;
+    background: #f5e6a3;
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    max-width: 700px;
+    width: 90%;
+    z-index: 3001;
+}
+
+.guide-explanation-dialog p {
+    margin: 0;
+    color: #333;
+    font-size: 14pt;
+    font-weight: 400;
+    line-height: 1.5;
+}
+
+.guide-explanation-next-btn {
+    display: block;
+    position: absolute;
+    bottom: 12px;
+    right: 16px;
+    padding: 6px 14px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    background: #2d3748;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+}
+
+.guide-explanation-next-btn:hover {
+    background: #4a5568;
+}
+
+.guide-explanation-close-btn {
+    position: absolute;
+    top: 12px;
+    right: 18px;
+    font-size: 1.7rem;
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+}
+
+.guide-explanation-close-btn:hover {
+    color: #333;
+}
+
+.guide-explanation-dialog.guide-explanation-dialog-has-close {
+    padding-right: 44px;
+}
+
 .config-section {
     margin-bottom: 0px;
     padding: 20px;

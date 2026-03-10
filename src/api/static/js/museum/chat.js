@@ -297,6 +297,11 @@ const Chat = (() => {
 
     function addMessage(role, text, isMarkdown = true, messageId = null, embeddedJson = null) {
 
+        if (embeddedJson && embeddedJson.showHelp) {
+            Guide.onTopicSelected(embeddedJson.showHelp);
+            return;
+        }
+
         const messageElement = _createMessageElement(role, messageId);
         _addVoiceBranding(messageElement, role);
 
