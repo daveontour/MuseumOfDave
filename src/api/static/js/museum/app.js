@@ -511,6 +511,9 @@ const App = (() => {
                 if (targetTab === 'interests') {
                     if (Modals.Interests && Modals.Interests.load) Modals.Interests.load();
                 }
+                if (targetTab === 'custom-voices') {
+                    if (Modals.CustomVoices && Modals.CustomVoices.load) Modals.CustomVoices.load();
+                }
                 // Load system instructions when System Instructions tab is opened
                 if (targetTab === 'system-instructions') {
                     if (Modals.SubjectConfiguration && Modals.SubjectConfiguration.loadAndPopulateForm) {

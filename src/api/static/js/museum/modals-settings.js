@@ -1772,6 +1772,7 @@ Modals.initAll = () => {
         if (Modals.EmailMatches && Modals.EmailMatches.init) Modals.EmailMatches.init();
         if (Modals.EmailClassifications && Modals.EmailClassifications.init) Modals.EmailClassifications.init();
         if (Modals.Interests && Modals.Interests.init) Modals.Interests.init();
+        if (Modals.CustomVoices && Modals.CustomVoices.init) Modals.CustomVoices.init();
         if (Modals.EmailExclusions && Modals.EmailExclusions.init) Modals.EmailExclusions.init();
         if (Modals.PreviousResponses && Modals.PreviousResponses.init) Modals.PreviousResponses.init();
         if (Modals.SaveResponseTitle && Modals.SaveResponseTitle.init) Modals.SaveResponseTitle.init();
@@ -3124,5 +3125,179 @@ Modals.AppConfig = (() => {
         delete: deleteKey,
         seed,
     };
+})();
+
+
+// --- Custom Voices (Settings Tab) ---
+Modals.CustomVoices = (() => {
+    const getEl = id => document.getElementById(id);
+    let editingId = null;
+
+    async function loadCustomVoices() {
+        const loadingEl = getEl('custom-voices-loading');
+        const tbody = getEl('custom-voices-tbody');
+        const emptyMsg = getEl('custom-voices-empty-msg');
+        if (loadingEl) loadingEl.style.display = 'block';
+        if (tbody) tbody.innerHTML = '';
+        try {
+            const res = await fetch('/api/voices/custom');
+            if (!res.ok) throw new Error(res.statusText);
+            const rows = await res.json();
+            if (tbody) {
+                rows.forEach(row => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td style="padding: 8px;">${_esc(row.name)}</td>
+                        <td style="padding: 8px; color: #666;">${_esc(row.description || '')}</td>
+                        <td style="padding: 8px; text-align: center;">${row.creativity.toFixed(1)}</td>
+                        <td style="padding: 8px; text-align: center;">
+                            <button class="modal-btn modal-btn-secondary" style="padding: 4px 10px; font-size: 0.85em;" onclick="Modals.CustomVoices.openEdit(${row.id})">Edit</button>
+                            <button class="modal-btn" style="padding: 4px 10px; font-size: 0.85em; background: #e74c3c; color: #fff; border: none; border-radius: 4px; cursor: pointer;" onclick="Modals.CustomVoices.deleteVoice(${row.id})">Delete</button>
+                        </td>`;
+                    tbody.appendChild(tr);
+                });
+            }
+            if (emptyMsg) emptyMsg.style.display = rows.length === 0 ? 'block' : 'none';
+        } catch (err) {
+            if (tbody) tbody.innerHTML = `<tr><td colspan="4" style="padding:1em;color:#c0392b;">Failed to load: ${_esc(err.message)}</td></tr>`;
+        } finally {
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+    }
+
+    function _esc(str) {
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function openCreate() {
+        editingId = null;
+        const title = getEl('custom-voice-edit-modal-title');
+        if (title) title.textContent = 'New Custom Voice';
+        _clearForm();
+        const modal = getEl('custom-voice-edit-modal');
+        if (modal) modal.style.display = 'flex';
+    }
+
+    async function openEdit(id) {
+        editingId = id;
+        const modal = getEl('custom-voice-edit-modal');
+        const errEl = getEl('custom-voice-edit-error');
+        try {
+            const res = await fetch(`/api/voices/custom`);
+            if (!res.ok) throw new Error(res.statusText);
+            const rows = await res.json();
+            const row = rows.find(r => r.id === id);
+            if (!row) throw new Error('Voice not found');
+            getEl('custom-voice-edit-modal-title').textContent = 'Edit Custom Voice';
+            getEl('custom-voice-edit-id').value = id;
+            getEl('custom-voice-edit-name').value = row.name;
+            getEl('custom-voice-edit-description').value = row.description || '';
+            getEl('custom-voice-edit-instructions').value = row.instructions;
+            const creativityInput = getEl('custom-voice-edit-creativity');
+            if (creativityInput) { creativityInput.value = row.creativity; }
+            const display = getEl('custom-voice-edit-creativity-display');
+            if (display) display.textContent = row.creativity.toFixed(1);
+            if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+            if (modal) modal.style.display = 'flex';
+        } catch (err) {
+            alert('Failed to load voice: ' + err.message);
+        }
+    }
+
+    function closeModal() {
+        const modal = getEl('custom-voice-edit-modal');
+        if (modal) modal.style.display = 'none';
+        editingId = null;
+    }
+
+    function _clearForm() {
+        const fields = ['custom-voice-edit-id','custom-voice-edit-name','custom-voice-edit-description','custom-voice-edit-instructions'];
+        fields.forEach(f => { const el = getEl(f); if (el) el.value = ''; });
+        const c = getEl('custom-voice-edit-creativity');
+        if (c) c.value = 0.5;
+        const d = getEl('custom-voice-edit-creativity-display');
+        if (d) d.textContent = '0.5';
+        const errEl = getEl('custom-voice-edit-error');
+        if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    }
+
+    async function saveVoice() {
+        const errEl = getEl('custom-voice-edit-error');
+        const name = (getEl('custom-voice-edit-name')?.value || '').trim();
+        const description = (getEl('custom-voice-edit-description')?.value || '').trim();
+        const instructions = (getEl('custom-voice-edit-instructions')?.value || '').trim();
+        const creativity = parseFloat(getEl('custom-voice-edit-creativity')?.value || '0.5');
+        if (!name) {
+            if (errEl) { errEl.textContent = 'Name is required'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (!instructions) {
+            if (errEl) { errEl.textContent = 'Instructions are required'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (errEl) errEl.style.display = 'none';
+        try {
+            let res;
+            if (editingId !== null) {
+                res = await fetch(`/api/voices/${editingId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, description, instructions, creativity })
+                });
+            } else {
+                res = await fetch('/api/voices', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, description, instructions, creativity })
+                });
+            }
+            if (!res.ok) {
+                const d = await res.json().catch(() => ({}));
+                const msg = typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail || res.statusText);
+                throw new Error(msg);
+            }
+            closeModal();
+            loadCustomVoices();
+            // Refresh the voice dropdowns to include the new/updated voice
+            if (typeof VoiceSelector !== 'undefined' && VoiceSelector.loadVoices) {
+                VoiceSelector.loadVoices();
+            }
+        } catch (err) {
+            if (errEl) { errEl.textContent = err.message; errEl.style.display = 'block'; }
+        }
+    }
+
+    async function deleteVoice(id) {
+        if (!confirm('Delete this custom voice? This cannot be undone.')) return;
+        try {
+            const res = await fetch(`/api/voices/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(res.statusText);
+            loadCustomVoices();
+            if (typeof VoiceSelector !== 'undefined' && VoiceSelector.loadVoices) {
+                VoiceSelector.loadVoices();
+            }
+        } catch (err) {
+            alert('Failed to delete: ' + err.message);
+        }
+    }
+
+    function init() {
+        const createBtn = getEl('custom-voices-create-btn');
+        const refreshBtn = getEl('custom-voices-refresh-btn');
+        const closeBtn = getEl('close-custom-voice-edit-modal');
+        const cancelBtn = getEl('custom-voice-edit-cancel-btn');
+        const saveBtn = getEl('custom-voice-edit-save-btn');
+
+        if (createBtn) createBtn.addEventListener('click', openCreate);
+        if (refreshBtn) refreshBtn.addEventListener('click', () => loadCustomVoices());
+        if (closeBtn) closeBtn.addEventListener('click', closeModal);
+        if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+        if (saveBtn) saveBtn.addEventListener('click', saveVoice);
+
+        const modal = getEl('custom-voice-edit-modal');
+        if (modal) modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+    }
+
+    return { init, load: loadCustomVoices, openEdit, deleteVoice };
 })();
 

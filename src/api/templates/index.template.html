@@ -52,21 +52,9 @@
                     <div class="modal-body voice-settings-modal-body">
                         <div class="voice-settings-controls">
                             <label for="voice-select" class="top-bar-label">Answer in the Voice Of:</label>
+                            <!-- Options populated dynamically from /api/voices by VoiceSelector.loadVoices() -->
                             <select id="voice-select" name="voice">
-                                <option value="owner">{{ owners }} own voice</option>
-                                <option value="expert" selected>A dispassionate expert</option>
-                                <option value="male_friend">{{ owners }} best male friend</option>
-                                <option value="female_friend">{{ owners }} best female friend</option>
-                                <option value="psychologist">A psychologist</option>
-                                <option value="after_death">A friend speaking after {{ owners }} death</option>
-                                <option value="irish">A Irish limmerick poet</option>
-                                <option value="secret_admirer">A admirer who remained anonymous to {{ owner }}</option>
-                                <option value="haiku">A Japanese haiku master</option>
-                                <option value="insult">An insult commedian</option>
-                                <option value="earthchild">A hippy earthchild</option>
-                                <option value="bar_girl">A Thai bar girl that knows {{ owners }} complete story</option>
-                                <option value="parents">{{owner}}'s mother and father</option>
-                                <option value="preacher">A fire and brimstone preacher who disapproves of all aspects of {{owner}}'s lif</option>
+                                <option value="expert" selected>Expert</option>
                             </select>
                             <div id="mood-selector" style="display: none; margin-top: 6px;">
                                 <select id="owner-mood" name="owner-mood">
@@ -273,6 +261,9 @@
                         </button>
                         <button class="config-tab-button" data-tab="system-instructions">
                             <i class="fas fa-file-alt"></i> System Instructions
+                        </button>
+                        <button class="config-tab-button" data-tab="custom-voices">
+                            <i class="fas fa-microphone-alt"></i> Custom Voices
                         </button>
                         <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;color:cadetblue">Personal Data</label>
                         <button class="config-tab-button" data-tab="reference-documents">
@@ -539,6 +530,79 @@
                         </div>
                     </section>
                 </div>
+                <!-- Custom Voices Tab -->
+                <div class="config-tab-content" id="custom-voices-tab">
+                    <section class="config-section">
+                        <h1>Custom Voices</h1>
+                        <div class="setting-group">
+                            <p style="color: #666; margin-bottom: 10px;">
+                                Define additional LLM personas in addition to the built-in voices. Custom voices appear in the voice selector marked with *.
+                            </p>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
+                                <button type="button" id="custom-voices-refresh-btn" class="modal-btn modal-btn-secondary">
+                                    <i class="fas fa-sync-alt"></i> Refresh
+                                </button>
+                                <button type="button" id="custom-voices-create-btn" class="modal-btn modal-btn-primary">
+                                    <i class="fas fa-plus"></i> New Voice
+                                </button>
+                            </div>
+                            <div id="custom-voices-loading" style="padding: 1em; text-align: center; color: #666; display: none;">
+                                <i class="fas fa-spinner fa-spin"></i> Loading...
+                            </div>
+                            <div id="custom-voices-table-container" style="overflow-x: auto; max-height: 45vh; overflow-y: auto;">
+                                <table class="contacts-table" id="custom-voices-table" style="width: 100%; margin-top: 0;">
+                                    <thead>
+                                        <tr style="background: #f0f4f8; border-bottom: 2px solid #bfc9da;">
+                                            <th style="padding: 8px; text-align: left;">Name</th>
+                                            <th style="padding: 8px; text-align: left;">Description</th>
+                                            <th style="padding: 8px; text-align: center; width: 60px;">Creativity</th>
+                                            <th style="padding: 8px; text-align: center; width: 160px;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="custom-voices-tbody"></tbody>
+                                </table>
+                            </div>
+                            <p id="custom-voices-empty-msg" style="display: none; padding: 1em; color: #666; text-align: center;">No custom voices. Click "New Voice" to create one.</p>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Custom Voice Edit Modal -->
+                <div id="custom-voice-edit-modal" class="modal" style="display: none; position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,0.5); align-items: center; justify-content: center;">
+                    <div class="modal-content" style="background: #fff; border-radius: 10px; padding: 2em; width: 540px; max-width: 95vw; max-height: 90vh; overflow-y: auto; position: relative;">
+                        <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.2em;">
+                            <h2 id="custom-voice-edit-modal-title" style="margin: 0; font-size: 1.2em;">New Custom Voice</h2>
+                            <button id="close-custom-voice-edit-modal" class="modal-close-btn" style="font-size: 1.4em; background: none; border: none; cursor: pointer;">&times;</button>
+                        </div>
+                        <input type="hidden" id="custom-voice-edit-id" value="">
+                        <div style="margin-bottom: 1em;">
+                            <label style="display: block; font-weight: bold; margin-bottom: 0.3em;">Name</label>
+                            <input type="text" id="custom-voice-edit-name" placeholder="e.g. Grumpy Professor" style="width: 100%; border: 1px solid #bfc9da; border-radius: 6px; padding: 0.6em; font-size: 1em; box-sizing: border-box;">
+                        </div>
+                        <div style="margin-bottom: 1em;">
+                            <label style="display: block; font-weight: bold; margin-bottom: 0.3em;">Description <span style="font-weight: normal; color: #888;">(optional)</span></label>
+                            <input type="text" id="custom-voice-edit-description" placeholder="Short description shown in the dropdown" style="width: 100%; border: 1px solid #bfc9da; border-radius: 6px; padding: 0.6em; font-size: 1em; box-sizing: border-box;">
+                        </div>
+                        <div style="margin-bottom: 1em;">
+                            <label style="display: block; font-weight: bold; margin-bottom: 0.3em;">Instructions</label>
+                            <textarea id="custom-voice-edit-instructions" rows="6" placeholder="Describe the persona in detail. e.g. Your name is Professor X and you are a grumpy academic who speaks in Latin phrases." style="width: 100%; border: 1px solid #bfc9da; border-radius: 6px; padding: 0.6em; font-size: 1em; font-family: monospace; resize: vertical; box-sizing: border-box;"></textarea>
+                            <small style="color: #666;">You can use {SUBJECT_NAME} as a placeholder for the subject name.</small>
+                        </div>
+                        <div style="margin-bottom: 1.5em;">
+                            <label style="display: block; font-weight: bold; margin-bottom: 0.3em;">Creativity: <span id="custom-voice-edit-creativity-display">0.5</span></label>
+                            <input type="range" id="custom-voice-edit-creativity" min="0" max="2" step="0.1" value="0.5" style="width: 100%;" oninput="document.getElementById('custom-voice-edit-creativity-display').textContent = this.value">
+                            <div style="display: flex; justify-content: space-between; font-size: 0.8em; color: #888;">
+                                <span>0 (factual)</span><span>1</span><span>2 (creative)</span>
+                            </div>
+                        </div>
+                        <div id="custom-voice-edit-error" style="display: none; padding: 0.6em; background: #fdecea; border-radius: 6px; color: #c0392b; margin-bottom: 1em;"></div>
+                        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                            <button type="button" id="custom-voice-edit-cancel-btn" class="modal-btn modal-btn-secondary">Cancel</button>
+                            <button type="button" id="custom-voice-edit-save-btn" class="modal-btn modal-btn-primary">Save</button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="config-tab-content" id="system-instructions-tab">
                     <section class="config-section">
                         <div class="subject-config-tabs" style="display: flex; border-bottom: 2px solid #bfc9da; margin-bottom: 0.5em;">
@@ -1826,21 +1890,9 @@
                 </div>
                 <div style="margin-bottom: 1.5rem;">
                     <label for="new-conversation-voice-select" style="display: block; color: #333; font-weight: bold; margin-bottom: 0.5em;">Voice:</label>
+                    <!-- Options populated dynamically from /api/voices by VoiceSelector.loadVoices() -->
                     <select id="new-conversation-voice-select" style="width: 100%; border-radius: 6px; border: 1px solid #bfc9da; padding: 0.7em; font-size: 1em;">
-                        <option value="owner">{{owner}}'s own voice</option>
-                        <option value="expert" selected>A dispassionate expert</option>
-                        <option value="male_friend">{{owner}}'s best male friend</option>
-                        <option value="female_friend">{{owner}}'s best female friend</option>
-                        <option value="psychologist">A psychologist</option>
-                        <option value="after_death">A friend speaking after {{owner}}'s death</option>
-                        <option value="irish">A Irish limmerick poet</option>
-                        <option value="secret_admirer">A admirer who remained anonymous to {{owner}}</option>
-                        <option value="haiku">A Japanese haiku master</option>
-                        <option value="insult">An insult commedian</option>
-                        <option value="earthchild">A hippy earthchild</option>
-                        <option value="bar_girl">A Thai bar girl that {{owner}} told his story to</option>
-                        <option value="parents">His mother and father</option>
-                        <option value="preacher">A fire and brimstone preacher who disapproves of all aspects of {{owner}}'s life</option>
+                        <option value="expert" selected>Expert</option>
                     </select>
                 </div>
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">

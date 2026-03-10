@@ -26,7 +26,7 @@ const Chat = (() => {
 
             const voiceImageSmall = document.createElement('img');
             voiceImageSmall.className = 'message-voice-image';
-            voiceImageSmall.src = `/static/images/${CONSTANTS.VOICE_IMAGES[selectedVoice + '_sm']}`;
+            voiceImageSmall.src = `/static/images/${VoiceSelector.getVoiceImage(selectedVoice, true)}`;
             voiceImageSmall.alt = `${selectedVoice} character`;
             brandingContainer.appendChild(voiceImageSmall);
 
@@ -734,14 +734,29 @@ const ApiService = (() => {
         return response.json();
     }
 
+    async function fetchVoices() {
+        const response = await _fetch('/api/voices');
+        return response.json();
+    }
+
     return {
         fetchChat, fetchNewChat, fetchVoice, fetchSuggestionsConfig,
-        fetchFacebookChatters, fetchContacts, fetchMessagesByContact, fetchAlbums, fetchMessagesByContactV2
+        fetchFacebookChatters, fetchContacts, fetchMessagesByContact, fetchAlbums, fetchMessagesByContactV2,
+        fetchVoices
     };
 })();
 
 // --- Voice Selector Module ---
 const VoiceSelector = (() => {
+    // Module-level voice map populated from /api/voices
+    let voiceMap = {};
+
+    function _getVoiceImage(voiceName, small = false) {
+        const suffix = small ? '_sm' : '';
+        return CONSTANTS.VOICE_IMAGES[voiceName + suffix]
+            || (small ? 'custom_sm.png' : 'custom.png');
+    }
+
     function getSelectedVoice() {
         const voiceSelect = document.getElementById('voice-select');
         return voiceSelect ? voiceSelect.value : 'expert'; // Default to expert
@@ -750,7 +765,7 @@ const VoiceSelector = (() => {
     function updateLoadingIndicatorImage() {
         const selectedVoice = getSelectedVoice();
         if (DOM.loadingVoiceImage) {
-            DOM.loadingVoiceImage.src = `/static/images/${CONSTANTS.VOICE_IMAGES[selectedVoice + '_sm']}`;
+            DOM.loadingVoiceImage.src = `/static/images/${_getVoiceImage(selectedVoice, true)}`;
             DOM.loadingVoiceImage.alt = `${selectedVoice} character`;
         }
     }
@@ -759,38 +774,33 @@ const VoiceSelector = (() => {
         // Re-query DOM elements to ensure we have fresh references
         const voicePreviewImg = document.querySelector('.preview-image');
         const voicePreviewDesc = document.querySelector('.preview-description');
-        
-        if (voicePreviewImg) {
-            const imageName = CONSTANTS.VOICE_IMAGES[voiceName];
- 
-            if (imageName) {
-                const imagePath = `/static/images/${imageName}`;
-                voicePreviewImg.src = imagePath;
-                voicePreviewImg.alt = `${voiceName} character`;
-                
 
-                voicePreviewImg.onerror = () => {
-                    console.error('Failed to load voice preview image:', imagePath);
-                };
-            } else {
-                console.warn(`Voice image not found for: ${voiceName}`);
-            }
+        if (voicePreviewImg) {
+            const imageName = _getVoiceImage(voiceName);
+            const imagePath = `/static/images/${imageName}`;
+            voicePreviewImg.src = imagePath;
+            voicePreviewImg.alt = `${voiceName} character`;
+            voicePreviewImg.onerror = () => {
+                voicePreviewImg.src = `/static/images/custom.png`;
+            };
         } else {
             console.error('voicePreviewImg element not found!');
         }
-        
+
         if (voicePreviewDesc) {
             let description = CONSTANTS.VOICE_DESCRIPTIONS[voiceName] || '';
-            
+
+            // Fall back to voiceMap description for custom voices
+            if (!description && voiceMap[voiceName]) {
+                description = voiceMap[voiceName].description || '';
+            }
+
             // Try to get description from voice icon wrapper's data-description attribute first
             const voiceWrapper = document.querySelector(`.voice-icon-wrapper[data-voice="${voiceName}"]`);
             if (voiceWrapper && voiceWrapper.dataset.description) {
                 description = voiceWrapper.dataset.description;
             }
-            
-            // Replace subject name placeholders if subject name is available
 
-            
             voicePreviewDesc.textContent = description;
         } else {
             console.error('voicePreviewDesc element not found!');
@@ -799,8 +809,41 @@ const VoiceSelector = (() => {
 
     function updateSelectedVoiceImage(voiceName) {
         if (DOM.selectedVoiceImage) {
-            DOM.selectedVoiceImage.src = `/static/images/${CONSTANTS.VOICE_IMAGES[voiceName]}`;
+            DOM.selectedVoiceImage.src = `/static/images/${_getVoiceImage(voiceName)}`;
             DOM.selectedVoiceImage.alt = `${voiceName} character`;
+        }
+    }
+
+    async function loadVoices() {
+        try {
+            const voices = await ApiService.fetchVoices();
+            voiceMap = {};
+            voices.forEach(v => { voiceMap[v.key] = v; });
+
+            const selects = [
+                document.getElementById('voice-select'),
+                document.getElementById('new-conversation-voice-select'),
+            ];
+            selects.forEach(sel => {
+                if (!sel) return;
+                const currentVal = sel.value || 'expert';
+                sel.innerHTML = '';
+                voices.forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v.key;
+                    const label = v.description ? `${v.name} - ${v.description}` : v.name;
+                    opt.textContent = label + (v.is_custom ? ' *' : '');
+                    if (v.key === currentVal) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+                // Default to expert if previous value no longer exists
+                if (!sel.value) {
+                    const expertOpt = sel.querySelector('option[value="expert"]');
+                    if (expertOpt) expertOpt.selected = true;
+                }
+            });
+        } catch (e) {
+            console.error('[VoiceSelector] Failed to load voices from API:', e);
         }
     }
 
@@ -818,6 +861,11 @@ const VoiceSelector = (() => {
             if (DOM.creativityLevel) {
                 DOM.creativityLevel.value = 0;
                 DOM.creativityLevel.disabled = true;
+            }
+        } else if (voiceMap[newVoice] && voiceMap[newVoice].creativity !== undefined) {
+            if (DOM.creativityLevel) {
+                DOM.creativityLevel.value = voiceMap[newVoice].creativity;
+                DOM.creativityLevel.disabled = false;
             }
         } else if (['irish', 'earthchild', 'haiku', 'insult', 'secret_admirer'].includes(newVoice)) {
             if (DOM.creativityLevel) {
@@ -846,7 +894,10 @@ const VoiceSelector = (() => {
         // UI.clearError();
         UI.hideLoadingIndicator();
         if (DOM.userInput) DOM.userInput.value = '';
-        Chat.addMessage('assistant', "Voice changed to " + CONSTANTS.VOICE_DESCRIPTIONS[newVoice], true, null, null);
+        const voiceDesc = CONSTANTS.VOICE_DESCRIPTIONS[newVoice]
+            || (voiceMap[newVoice] && voiceMap[newVoice].description)
+            || newVoice;
+        Chat.addMessage('assistant', "Voice changed to " + voiceDesc, true, null, null);
     }
 
     function highlightSelectedVoiceIcon() {
@@ -902,7 +953,8 @@ const VoiceSelector = (() => {
     }
 
     function init() {
-        setInitialState();
+        // Load voices from API first, then set initial state
+        loadVoices().then(() => setInitialState());
         // Add event listener for the voice select dropdown
         if (DOM.voiceSelect) {
             DOM.voiceSelect.addEventListener('change', (e) => {
@@ -927,6 +979,6 @@ const VoiceSelector = (() => {
             });
         });
     }
-    return { init, getSelectedVoice, setVoice, updateLoadingIndicatorImage, updateVoicePreview, updateSelectedVoiceImage };
+    return { init, getSelectedVoice, setVoice, updateLoadingIndicatorImage, updateVoicePreview, updateSelectedVoiceImage, loadVoices, getVoiceImage: _getVoiceImage };
 })();
 

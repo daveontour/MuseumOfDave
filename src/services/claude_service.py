@@ -308,15 +308,8 @@ class ClaudeChatService(BaseChatService):
             db = self.db
         self._current_db = db
 
-        # --- Voice / mood setup ---
-        self.voice = voice
-        if not self.voice_instructions_list:
-            self.voice_instructions_list = self._load_voice_instructions()
-        try:
-            self.voice_instructions = self.voice_instructions_list[voice]
-        except KeyError:
-            self.voice = "expert"
-            self.voice_instructions = self.voice_instructions_list[self.voice]
+        # --- Voice / mood setup (uses BaseChatService.set_voice which merges DB custom voices) ---
+        self.set_voice(voice)
 
         self.mood = "neutral"
         self.set_psychological_profile(None)

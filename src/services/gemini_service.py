@@ -732,17 +732,8 @@ class ChatService(BaseChatService):
         if db is None:
             db = self.db
 
-        #set the voice and voice instructions
-        self.voice = voice
-        if not self.voice_instructions_list:
-            # Reload voice instructions if not loaded yet
-            self.voice_instructions_list = self._load_voice_instructions()
-        try:
-            self.voice_instructions = self.voice_instructions_list[voice]
-        except KeyError:
-            print(f"[GeminiChatService.set_voice] Voice '{voice}' not found. Using default voice 'expert'.")
-            self.voice = "expert"
-            self.voice_instructions = self.voice_instructions_list[self.voice]
+        #set the voice and voice instructions (uses BaseChatService.set_voice which merges DB custom voices)
+        self.set_voice(voice)
 
         self.mood = "neutral"
         self.set_psychological_profile(None)

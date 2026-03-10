@@ -84,7 +84,10 @@ class BaseChatService:
         """Sets the voice for the session."""
         self.voice = voice
         if not self.voice_instructions_list:
-            self.voice_instructions_list = self._load_voice_instructions()
+            self.voice_instructions_list = self._load_voice_instructions(db=self.db)
+        if voice not in self.voice_instructions_list:
+            # Reload including DB custom voices in case one was added since startup
+            self.voice_instructions_list = self._load_voice_instructions(db=self.db)
         try:
             self.voice_instructions = self.voice_instructions_list[voice]
         except KeyError:
@@ -147,21 +150,48 @@ class BaseChatService:
             import traceback; traceback.print_exc()
             return False
 
-    def _load_voice_instructions(self):
-        """Loads voice instructions from the JSON file and replaces placeholders."""
+    def _load_voice_instructions(self, db=None):
+        """Loads voice instructions from the JSON file and replaces placeholders.
+
+        Also merges any custom voices stored in the database when *db* is provided.
+        """
         try:
             with open('src/api/static/data/voice_instructions.json', 'r', encoding='utf-8') as file:
                 voice_data = json.load(file)
-                if self.subject_name:
-                    for voice_key, voice_info in voice_data.items():
-                        if isinstance(voice_info, dict):
-                            for key, value in voice_info.items():
-                                if isinstance(value, str):
-                                    voice_info[key] = value.replace('{SUBJECT_NAME}', self.subject_name)
-                return voice_data
         except FileNotFoundError:
             print("[BaseChatService._load_voice_instructions] voice_instructions.json not found.")
-            return {"expert": {"name": "Expert", "description": "Professional Expert", "instructions": "You are a professional expert."}}
+            voice_data = {"expert": {"name": "Expert", "description": "Professional Expert", "instructions": "You are a professional expert."}}
+
+        # Merge custom voices from database (never overwrite built-in keys)
+        _db = db or self.db
+        if _db:
+            try:
+                from ..database.models import CustomVoice
+                session = _db.get_session()
+                try:
+                    rows = session.query(CustomVoice).all()
+                    for row in rows:
+                        if row.key not in voice_data:
+                            voice_data[row.key] = {
+                                "name": row.name,
+                                "description": row.description or "",
+                                "instructions": row.instructions,
+                                "creativity": row.creativity,
+                                "is_custom": True,
+                            }
+                finally:
+                    session.close()
+            except Exception as e:
+                print(f"[BaseChatService._load_voice_instructions] Could not load custom voices: {e}")
+
+        if self.subject_name:
+            for voice_key, voice_info in voice_data.items():
+                if isinstance(voice_info, dict):
+                    for key, value in voice_info.items():
+                        if isinstance(value, str):
+                            voice_info[key] = value.replace('{SUBJECT_NAME}', self.subject_name)
+
+        return voice_data
 
     def reload_system_prompt(self, db: Database = None):
         """Reload system prompt from database with file fallback."""
@@ -177,7 +207,7 @@ class BaseChatService:
                 self.subject_phone_numbers = self._subject_config_service.get_phone_numbers()
                 self.subject_whatsapp_handle = self._subject_config_service.get_whatsapp_handle()
                 self.subject_instagram_handle = self._subject_config_service.get_instagram_handle()
-                self.voice_instructions_list = self._load_voice_instructions()
+                self.voice_instructions_list = self._load_voice_instructions(db=db)
                 if self.voice_instructions_list and self.voice in self.voice_instructions_list:
                     self.voice_instructions = self.voice_instructions_list[self.voice]
                 system_instructions = self._subject_config_service.get_system_instructions()
