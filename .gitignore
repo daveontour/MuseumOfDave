@@ -61,6 +61,8 @@ history.json
 
 .claude/
 .git/
-
+.claude
 *.code-workspace
 *.json.bak
+.gitignore
+*.code-workspace
