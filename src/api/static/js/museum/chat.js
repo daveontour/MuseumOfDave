@@ -20,14 +20,24 @@ const Chat = (() => {
         if (role === 'assistant') {
             const selectedVoice = VoiceSelector.getSelectedVoice();
             messageElement.classList.add(`voice-${selectedVoice}`);
+
+            const brandingContainer = document.createElement('div');
+            brandingContainer.className = 'message-voice-branding';
+
             const voiceImageSmall = document.createElement('img');
             voiceImageSmall.className = 'message-voice-image';
-
-            let selector = selectedVoice + '_sm';
-            let imgSrc = `/static/images/${CONSTANTS.VOICE_IMAGES[selector]}`;
-            voiceImageSmall.src = imgSrc;
+            voiceImageSmall.src = `/static/images/${CONSTANTS.VOICE_IMAGES[selectedVoice + '_sm']}`;
             voiceImageSmall.alt = `${selectedVoice} character`;
-            messageElement.appendChild(voiceImageSmall);
+            brandingContainer.appendChild(voiceImageSmall);
+
+            if (selectedVoice === 'owner' && DOM.ownerMood) {
+                const moodSpan = document.createElement('span');
+                moodSpan.className = 'message-voice-mood';
+                moodSpan.textContent = DOM.ownerMood.options[DOM.ownerMood.selectedIndex]?.text || DOM.ownerMood.value || '';
+                brandingContainer.appendChild(moodSpan);
+            }
+
+            messageElement.appendChild(brandingContainer);
         }
     }
 
@@ -631,7 +641,15 @@ const Chat = (() => {
         UI.scrollToBottom();
     }
 
-    return { addMessage, clearChat, addConversation, renderExistingMessages, renderMarkdown, addEmail };
+    function updateMoodInMessages() {
+        if (!DOM.ownerMood) return;
+        const moodText = DOM.ownerMood.options[DOM.ownerMood.selectedIndex]?.text || DOM.ownerMood.value || '';
+        DOM.chatBox.querySelectorAll('.message.voice-owner .message-voice-mood').forEach(el => {
+            el.textContent = moodText;
+        });
+    }
+
+    return { addMessage, clearChat, addConversation, renderExistingMessages, renderMarkdown, addEmail, updateMoodInMessages };
 })();
 
 // --- API Service Module ---
@@ -786,6 +804,10 @@ const VoiceSelector = (() => {
         }
     }
 
+    function _closeVoiceSettingsModal() {
+        if (DOM.voiceSettingsModal) DOM.voiceSettingsModal.style.display = 'none';
+    }
+
     function _handleVoiceChange(event) {
         const newVoice = event.target.value;
         updateLoadingIndicatorImage();
@@ -815,7 +837,11 @@ const VoiceSelector = (() => {
         if (DOM.moodSelector) {
             DOM.moodSelector.style.display = newVoice === 'owner' ? 'block' : 'none';
         }
-        
+
+        if (newVoice !== 'owner') {
+            _closeVoiceSettingsModal();
+        }
+
         // Chat.clearChat();
         // UI.clearError();
         UI.hideLoadingIndicator();
@@ -882,6 +908,12 @@ const VoiceSelector = (() => {
             DOM.voiceSelect.addEventListener('change', (e) => {
                 _handleVoiceChange(e);
                 highlightSelectedVoiceIcon(); // Also update highlight on change
+            });
+        }
+        if (DOM.ownerMood) {
+            DOM.ownerMood.addEventListener('change', () => {
+                if (Chat.updateMoodInMessages) Chat.updateMoodInMessages();
+                _closeVoiceSettingsModal();
             });
         }
         DOM.voiceIconWrappers.forEach(wrapper => {

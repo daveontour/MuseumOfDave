@@ -655,3 +655,18 @@ class Interest(Base):
     name = Column(String(500), nullable=False)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class CustomVoice(Base):
+    """User-defined custom voice/persona for the chat LLM."""
+
+    __tablename__ = "custom_voices"
+
+    id = Column(Integer, primary_key=True)
+    key = Column(String(100), unique=True, nullable=False)   # auto-generated slug: custom_<name>
+    name = Column(String(200), nullable=False)
+    description = Column(String(500), nullable=True)
+    instructions = Column(Text, nullable=False)
+    creativity = Column(Float, nullable=False, default=0.5)  # 0.0–2.0
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

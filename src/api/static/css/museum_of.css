@@ -469,11 +469,12 @@ body {
 
 /* --- Message Content Styling --- */
 .message-content {
+    border-radius: 8px;
     overflow: hidden; /* Ensure content wraps around the floated image */
     font-size: var(--message-font-size);
     min-height: 60px; /* Default min-height for assistant messages */
     position: relative; /* For speak button */
-    padding-bottom: 5px; /* Make space for the speak button */
+    padding: 5px; /* Make space for the speak button */
 }
 
 /* Set specific min-height for non-assistant messages */
@@ -548,14 +549,29 @@ body {
 
 /* --- Message Add-ons --- */
 /* Small Voice Image in Message */
+.message-voice-branding {
+    float: left;
+    margin: 0 16px 12px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
 .message-voice-image {
     width: 60px;
     height: 60px;
     border-radius: 50%;
-    float: left;
-    margin: 0 16px 12px 0;
     object-fit: cover;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.message-voice-mood {
+    font-size: 0.7rem;
+    color: #666;
+    text-align: center;
+    max-width: 60px;
+    line-height: 1.2;
 }
 
 /* Copy Button (Hover) */
@@ -1468,35 +1484,17 @@ body {
     box-sizing: border-box;
 }
 
-/* Voice Settings Modal */
-.voice-settings-modal {
-    position: fixed;
-    inset: 0;
-    z-index: 1001;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    box-sizing: border-box;
+/* Voice Settings Modal - extends base .modal and .modal-content */
+.voice-settings-modal.modal {
+    z-index: 2000;
 }
 
-.voice-settings-modal-content {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    display: flex;
-    flex-direction: column;
+.voice-settings-modal .voice-settings-modal-content {
     max-width: 420px;
     width: 90%;
-    overflow: hidden;
 }
 
-.voice-settings-modal-content .modal-header {
-    border-radius: 12px 12px 0 0;
-}
-
-.voice-settings-modal-body {
-    padding: 20px;
+.voice-settings-modal .voice-settings-modal-body {
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -1509,18 +1507,22 @@ body {
 }
 
 .voice-settings-controls .top-bar-label {
-    color: #333;
-    font-size: 21px;
+    color: #2c3e50;
+    font-size: 0.95rem;
+    font-weight: 500;
 }
 
 .voice-settings-controls #voice-select,
 .voice-settings-controls #owner-mood {
-    font-size: 21px;
+    font-size: 0.95rem;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #ced4da;
 }
 
 .voice-settings-modal .work-mode-label {
-    color: #333;
-    font-size: 21px;
+    color: #2c3e50;
+    font-size: 0.95rem;
 }
 
 .voice-settings-slider {
@@ -1530,14 +1532,14 @@ body {
 }
 
 .voice-settings-slider label {
-    color: #333;
-    font-size: 21px;
+    color: #2c3e50;
+    font-size: 0.95rem;
 }
 
 .voice-settings-slider .value-display {
-    color: #333;
+    color: #495057;
     min-width: 28px;
-    font-size: 21px;
+    font-size: 0.9rem;
 }
 
 .voice-settings-slider input[type="range"] {

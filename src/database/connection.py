@@ -35,16 +35,17 @@ class Database:
 
     def create_tables(self):
         """Create all tables if they don't exist."""
+        #Not using pgvector for now
         # Try to create pgvector extension if available
-        try:
-            with self.engine.connect() as conn:
-                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-                conn.commit()
-        except Exception:
-            # pgvector extension not available, continue without it
-            pass
+        # try:
+        #     with self.engine.connect() as conn:
+        #         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        #         conn.commit()
+        # except Exception:
+        #     # pgvector extension not available, continue without it
+        #     pass
 
-        # Try to create pg_trgm extension for full-text search
+        # # Try to create pg_trgm extension for full-text search
         pg_trgm_available = False
         try:
             with self.engine.connect() as conn:

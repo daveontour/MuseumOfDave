@@ -43,13 +43,13 @@
             </div>
 
             <!-- Voice Settings Modal -->
-            <div id="voice-settings-modal" class="voice-settings-modal" style="display: none;">
-                <div class="voice-settings-modal-content" onclick="event.stopPropagation()">
+            <div id="voice-settings-modal" class="modal voice-settings-modal" style="display: none;">
+                <div class="modal-content voice-settings-modal-content" onclick="event.stopPropagation()">
                     <div class="modal-header">
                         <h2>Voice Settings</h2>
                         <button id="close-voice-settings" class="modal-close-btn">&times;</button>
                     </div>
-                    <div class="voice-settings-modal-body">
+                    <div class="modal-body voice-settings-modal-body">
                         <div class="voice-settings-controls">
                             <label for="voice-select" class="top-bar-label">Answer in the Voice Of:</label>
                             <select id="voice-select" name="voice">
@@ -264,7 +264,7 @@
                 </div>
                 <div class="config-modal-body">
                     <div class="config-tabs-sidebar">
-                        <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;">App & Subject Settings</label>
+                        <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;;color:cadetblue">App & Subject Settings</label>
                         <button class="config-tab-button active" data-tab="settings">
                             <i class="fas fa-cog"></i> Settings
                         </button>
@@ -274,7 +274,7 @@
                         <button class="config-tab-button" data-tab="system-instructions">
                             <i class="fas fa-file-alt"></i> System Instructions
                         </button>
-                        <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;">Subject Data</label>
+                        <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;color:cadetblue">Personal Data</label>
                         <button class="config-tab-button" data-tab="reference-documents">
                             <i class="fas fa-folder-open"></i> Reference Documents
                         </button>
@@ -285,12 +285,12 @@
                             <i class="fas fa-comments"></i> Facebook and Instagram
                         </button>
                         <button class="config-tab-button" data-tab="import-images-controls">
-                            <i class="fas fa-image"></i> Import Images
+                            <i class="fas fa-image"></i> Images and Thumbnails
                         </button>
                         <button class="config-tab-button" data-tab="interests">
                             <i class="fas fa-star"></i> Interests
                         </button>
-                        <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;">Manage Emails & Contacts</label>
+                        <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;;color:cadetblue">Manage Emails & Contacts</label>
                         <button class="config-tab-button" data-tab="images-grid">
                             <i class="fas fa-images"></i> Email Attachments
                         </button>
@@ -300,11 +300,11 @@
                         <button class="config-tab-button" data-tab="manage-contacts">
                             <i class="fas fa-address-book"></i> Manage Contacts
                         </button>
-                        <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;">Manage Secure Data Access</label>
+                        <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;;color:cadetblue">Manage Secure Data Access</label>
                         <button class="config-tab-button" data-tab="manage-keys">
                             <i class="fas fa-key"></i> Manage Keys
                         </button>
-                        <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;">API Reference</label>
+                        <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;;color:cadetblue">API Reference</label>
                         <button class="config-tab-button" data-tab="api-docs">
                             <i class="fas fa-book"></i> API Docs
                         </button>
