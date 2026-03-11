@@ -75,6 +75,30 @@ func New(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
 	artefactHandler := handler.NewArtefactHandler(artefactSvc)
 	artefactHandler.RegisterRoutes(r)
 
+	// ── Reference documents ───────────────────────────────────────────────────
+	documentRepo := repository.NewDocumentRepo(pool)
+	documentSvc := service.NewDocumentService(documentRepo)
+	documentHandler := handler.NewDocumentHandler(documentSvc)
+	documentHandler.RegisterRoutes(r)
+
+	// ── Voices ────────────────────────────────────────────────────────────────
+	voiceRepo := repository.NewVoiceRepo(pool)
+	voiceSvc := service.NewVoiceService(voiceRepo, subjectConfigRepo, cfg.App.PythonStaticDir)
+	voiceHandler := handler.NewVoiceHandler(voiceSvc)
+	voiceHandler.RegisterRoutes(r)
+
+	// ── Interests ─────────────────────────────────────────────────────────────
+	interestRepo := repository.NewInterestRepo(pool)
+	interestSvc := service.NewInterestService(interestRepo)
+	interestHandler := handler.NewInterestHandler(interestSvc)
+	interestHandler.RegisterRoutes(r)
+
+	// ── Saved responses ───────────────────────────────────────────────────────
+	savedResponseRepo := repository.NewSavedResponseRepo(pool)
+	savedResponseSvc := service.NewSavedResponseService(savedResponseRepo)
+	savedResponseHandler := handler.NewSavedResponseHandler(savedResponseSvc)
+	savedResponseHandler.RegisterRoutes(r)
+
 	// ── Chat & AI ────────────────────────────────────────────────────────────
 	geminiProvider := appai.NewGeminiProvider(cfg.AI.GeminiAPIKey, cfg.AI.GeminiModelName)
 	claudeProvider := appai.NewClaudeProvider(cfg.AI.AnthropicAPIKey, cfg.AI.ClaudeModelName)
