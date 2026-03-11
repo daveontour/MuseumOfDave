@@ -48,7 +48,9 @@ type ServerConfig struct {
 
 // AppConfig holds application-level settings.
 type AppConfig struct {
-	PageTitle string
+	PageTitle       string
+	TemplatesDir    string // path to Jinja2 HTML templates
+	PythonStaticDir string // path to Python static directory (JS/data files for templating)
 }
 
 // DefaultsConfig holds default values shown in the control panel UI.
@@ -100,6 +102,9 @@ type AttachmentConfig struct {
 	// AllowedTypes is nil when all types are allowed.
 	AllowedTypes []string
 	MinSize      int64
+	// RawAllowedTypes is the unmodified ATTACHMENT_ALLOWED_TYPES env value.
+	// It doubles as the crypto pepper for the sensitive-data layer.
+	RawAllowedTypes string
 }
 
 // FilesystemConfig holds filesystem import settings.
@@ -131,7 +136,9 @@ func Load() (*Config, error) {
 		DB:     db,
 		Server: ServerConfig{Port: serverPort},
 		App: AppConfig{
-			PageTitle: getenv("PAGE_TITLE", "Museum of Dave"),
+			PageTitle:       getenv("PAGE_TITLE", "Museum of Dave"),
+			TemplatesDir:    getenv("TEMPLATES_DIR", "../src/api/templates"),
+			PythonStaticDir: getenv("PYTHON_STATIC_DIR", "../src/api/static"),
 		},
 		Defaults:    loadDefaultsConfig(),
 		AI:          loadAIConfig(),
@@ -231,8 +238,9 @@ func loadAttachmentConfig() (AttachmentConfig, error) {
 	}
 
 	return AttachmentConfig{
-		AllowedTypes: allowedTypes,
-		MinSize:      minSize,
+		AllowedTypes:    allowedTypes,
+		MinSize:         minSize,
+		RawAllowedTypes: raw,
 	}, nil
 }
 

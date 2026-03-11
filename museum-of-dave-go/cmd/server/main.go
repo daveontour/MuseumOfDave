@@ -57,7 +57,7 @@ func run() error {
 	}
 
 	// ── HTTP server ────────────────────────────────────────────────────────────
-	handler := router.New(db.Pool)
+	handler := router.New(db.Pool, cfg)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),

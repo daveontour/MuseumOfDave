@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/museum-of-dave/app/internal/config"
 	"github.com/museum-of-dave/app/internal/handler"
 	"github.com/museum-of-dave/app/internal/middleware"
 	"github.com/museum-of-dave/app/internal/repository"
@@ -15,7 +16,7 @@ import (
 )
 
 // New returns the fully-wired application router.
-func New(pool *pgxpool.Pool) http.Handler {
+func New(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
 	r := chi.NewRouter()
 
 	// ── Global middleware ───────────────────────────────────────────────────────
@@ -36,6 +37,36 @@ func New(pool *pgxpool.Pool) http.Handler {
 	emailSvc := service.NewEmailService(emailRepo)
 	emailHandler := handler.NewEmailHandler(emailSvc)
 	emailHandler.RegisterRoutes(r)
+
+	// ── Images & media ─────────────────────────────────────────────────────────
+	imageRepo := repository.NewImageRepo(pool)
+	imageSvc := service.NewImageService(imageRepo)
+	imageHandler := handler.NewImageHandler(imageSvc)
+	imageHandler.RegisterRoutes(r)
+
+	// ── Messages ────────────────────────────────────────────────────────────────
+	messageRepo := repository.NewMessageRepo(pool)
+	messageSvc := service.NewMessageService(messageRepo)
+	messageHandler := handler.NewMessageHandler(messageSvc)
+	messageHandler.RegisterRoutes(r)
+
+	// ── Dashboard & subject configuration ────────────────────────────────────
+	dashboardRepo := repository.NewDashboardRepo(pool)
+	subjectConfigRepo := repository.NewSubjectConfigRepo(pool)
+	dashboardSvc := service.NewDashboardService(dashboardRepo, subjectConfigRepo)
+	subjectConfigSvc := service.NewSubjectConfigService(subjectConfigRepo)
+	dashboardHandler := handler.NewDashboardHandler(dashboardSvc, subjectConfigSvc)
+	dashboardHandler.RegisterRoutes(r)
+
+	// ── Templated endpoints (GET /, suggestions, JS files) ───────────────────
+	templateHandler := handler.NewTemplateHandler(subjectConfigRepo, cfg)
+	templateHandler.RegisterRoutes(r)
+
+	// ── Sensitive data ────────────────────────────────────────────────────────
+	sensitiveRepo := repository.NewSensitiveRepo(pool)
+	sensitiveSvc := service.NewSensitiveService(sensitiveRepo, pool, cfg.Attachments.RawAllowedTypes)
+	sensitiveHandler := handler.NewSensitiveHandler(sensitiveSvc, cfg.App.PythonStaticDir)
+	sensitiveHandler.RegisterRoutes(r)
 
 	return r
 }
