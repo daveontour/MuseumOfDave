@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -21,17 +22,21 @@ func NewImageHandler(svc *service.ImageService) *ImageHandler {
 	return &ImageHandler{svc: svc}
 }
 
-// RegisterRoutes mounts all image read routes onto r.
-// Write/delete routes are registered in Phase 4.
+// RegisterRoutes mounts all image routes onto r.
 func (h *ImageHandler) RegisterRoutes(r chi.Router) {
 	// Specific sub-paths must be registered before parameterised {image_id} routes.
 	r.Get("/images/search", h.Search)
 	r.Get("/images/years", h.GetYears)
 	r.Get("/images/tags", h.GetTags)
+	r.Put("/images/bulk-update", h.BulkUpdate)
+	r.Delete("/images/bulk-delete", h.BulkDelete)
+	r.Delete("/images", h.DeleteByRange)
 
 	r.Get("/images/{image_id}/metadata", h.GetMetadata)
 	r.Get("/images/{image_id}/thumbnail", h.GetThumbnail)
 	r.Get("/images/{image_id}", h.GetContent)
+	r.Put("/images/{image_id}", h.UpdateMetadata)
+	r.Delete("/images/{image_id}", h.Delete)
 
 	// Location map endpoint
 	r.Get("/getLocations", h.GetLocations)
@@ -302,6 +307,144 @@ func (h *ImageHandler) GetAlbumImageContent(w http.ResponseWriter, r *http.Reque
 	}
 
 	serveBinaryContent(w, content)
+}
+
+// ── Write / delete ────────────────────────────────────────────────────────────
+
+func (h *ImageHandler) BulkUpdate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ImageIDs []int64 `json:"image_ids"`
+		Tags     string  `json:"tags"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	updated, errs := h.svc.BulkUpdateTags(r.Context(), req.ImageIDs, req.Tags)
+	resp := map[string]any{
+		"message":       fmt.Sprintf("Updated %d image(s)", updated),
+		"updated_count": updated,
+	}
+	if len(errs) > 0 {
+		resp["errors"] = errs
+	}
+	writeJSON(w, resp)
+}
+
+func (h *ImageHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ImageIDs []int64 `json:"image_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	deleted, errs := h.svc.BulkDeleteImages(r.Context(), req.ImageIDs)
+	resp := map[string]any{
+		"message":       fmt.Sprintf("Deleted %d image(s)", deleted),
+		"deleted_count": deleted,
+	}
+	if len(errs) > 0 {
+		resp["errors"] = errs
+	}
+	writeJSON(w, resp)
+}
+
+func (h *ImageHandler) DeleteByRange(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	all := strings.ToLower(q.Get("all")) == "true" || q.Get("all") == "1"
+	var startID, endID *int64
+	if s := q.Get("start_id"); s != "" {
+		id, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "start_id must be an integer")
+			return
+		}
+		startID = &id
+	}
+	if s := q.Get("end_id"); s != "" {
+		id, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "end_id must be an integer")
+			return
+		}
+		endID = &id
+	}
+	deleted, err := h.svc.DeleteByIDRange(r.Context(), all, startID, endID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if deleted == 0 && all {
+		writeError(w, http.StatusNotFound, "No images found to delete")
+		return
+	}
+	writeJSON(w, map[string]any{
+		"message":       fmt.Sprintf("Successfully deleted %d image(s)", deleted),
+		"deleted_count": deleted,
+	})
+}
+
+func (h *ImageHandler) UpdateMetadata(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseImageID(w, r, "image_id")
+	if !ok {
+		return
+	}
+	var req map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	var description, tags *string
+	var rating *int
+	if v, ok := req["description"].(string); ok {
+		description = &v
+	}
+	if v, ok := req["tags"].(string); ok {
+		tags = &v
+	}
+	if v, ok := req["rating"].(float64); ok {
+		rt := int(v)
+		rating = &rt
+	}
+	ok2, err := h.svc.UpdateMetadata(r.Context(), id, description, tags, rating)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !ok2 {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("Image with ID %d not found", id))
+		return
+	}
+	writeJSON(w, map[string]any{
+		"message":        fmt.Sprintf("Image %d updated successfully", id),
+		"image_id":       id,
+		"updated_fields": map[string]bool{
+			"description": description != nil,
+			"tags":        tags != nil,
+			"rating":      rating != nil,
+		},
+	})
+}
+
+func (h *ImageHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseImageID(w, r, "image_id")
+	if !ok {
+		return
+	}
+	deleted, err := h.svc.DeleteByMetadataID(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !deleted {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("Image with metadata ID %d not found", id))
+		return
+	}
+	writeJSON(w, map[string]any{
+		"message":  fmt.Sprintf("Image %d deleted successfully", id),
+		"image_id": id,
+	})
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

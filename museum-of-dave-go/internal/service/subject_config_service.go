@@ -18,6 +18,40 @@ func NewSubjectConfigService(repo *repository.SubjectConfigRepo) *SubjectConfigS
 	return &SubjectConfigService{repo: repo}
 }
 
+// SubjectConfigUpdateParams mirrors the POST body fields.
+type SubjectConfigUpdateParams struct {
+	SubjectName            string
+	SystemInstructions     string
+	CoreSystemInstructions *string
+	Gender                 *string
+	FamilyName             *string
+	OtherNames             *string
+	EmailAddresses         *string
+	PhoneNumbers           *string
+	WhatsAppHandle         *string
+	InstagramHandle        *string
+}
+
+// CreateOrUpdate upserts the singleton subject configuration row.
+func (s *SubjectConfigService) CreateOrUpdate(ctx context.Context, p SubjectConfigUpdateParams) (*model.SubjectConfigResponse, error) {
+	cfg, err := s.repo.Upsert(ctx, repository.UpsertSubjectConfigParams{
+		SubjectName:            p.SubjectName,
+		SystemInstructions:     p.SystemInstructions,
+		CoreSystemInstructions: p.CoreSystemInstructions,
+		Gender:                 p.Gender,
+		FamilyName:             p.FamilyName,
+		OtherNames:             p.OtherNames,
+		EmailAddresses:         p.EmailAddresses,
+		PhoneNumbers:           p.PhoneNumbers,
+		WhatsAppHandle:         p.WhatsAppHandle,
+		InstagramHandle:        p.InstagramHandle,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return toSubjectConfigResponse(cfg), nil
+}
+
 // GetConfiguration returns the singleton subject configuration, or nil if none exists.
 func (s *SubjectConfigService) GetConfiguration(ctx context.Context) (*model.SubjectConfigResponse, error) {
 	cfg, err := s.repo.GetFirst(ctx)

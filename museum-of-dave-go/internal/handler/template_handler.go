@@ -62,7 +62,7 @@ func (h *TemplateHandler) GetRoot(w http.ResponseWriter, r *http.Request) {
 	// Choose template: non_user_init when subject_configuration exists but both
 	// subject_name and family_name are empty strings (matches Python logic).
 	templateName := "index.template.html"
-	if cfg != nil && cfg.SubjectName == "" && (cfg.FamilyName == nil || *cfg.FamilyName == "") {
+	if cfg == nil || (cfg != nil && cfg.SubjectName == "" && (cfg.FamilyName == nil || *cfg.FamilyName == "")) {
 		templateName = "non_user_init.template.html"
 	}
 
@@ -158,9 +158,9 @@ func (h *TemplateHandler) buildContext(r *http.Request) map[string]string {
 	cfg, _ := h.subjectRepo.GetFirst(r.Context())
 
 	var (
-		subjectName  = "<Error>"
-		gender       = "Male"
-		familyName   = ""
+		subjectName = "<Error>"
+		gender      = "Male"
+		familyName  = ""
 	)
 	if cfg != nil {
 		subjectName = cfg.SubjectName

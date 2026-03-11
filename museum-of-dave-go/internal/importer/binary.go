@@ -1,15 +1,37 @@
+// Package importer provides RunSubprocess for imports that still run as a separate
+// import-processor binary (thumbnails, contacts, facebook-albums, facebook-posts,
+// facebook-places, facebook-all). WhatsApp, iMessage, Facebook Messenger, Instagram,
+// and filesystem images run in-process instead.
 package importer
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
+	"time"
 )
+
+// splitOnCROrLF is a bufio.SplitFunc that yields a token on each \r or \n.
+// This allows progress lines that use \r for in-place updates to be forwarded to SSE clients.
+func splitOnCROrLF(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
+	if i := bytes.IndexAny(data, "\r\n"); i >= 0 {
+		return i + 1, data[:i], nil
+	}
+	if atEOF {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
+}
 
 // FindBinary locates the import-processor binary.
 // It checks IMPORT_PROCESSOR_PATH env var first, then looks for the binary
@@ -73,6 +95,24 @@ func RunSubprocess(job *ImportJob, args []string) (stdout string, returnCode int
 		return "", -1, fmt.Errorf("start: %w", err)
 	}
 
+	// Heartbeat: re-broadcast current state every second so clients receive
+	// updates even when subprocess stderr is buffered (e.g. pipe, not TTY).
+	heartbeatDone := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-heartbeatDone:
+				return
+			case <-ticker.C:
+				if job.InProgress() && !job.IsCancelled() {
+					job.Broadcast("progress", job.GetState())
+				}
+			}
+		}
+	}()
+
 	var wg sync.WaitGroup
 	var stdoutBuf []byte
 
@@ -83,25 +123,29 @@ func RunSubprocess(job *ImportJob, args []string) (stdout string, returnCode int
 		stdoutBuf, _ = io.ReadAll(stdoutPipe)
 	}()
 
-	// Read stderr line-by-line, broadcasting each line
+	// Read stderr line-by-line, broadcasting each line.
+	// Import-processor uses \r (carriage return) for in-place progress updates;
+	// we must split on both \r and \n so the client receives intermediate updates.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		scanner := bufio.NewScanner(stderrPipe)
+		scanner.Split(splitOnCROrLF)
 		for scanner.Scan() {
 			if job.IsCancelled() {
 				_ = cmd.Process.Kill()
 				return
 			}
-			line := scanner.Text()
+			line := strings.TrimSpace(scanner.Text())
 			if line != "" {
 				job.UpdateState(map[string]any{"status_line": line})
-				job.Broadcast("status", map[string]any{"status_line": line})
+				job.Broadcast("progress", job.GetState())
 			}
 		}
 	}()
 
 	wg.Wait()
+	close(heartbeatDone)
 	_ = cmd.Wait()
 	returnCode = cmd.ProcessState.ExitCode()
 	return string(stdoutBuf), returnCode, nil

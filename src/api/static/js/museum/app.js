@@ -1671,6 +1671,7 @@ const App = (() => {
             currentEventSource = new EventSource(cfg.stream);
             currentEventSource.onmessage = (event) => {
                 try {
+                    debugger;
                     const ed = JSON.parse(event.data);
                     const type = ed.type;
                     const data = ed.data || {};

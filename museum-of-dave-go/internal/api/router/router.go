@@ -124,7 +124,12 @@ func New(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
 	attachmentHandler.RegisterRoutes(r)
 
 	// ── Import jobs ───────────────────────────────────────────────────────────
-	importerHandler := handler.NewImporterHandler(cfg.Filesystem.ExcludePatterns)
+	importerHandler := handler.NewImporterHandler(handler.ImporterHandlerDeps{
+		ExcludePatterns:   cfg.Filesystem.ExcludePatterns,
+		ImageRepo:         imageRepo,
+		Pool:              pool,
+		SubjectConfigRepo: subjectConfigRepo,
+	})
 	importerHandler.RegisterRoutes(r)
 
 	// ── Chat & AI ────────────────────────────────────────────────────────────
@@ -138,6 +143,7 @@ func New(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
 	adminHandler.RegisterRoutes(r)
 	claudeProvider := appai.NewClaudeProvider(cfg.AI.AnthropicAPIKey, cfg.AI.ClaudeModelName)
 	chatRepo := repository.NewChatRepo(pool)
+	completeProfileRepo := repository.NewCompleteProfileRepo(pool)
 	chatSvc := service.NewChatService(
 		chatRepo,
 		subjectConfigRepo,
@@ -147,7 +153,7 @@ func New(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
 		cfg.App.PythonStaticDir,
 		cfg.AI.TavilyAPIKey,
 	)
-	chatHandler := handler.NewChatHandler(chatSvc)
+	chatHandler := handler.NewChatHandler(chatSvc, completeProfileRepo)
 	chatHandler.RegisterRoutes(r)
 
 	return r

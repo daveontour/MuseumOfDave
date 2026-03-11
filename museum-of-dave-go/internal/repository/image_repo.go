@@ -236,6 +236,225 @@ func (r *ImageRepo) GetLocations(ctx context.Context) ([]*model.MediaItem, error
 	return scanMediaItems(rows)
 }
 
+// ── Write / delete ────────────────────────────────────────────────────────────
+
+// UpdateTags updates the tags column for a media item (merge: append to existing).
+func (r *ImageRepo) UpdateTags(ctx context.Context, id int64, newTags string) (bool, error) {
+	var existing *string
+	err := r.pool.QueryRow(ctx, `SELECT tags FROM media_items WHERE id = $1`, id).Scan(&existing)
+	if err != nil {
+		if isNoRows(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("UpdateTags: %w", err)
+	}
+	merged := newTags
+	if existing != nil && strings.TrimSpace(*existing) != "" {
+		merged = strings.TrimSpace(*existing) + ", " + strings.TrimSpace(newTags)
+	}
+	res, err := r.pool.Exec(ctx, `UPDATE media_items SET tags = $2, updated_at = NOW() WHERE id = $1`, id, merged)
+	if err != nil {
+		return false, fmt.Errorf("UpdateTags: %w", err)
+	}
+	return res.RowsAffected() > 0, nil
+}
+
+// UpdateMetadata updates description, tags, and/or rating for a media item.
+func (r *ImageRepo) UpdateMetadata(ctx context.Context, id int64, description, tags *string, rating *int) (bool, error) {
+	item, err := r.GetMediaItemByID(ctx, id)
+	if err != nil || item == nil {
+		return false, nil
+	}
+	var setParts []string
+	var args []any
+	n := 1
+	args = append(args, id)
+	n++
+	if description != nil {
+		setParts = append(setParts, fmt.Sprintf("description = $%d", n))
+		args = append(args, *description)
+		n++
+	}
+	if tags != nil {
+		setParts = append(setParts, fmt.Sprintf("tags = $%d", n))
+		args = append(args, *tags)
+		n++
+	}
+	if rating != nil {
+		setParts = append(setParts, fmt.Sprintf("rating = $%d", n))
+		args = append(args, *rating)
+		n++
+	}
+	if len(setParts) == 0 {
+		return true, nil
+	}
+	setParts = append(setParts, "updated_at = NOW()")
+	sql := fmt.Sprintf(`UPDATE media_items SET %s WHERE id = $1`, strings.Join(setParts, ", "))
+	res, err := r.pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return false, fmt.Errorf("UpdateMetadata: %w", err)
+	}
+	return res.RowsAffected() > 0, nil
+}
+
+// DeleteByMetadataID deletes a media_items row and its media_blobs row.
+func (r *ImageRepo) DeleteByMetadataID(ctx context.Context, id int64) (bool, error) {
+	var blobID int64
+	err := r.pool.QueryRow(ctx, `SELECT media_blob_id FROM media_items WHERE id = $1`, id).Scan(&blobID)
+	if err != nil {
+		if isNoRows(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("DeleteByMetadataID: %w", err)
+	}
+	_, err = r.pool.Exec(ctx, `DELETE FROM media_items WHERE id = $1`, id)
+	if err != nil {
+		return false, fmt.Errorf("DeleteByMetadataID: %w", err)
+	}
+	_, _ = r.pool.Exec(ctx, `DELETE FROM media_blobs WHERE id = $1`, blobID)
+	return true, nil
+}
+
+// DeleteByIDRange deletes media_items (and associated blobs) matching the criteria.
+// If all is true, deletes all image media_items. If startID/endID are set, deletes in range.
+func (r *ImageRepo) DeleteByIDRange(ctx context.Context, all bool, startID, endID *int64) (int64, error) {
+	if all && (startID != nil || endID != nil) {
+		return 0, fmt.Errorf("cannot specify both all and ID range")
+	}
+	if !all && startID == nil && endID == nil {
+		return 0, fmt.Errorf("must specify either all=true or start_id/end_id")
+	}
+	if startID != nil && endID != nil && *startID > *endID {
+		return 0, fmt.Errorf("start_id must be <= end_id")
+	}
+
+	var cond string
+	var args []any
+	n := 1
+	if all {
+		cond = "media_type LIKE 'image/%'"
+	} else {
+		parts := []string{"media_type LIKE 'image/%'"}
+		if startID != nil {
+			parts = append(parts, fmt.Sprintf("id >= $%d", n))
+			args = append(args, *startID)
+			n++
+		}
+		if endID != nil {
+			parts = append(parts, fmt.Sprintf("id <= $%d", n))
+			args = append(args, *endID)
+		}
+		cond = strings.Join(parts, " AND ")
+	}
+	rows, err := r.pool.Query(ctx, `SELECT id, media_blob_id FROM media_items WHERE `+cond, args...)
+	if err != nil {
+		return 0, fmt.Errorf("DeleteByIDRange: %w", err)
+	}
+	defer rows.Close()
+	var ids, blobIDs []int64
+	for rows.Next() {
+		var id, blobID int64
+		if err := rows.Scan(&id, &blobID); err != nil {
+			return 0, err
+		}
+		ids = append(ids, id)
+		blobIDs = append(blobIDs, blobID)
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	_, err = r.pool.Exec(ctx, `DELETE FROM media_items WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return 0, fmt.Errorf("DeleteByIDRange: %w", err)
+	}
+	_, err = r.pool.Exec(ctx, `DELETE FROM media_blobs WHERE id = ANY($1)`, blobIDs)
+	if err != nil {
+		return 0, fmt.Errorf("DeleteByIDRange: %w", err)
+	}
+	return int64(len(ids)), nil
+}
+
+// ReferencedItem holds id, blob id, and source path for reference import.
+type ReferencedItem struct {
+	ID               int64
+	MediaBlobID      int64
+	SourceReference  string
+}
+
+// ListReferencedItems returns media_items where is_referenced=true and source_reference is not empty.
+func (r *ImageRepo) ListReferencedItems(ctx context.Context) ([]ReferencedItem, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, media_blob_id, COALESCE(source_reference,'') FROM media_items
+		 WHERE is_referenced = TRUE AND source_reference IS NOT NULL AND source_reference != ''`)
+	if err != nil {
+		return nil, fmt.Errorf("ListReferencedItems: %w", err)
+	}
+	defer rows.Close()
+	var items []ReferencedItem
+	for rows.Next() {
+		var it ReferencedItem
+		if err := rows.Scan(&it.ID, &it.MediaBlobID, &it.SourceReference); err != nil {
+			return nil, err
+		}
+		items = append(items, it)
+	}
+	return items, rows.Err()
+}
+
+// UpdateBlobImageDataAndClearReferenced updates media_blobs.image_data and sets media_items.is_referenced=false.
+func (r *ImageRepo) UpdateBlobImageDataAndClearReferenced(ctx context.Context, itemID, blobID int64, data []byte) error {
+	_, err := r.pool.Exec(ctx, `UPDATE media_blobs SET image_data = $2 WHERE id = $1`, blobID, data)
+	if err != nil {
+		return fmt.Errorf("UpdateBlobImageData: %w", err)
+	}
+	_, err = r.pool.Exec(ctx, `UPDATE media_items SET is_referenced = FALSE, updated_at = NOW() WHERE id = $1`, itemID)
+	if err != nil {
+		return fmt.Errorf("SetItemNotReferenced: %w", err)
+	}
+	return nil
+}
+
+// ExportItem holds fields needed for image export.
+type ExportItem struct {
+	ID          int64
+	MediaBlobID int64
+	Title       *string
+	MediaType   *string
+	SourceRef   *string
+}
+
+// ListMediaItemsForExport returns all media_items (id, blob_id, title, media_type, source_reference).
+func (r *ImageRepo) ListMediaItemsForExport(ctx context.Context) ([]ExportItem, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, media_blob_id, title, media_type, source_reference FROM media_items ORDER BY id`)
+	if err != nil {
+		return nil, fmt.Errorf("ListMediaItemsForExport: %w", err)
+	}
+	defer rows.Close()
+	var items []ExportItem
+	for rows.Next() {
+		var it ExportItem
+		if err := rows.Scan(&it.ID, &it.MediaBlobID, &it.Title, &it.MediaType, &it.SourceRef); err != nil {
+			return nil, err
+		}
+		items = append(items, it)
+	}
+	return items, rows.Err()
+}
+
+// GetBlobImageData returns image_data for a blob. Returns nil if not found or empty.
+func (r *ImageRepo) GetBlobImageData(ctx context.Context, blobID int64) ([]byte, error) {
+	var data []byte
+	err := r.pool.QueryRow(ctx, `SELECT image_data FROM media_blobs WHERE id = $1`, blobID).Scan(&data)
+	if err != nil {
+		if isNoRows(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return data, nil
+}
+
 // ── facebook_albums queries ───────────────────────────────────────────────────
 
 // GetFacebookAlbums returns all albums with their image count.

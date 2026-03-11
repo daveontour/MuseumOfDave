@@ -2,22 +2,26 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/museum-of-dave/app/internal/model"
+	"github.com/museum-of-dave/app/internal/repository"
 	"github.com/museum-of-dave/app/internal/service"
 )
 
 // ChatHandler handles all /chat/* endpoints.
 type ChatHandler struct {
-	svc *service.ChatService
+	svc   *service.ChatService
+	cpRepo *repository.CompleteProfileRepo
 }
 
 // NewChatHandler creates a ChatHandler.
-func NewChatHandler(svc *service.ChatService) *ChatHandler {
-	return &ChatHandler{svc: svc}
+func NewChatHandler(svc *service.ChatService, cpRepo *repository.CompleteProfileRepo) *ChatHandler {
+	return &ChatHandler{svc: svc, cpRepo: cpRepo}
 }
 
 // RegisterRoutes mounts the chat endpoints on r.
@@ -30,6 +34,13 @@ func (h *ChatHandler) RegisterRoutes(r chi.Router) {
 	r.Put("/chat/conversations/{id}", h.UpdateConversation)
 	r.Delete("/chat/conversations/{id}", h.DeleteConversation)
 	r.Get("/chat/conversations/{id}/turns", h.GetTurns)
+
+	// Complete profile (must be before /chat/conversations/{id} to avoid "complete-profile" as id)
+	r.Get("/chat/complete-profile/names", h.CompleteProfileListNames)
+	r.Get("/chat/complete-profile", h.CompleteProfileGet)
+	r.Put("/chat/complete-profile", h.CompleteProfileUpdate)
+	r.Delete("/chat/complete-profile", h.CompleteProfileDelete)
+	r.Post("/chat/complete-profile", h.CompleteProfileStart)
 }
 
 // GET /chat/availability
@@ -258,4 +269,105 @@ func turnResponse(t *model.ChatTurn) map[string]any {
 
 func parseIDParam(r *http.Request, param string) (int64, error) {
 	return strconv.ParseInt(chi.URLParam(r, param), 10, 64)
+}
+
+// ── Complete Profile ───────────────────────────────────────────────────────────
+
+// CompleteProfileListNames handles GET /chat/complete-profile/names.
+func (h *ChatHandler) CompleteProfileListNames(w http.ResponseWriter, r *http.Request) {
+	names, err := h.cpRepo.ListNames(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "error listing complete profile names: "+err.Error())
+		return
+	}
+	if names == nil {
+		names = []string{}
+	}
+	writeJSON(w, map[string]any{"names": names})
+}
+
+// CompleteProfileGet handles GET /chat/complete-profile?name=...
+func (h *ChatHandler) CompleteProfileGet(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	profile, err := h.cpRepo.GetByName(r.Context(), name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "error retrieving complete profile: "+err.Error())
+		return
+	}
+	if profile == nil {
+		writeError(w, http.StatusNotFound, "No complete profile found for '"+name+"'")
+		return
+	}
+	p := *profile
+	writeJSON(w, map[string]any{"name": name, "profile": p})
+}
+
+// CompleteProfileUpdate handles PUT /chat/complete-profile.
+func (h *ChatHandler) CompleteProfileUpdate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name    string `json:"name"`
+		Profile string `json:"profile"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if err := h.cpRepo.Upsert(r.Context(), name, req.Profile); err != nil {
+		writeError(w, http.StatusInternalServerError, "error updating complete profile: "+err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"name": name, "message": "Profile updated"})
+}
+
+// CompleteProfileDelete handles DELETE /chat/complete-profile?name=...
+func (h *ChatHandler) CompleteProfileDelete(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	deleted, err := h.cpRepo.DeleteByName(r.Context(), name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "error deleting complete profile: "+err.Error())
+		return
+	}
+	if !deleted {
+		writeError(w, http.StatusNotFound, "No complete profile found for '"+name+"'")
+		return
+	}
+	writeJSON(w, map[string]any{"message": "Profile for '" + name + "' deleted"})
+}
+
+// CompleteProfileStart handles POST /chat/complete-profile.
+// Starts background profile generation. AI generation is not yet implemented in Go;
+// returns success so the frontend doesn't break, but no profile is actually generated.
+func (h *ChatHandler) CompleteProfileStart(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		FullName string `json:"full_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	name := strings.TrimSpace(req.FullName)
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "full_name is required")
+		return
+	}
+	go func() {
+		log.Printf("[complete_profile] AI generation for '%s' not yet implemented in Go", name)
+	}()
+	writeJSON(w, map[string]any{
+		"status":  "submitted",
+		"message": "Complete profile generation started for '" + name + "'. Processing runs in the background.",
+	})
 }

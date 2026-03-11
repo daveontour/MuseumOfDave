@@ -75,6 +75,68 @@ func (s *ImageService) GetDistinctTags(ctx context.Context) ([]string, error) {
 	return tags, nil
 }
 
+// BulkUpdateTags appends tags to multiple images. Returns updated count and any errors.
+func (s *ImageService) BulkUpdateTags(ctx context.Context, imageIDs []int64, tags string) (int, []string) {
+	if len(imageIDs) == 0 || strings.TrimSpace(tags) == "" {
+		return 0, []string{"image_ids must be non-empty and tags must be non-empty"}
+	}
+	var updated int
+	var errs []string
+	for _, id := range imageIDs {
+		ok, err := s.repo.UpdateTags(ctx, id, tags)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("Error updating image %d: %v", id, err))
+			continue
+		}
+		if ok {
+			updated++
+		} else {
+			errs = append(errs, fmt.Sprintf("Image %d not found", id))
+		}
+	}
+	return updated, errs
+}
+
+// UpdateMetadata updates description, tags, and/or rating for one image.
+func (s *ImageService) UpdateMetadata(ctx context.Context, id int64, description, tags *string, rating *int) (bool, error) {
+	if rating != nil && (*rating < 1 || *rating > 5) {
+		return false, fmt.Errorf("rating must be between 1 and 5")
+	}
+	return s.repo.UpdateMetadata(ctx, id, description, tags, rating)
+}
+
+// BulkDeleteImages deletes multiple images by metadata ID.
+func (s *ImageService) BulkDeleteImages(ctx context.Context, imageIDs []int64) (int, []string) {
+	if len(imageIDs) == 0 {
+		return 0, []string{"image_ids must be non-empty"}
+	}
+	var deleted int
+	var errs []string
+	for _, id := range imageIDs {
+		ok, err := s.repo.DeleteByMetadataID(ctx, id)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("Error deleting image %d: %v", id, err))
+			continue
+		}
+		if ok {
+			deleted++
+		} else {
+			errs = append(errs, fmt.Sprintf("Image %d not found", id))
+		}
+	}
+	return deleted, errs
+}
+
+// DeleteByMetadataID deletes one image by metadata ID.
+func (s *ImageService) DeleteByMetadataID(ctx context.Context, id int64) (bool, error) {
+	return s.repo.DeleteByMetadataID(ctx, id)
+}
+
+// DeleteByIDRange deletes images by criteria (all, or start_id/end_id range).
+func (s *ImageService) DeleteByIDRange(ctx context.Context, all bool, startID, endID *int64) (int64, error) {
+	return s.repo.DeleteByIDRange(ctx, all, startID, endID)
+}
+
 // GetLocations returns items that have GPS data, shaped for the map view.
 func (s *ImageService) GetLocations(ctx context.Context) ([]model.LocationItem, error) {
 	items, err := s.repo.GetLocations(ctx)

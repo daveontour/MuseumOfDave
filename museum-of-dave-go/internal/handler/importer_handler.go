@@ -1,16 +1,26 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	facebookimport "github.com/museum-of-dave/app/internal/import/facebook"
+	filesystemimport "github.com/museum-of-dave/app/internal/import/filesystem"
+	imessageimport "github.com/museum-of-dave/app/internal/import/imessage"
+	instagramimport "github.com/museum-of-dave/app/internal/import/instagram"
+	whatsappimport "github.com/museum-of-dave/app/internal/import/whatsapp"
+	"github.com/museum-of-dave/app/internal/importstorage"
 	"github.com/museum-of-dave/app/internal/importer"
+	"github.com/museum-of-dave/app/internal/repository"
 )
 
 // ── Job singletons ────────────────────────────────────────────────────────────
@@ -98,18 +108,44 @@ var (
 		"status": "idle", "status_line": nil, "error_message": nil,
 		"contacts_processed": 0, "contacts_merged": 0, "contacts_created": 0,
 	})
+
+	referenceImportJob = importer.NewImportJob("Reference import", map[string]any{
+		"status": "idle", "status_line": nil, "total": 0, "processed": 0,
+		"imported": 0, "skipped": 0, "errors": 0, "error_message": nil, "error_messages": []string{},
+	})
+
+	imageExportJob = importer.NewImportJob("Image export", map[string]any{
+		"status": "idle", "status_line": nil, "total": 0, "processed": 0,
+		"exported": 0, "skipped": 0, "errors": 0, "error_message": nil, "error_messages": []string{},
+	})
 )
 
 // ── ImporterHandler ───────────────────────────────────────────────────────────
 
 // ImporterHandler handles all import job HTTP endpoints.
 type ImporterHandler struct {
-	excludePatterns []string // from config
+	excludePatterns   []string
+	imageRepo         *repository.ImageRepo
+	pool              *pgxpool.Pool
+	subjectConfigRepo *repository.SubjectConfigRepo
+}
+
+// ImporterHandlerDeps holds dependencies for NewImporterHandler.
+type ImporterHandlerDeps struct {
+	ExcludePatterns   []string
+	ImageRepo         *repository.ImageRepo
+	Pool              *pgxpool.Pool
+	SubjectConfigRepo *repository.SubjectConfigRepo
 }
 
 // NewImporterHandler creates an ImporterHandler.
-func NewImporterHandler(excludePatterns []string) *ImporterHandler {
-	return &ImporterHandler{excludePatterns: excludePatterns}
+func NewImporterHandler(deps ImporterHandlerDeps) *ImporterHandler {
+	return &ImporterHandler{
+		excludePatterns:   deps.ExcludePatterns,
+		imageRepo:         deps.ImageRepo,
+		pool:              deps.Pool,
+		subjectConfigRepo: deps.SubjectConfigRepo,
+	}
 }
 
 // RegisterRoutes mounts all import job routes.
@@ -156,6 +192,18 @@ func (h *ImporterHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/contacts/extract/stream", h.ContactsExtractStream)
 	r.Post("/contacts/extract/cancel", h.ContactsExtractCancel)
 	r.Get("/contacts/extract/status", h.ContactsExtractStatus)
+
+	// Reference import (import referenced images into database)
+	r.Post("/images/import-reference", h.ReferenceImportStart)
+	r.Get("/images/import-reference/stream", h.ReferenceImportStream)
+	r.Post("/images/import-reference/cancel", h.ReferenceImportCancel)
+	r.Get("/images/import-reference/status", h.ReferenceImportStatus)
+
+	// Image export (export images to filesystem)
+	r.Post("/images/export", h.ImageExportStart)
+	r.Get("/images/export/stream", h.ImageExportStream)
+	r.Post("/images/export/cancel", h.ImageExportCancel)
+	r.Get("/images/export/status", h.ImageExportStatus)
 
 	// WhatsApp
 	r.Post("/whatsapp/import", h.WhatsAppStart)
@@ -262,44 +310,86 @@ func (h *ImporterHandler) FilesystemStart(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if h.pool == nil {
+		writeError(w, http.StatusServiceUnavailable, "Filesystem import not configured")
+		return
+	}
+
 	filesystemJob.Start()
 	filesystemJob.UpdateState(map[string]any{
-		"status": "in_progress", "status_line": "Starting import-processor...",
+		"status": "in_progress", "status_line": "Starting filesystem images import...",
 		"current_file": nil, "files_processed": 0, "total_files": 0,
 		"images_imported": 0, "images_referenced": 0, "images_updated": 0,
 		"errors": 0, "error_messages": []string{},
 	})
-	filesystemJob.Broadcast("status", map[string]any{"status_line": "Starting import-processor..."})
+	filesystemJob.Broadcast("status", map[string]any{"status_line": "Starting filesystem images import..."})
 
-	args := []string{"filesystem"}
-	for _, p := range validPaths {
-		args = append(args, "--path", p)
+	maxImages := req.MaxImages
+	if maxImages != nil && *maxImages <= 0 {
+		maxImages = nil
 	}
-	for _, pat := range h.excludePatterns {
-		args = append(args, "--exclude", pat)
-	}
-	if req.MaxImages != nil && *req.MaxImages > 0 {
-		args = append(args, "--max", strconv.Itoa(*req.MaxImages))
-	}
-	if req.ReferenceMode {
-		args = append(args, "--reference")
-	}
-
-	runJob(filesystemJob, args, func(stdout string) {
-		total, processed, imp, ref, upd, errs, errMsgs, msg := parseFilesystemStdout(stdout)
-		filesystemJob.UpdateState(map[string]any{
-			"status": "completed", "status_line": msg,
-			"total_files": total, "files_processed": processed,
-			"images_imported": imp, "images_referenced": ref,
-			"images_updated": upd, "errors": errs, "error_messages": errMsgs,
-		})
-		filesystemJob.Broadcast("completed", filesystemJob.GetState())
-	})
+	go runFilesystemInProcess(h.pool, filesystemJob, validPaths, h.excludePatterns, maxImages, req.ReferenceMode)
 
 	writeJSON(w, map[string]any{
 		"message": "Filesystem images import started",
 		"root_directory": req.RootDirectory,
 	})
+}
+
+func runFilesystemInProcess(pool *pgxpool.Pool, job *importer.ImportJob, directories []string, excludePatterns []string, maxImages *int, referenceMode bool) {
+	ctx := context.Background()
+	defer job.Finish()
+
+	storage := importstorage.NewImageStorage(pool)
+
+	progressCallback := func(stats filesystemimport.ImportStats) {
+		statusLine := fmt.Sprintf("Processing file %d of %d: %s | Imported: %d, Referenced: %d, Updated: %d, Errors: %d",
+			stats.FilesProcessed, stats.TotalFiles, stats.CurrentFile,
+			stats.ImagesImported, stats.ImagesReferenced, stats.ImagesUpdated, stats.Errors)
+		job.UpdateState(map[string]any{
+			"total_files":       stats.TotalFiles,
+			"files_processed":   stats.FilesProcessed,
+			"images_imported":   stats.ImagesImported,
+			"images_referenced": stats.ImagesReferenced,
+			"images_updated":   stats.ImagesUpdated,
+			"errors":            stats.Errors,
+			"error_messages":    stats.ErrorMessages,
+			"current_file":      stats.CurrentFile,
+			"status_line":       statusLine,
+		})
+		job.Broadcast("progress", job.GetState())
+	}
+
+	cancelledCheck := func() bool { return job.IsCancelled() }
+
+	stats, err := filesystemimport.ImportImagesFromDirectories(ctx, storage, directories, excludePatterns, maxImages, referenceMode, progressCallback, cancelledCheck)
+
+	if job.IsCancelled() {
+		job.UpdateState(map[string]any{"status": "cancelled", "status_line": "Import cancelled."})
+		job.Broadcast("cancelled", job.GetState())
+		return
+	}
+	if err != nil {
+		msg := fmt.Sprintf("import error: %s", err)
+		job.UpdateState(map[string]any{"status": "error", "status_line": msg, "error_message": msg})
+		job.Broadcast("error", job.GetState())
+		return
+	}
+
+	statusLine := fmt.Sprintf("Completed: %d files processed, %d imported, %d referenced, %d updated, %d errors",
+		stats.FilesProcessed, stats.ImagesImported, stats.ImagesReferenced, stats.ImagesUpdated, stats.Errors)
+	job.UpdateState(map[string]any{
+		"status":            "completed",
+		"status_line":       statusLine,
+		"total_files":       stats.TotalFiles,
+		"files_processed":  stats.FilesProcessed,
+		"images_imported":   stats.ImagesImported,
+		"images_referenced": stats.ImagesReferenced,
+		"images_updated":    stats.ImagesUpdated,
+		"errors":            stats.Errors,
+		"error_messages":    stats.ErrorMessages,
+	})
+	job.Broadcast("completed", job.GetState())
 }
 
 func (h *ImporterHandler) FilesystemStream(w http.ResponseWriter, r *http.Request) {
@@ -599,6 +689,251 @@ func (h *ImporterHandler) ContactsExtractStatus(w http.ResponseWriter, r *http.R
 	writeJSON(w, contactsExtractJob.Status())
 }
 
+// ── Reference import ──────────────────────────────────────────────────────────
+
+func (h *ImporterHandler) ReferenceImportStart(w http.ResponseWriter, r *http.Request) {
+	if err := referenceImportJob.AssertNotRunning(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if h.imageRepo == nil {
+		writeError(w, http.StatusServiceUnavailable, "reference import not configured")
+		return
+	}
+
+	referenceImportJob.Start()
+	referenceImportJob.UpdateState(map[string]any{
+		"status": "in_progress", "status_line": "Starting reference import...",
+		"total": 0, "processed": 0, "imported": 0, "skipped": 0, "errors": 0,
+		"error_message": nil, "error_messages": []string{},
+	})
+	referenceImportJob.Broadcast("status", map[string]any{"status_line": "Starting reference import..."})
+
+	go runReferenceImport(h.imageRepo, referenceImportJob)
+
+	writeJSON(w, map[string]any{"message": "Reference import started", "status": "started"})
+}
+
+func runReferenceImport(repo *repository.ImageRepo, job *importer.ImportJob) {
+	ctx := context.Background()
+	defer job.Finish()
+
+	items, err := repo.ListReferencedItems(ctx)
+	if err != nil {
+		job.UpdateState(map[string]any{"status": "error", "error_message": err.Error(), "status_line": err.Error()})
+		job.Broadcast("error", job.GetState())
+		return
+	}
+	total := len(items)
+	job.UpdateState(map[string]any{"total": total, "status_line": fmt.Sprintf("Found %d referenced images to import", total)})
+	job.Broadcast("progress", job.GetState())
+
+	imported, skipped, errCount := 0, 0, 0
+	var errMsgs []string
+	for i, it := range items {
+		if job.IsCancelled() {
+			job.UpdateState(map[string]any{"status": "cancelled", "status_line": "Processing cancelled.", "processed": i, "imported": imported, "skipped": skipped, "errors": errCount, "error_messages": errMsgs})
+			job.Broadcast("cancelled", job.GetState())
+			return
+		}
+		data, err := os.ReadFile(it.SourceReference)
+		if err != nil {
+			skipped++
+			msg := fmt.Sprintf("File not found: %s", it.SourceReference)
+			errMsgs = append(errMsgs, msg)
+		} else if err := repo.UpdateBlobImageDataAndClearReferenced(ctx, it.ID, it.MediaBlobID, data); err != nil {
+			errCount++
+			errMsgs = append(errMsgs, fmt.Sprintf("Failed to update media_item %d: %v", it.ID, err))
+		} else {
+			imported++
+		}
+		job.UpdateState(map[string]any{
+			"processed": i + 1, "imported": imported, "skipped": skipped, "errors": errCount,
+			"error_messages": errMsgs,
+			"status_line": fmt.Sprintf("Item %d/%d: %d imported, %d skipped, %d errors", i+1, total, imported, skipped, errCount),
+		})
+		job.Broadcast("progress", job.GetState())
+	}
+
+	statusLine := fmt.Sprintf("Completed: %d imported, %d skipped, %d errors", imported, skipped, errCount)
+	var errMsg any
+	if len(errMsgs) > 0 {
+		end := 5
+		if len(errMsgs) < end {
+			end = len(errMsgs)
+		}
+		errMsg = strings.Join(errMsgs[:end], "; ")
+	}
+	job.UpdateState(map[string]any{
+		"status": "completed", "status_line": statusLine,
+		"processed": total, "imported": imported, "skipped": skipped, "errors": errCount,
+		"error_message": errMsg, "error_messages": errMsgs,
+	})
+	job.Broadcast("completed", job.GetState())
+}
+
+func (h *ImporterHandler) ReferenceImportStream(w http.ResponseWriter, r *http.Request) {
+	referenceImportJob.ServeSSE(w, r)
+}
+func (h *ImporterHandler) ReferenceImportCancel(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, referenceImportJob.Cancel())
+}
+func (h *ImporterHandler) ReferenceImportStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, referenceImportJob.Status())
+}
+
+// ── Image export ───────────────────────────────────────────────────────────────
+
+func (h *ImporterHandler) ImageExportStart(w http.ResponseWriter, r *http.Request) {
+	if err := imageExportJob.AssertNotRunning(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if h.imageRepo == nil {
+		writeError(w, http.StatusServiceUnavailable, "image export not configured")
+		return
+	}
+	var req struct {
+		TargetDirectory string `json:"target_directory"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	targetDir := strings.TrimSpace(req.TargetDirectory)
+	if targetDir == "" {
+		writeError(w, http.StatusBadRequest, "target_directory is required")
+		return
+	}
+
+	imageExportJob.Start()
+	imageExportJob.UpdateState(map[string]any{
+		"status": "in_progress", "status_line": "Starting image export...",
+		"total": 0, "processed": 0, "exported": 0, "skipped": 0, "errors": 0,
+		"error_message": nil, "error_messages": []string{},
+	})
+	imageExportJob.Broadcast("status", map[string]any{"status_line": "Starting image export..."})
+
+	go runImageExport(h.imageRepo, imageExportJob, targetDir)
+
+	writeJSON(w, map[string]any{"message": "Image export started", "status": "started"})
+}
+
+func runImageExport(repo *repository.ImageRepo, job *importer.ImportJob, targetDir string) {
+	ctx := context.Background()
+	defer job.Finish()
+
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		job.UpdateState(map[string]any{"status": "error", "error_message": err.Error(), "status_line": err.Error()})
+		job.Broadcast("error", job.GetState())
+		return
+	}
+
+	items, err := repo.ListMediaItemsForExport(ctx)
+	if err != nil {
+		job.UpdateState(map[string]any{"status": "error", "error_message": err.Error(), "status_line": err.Error()})
+		job.Broadcast("error", job.GetState())
+		return
+	}
+	total := len(items)
+	job.UpdateState(map[string]any{"total": total, "status_line": fmt.Sprintf("Found %d images to export", total)})
+	job.Broadcast("progress", job.GetState())
+
+	exported, skipped, errCount := 0, 0, 0
+	var errMsgs []string
+	subdirCount := 0
+	const maxPerDir = 200
+
+	for i, it := range items {
+		if job.IsCancelled() {
+			job.UpdateState(map[string]any{"status": "cancelled", "status_line": "Export cancelled.", "processed": i, "exported": exported, "skipped": skipped, "errors": errCount, "error_messages": errMsgs})
+			job.Broadcast("cancelled", job.GetState())
+			return
+		}
+		data, err := repo.GetBlobImageData(ctx, it.MediaBlobID)
+		if err != nil || len(data) == 0 {
+			skipped++
+			errMsgs = append(errMsgs, fmt.Sprintf("Image %d: no data", it.ID))
+		} else {
+			subIdx := i / maxPerDir
+			subdir := filepath.Join(targetDir, fmt.Sprintf("%04d", subIdx))
+			if subIdx > subdirCount {
+				_ = os.MkdirAll(subdir, 0755)
+				subdirCount = subIdx
+			}
+			ext := extForMediaType(it.MediaType)
+			filename := fmt.Sprintf("%d.%s", it.ID, ext)
+			if it.SourceRef != nil && *it.SourceRef != "" {
+				ext2 := filepath.Ext(*it.SourceRef)
+				if ext2 != "" {
+					filename = fmt.Sprintf("%d%s", it.ID, ext2)
+				}
+			}
+			path := filepath.Join(subdir, filename)
+			if err := os.WriteFile(path, data, 0644); err != nil {
+				errCount++
+				errMsgs = append(errMsgs, fmt.Sprintf("Image %d: %v", it.ID, err))
+			} else {
+				exported++
+			}
+		}
+		job.UpdateState(map[string]any{
+			"processed": i + 1, "exported": exported, "skipped": skipped, "errors": errCount,
+			"error_messages": errMsgs,
+			"status_line": fmt.Sprintf("Item %d/%d: %d exported, %d skipped, %d errors", i+1, total, exported, skipped, errCount),
+		})
+		job.Broadcast("progress", job.GetState())
+	}
+
+	statusLine := fmt.Sprintf("Completed: %d exported, %d skipped, %d errors", exported, skipped, errCount)
+	var errMsg any
+	if len(errMsgs) > 0 {
+		end := 5
+		if len(errMsgs) < end {
+			end = len(errMsgs)
+		}
+		errMsg = strings.Join(errMsgs[:end], "; ")
+	}
+	job.UpdateState(map[string]any{
+		"status": "completed", "status_line": statusLine,
+		"processed": total, "exported": exported, "skipped": skipped, "errors": errCount,
+		"error_message": errMsg, "error_messages": errMsgs,
+	})
+	job.Broadcast("completed", job.GetState())
+}
+
+func extForMediaType(mt *string) string {
+	if mt == nil {
+		return "jpg"
+	}
+	switch strings.ToLower(*mt) {
+	case "image/png":
+		return "png"
+	case "image/gif":
+		return "gif"
+	case "image/webp":
+		return "webp"
+	case "image/heic", "image/heif":
+		return "heic"
+	case "image/bmp":
+		return "bmp"
+	case "image/tiff":
+		return "tiff"
+	default:
+		return "jpg"
+	}
+}
+
+func (h *ImporterHandler) ImageExportStream(w http.ResponseWriter, r *http.Request) {
+	imageExportJob.ServeSSE(w, r)
+}
+func (h *ImporterHandler) ImageExportCancel(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, imageExportJob.Cancel())
+}
+func (h *ImporterHandler) ImageExportStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, imageExportJob.Status())
+}
+
 // ── WhatsApp ──────────────────────────────────────────────────────────────────
 
 func (h *ImporterHandler) WhatsAppStart(w http.ResponseWriter, r *http.Request) {
@@ -617,25 +952,86 @@ func (h *ImporterHandler) WhatsAppStart(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("directory does not exist: %s", req.DirectoryPath))
 		return
 	}
+	if h.pool == nil || h.subjectConfigRepo == nil {
+		writeError(w, http.StatusServiceUnavailable, "WhatsApp import not configured")
+		return
+	}
 
 	whatsappJob.Start()
 	whatsappJob.UpdateState(map[string]any{
-		"status": "in_progress", "status_line": "Starting import-processor...",
+		"status": "in_progress", "status_line": "Starting WhatsApp import...",
 		"conversations": 0, "messages_imported": 0, "messages_created": 0,
 		"messages_updated": 0, "attachments_found": 0, "attachments_missing": 0,
 		"missing_attachment_filenames": []string{}, "errors": 0,
 	})
-	whatsappJob.Broadcast("status", map[string]any{"status_line": "Starting import-processor..."})
+	whatsappJob.Broadcast("status", map[string]any{"status_line": "Starting WhatsApp import..."})
 
-	runJob(whatsappJob, []string{"whatsapp", "--path", req.DirectoryPath}, func(stdout string) {
-		stats := parseMessageStdout(stdout, true)
-		stats["status"] = "completed"
-		stats["status_line"] = "Import completed"
-		whatsappJob.UpdateState(stats)
-		whatsappJob.Broadcast("completed", whatsappJob.GetState())
-	})
+	go runWhatsAppInProcess(h.pool, h.subjectConfigRepo, whatsappJob, req.DirectoryPath)
 
 	writeJSON(w, map[string]any{"message": "WhatsApp import started", "directory_path": req.DirectoryPath})
+}
+
+func runWhatsAppInProcess(pool *pgxpool.Pool, subjectRepo *repository.SubjectConfigRepo, job *importer.ImportJob, directoryPath string) {
+	ctx := context.Background()
+	defer job.Finish()
+
+	storage := importstorage.NewMessageStorage(ctx, pool, subjectRepo)
+
+	progressCallback := func(stats whatsappimport.ImportStats) {
+		statusLine := ""
+		if stats.TotalConversations > 0 {
+			statusLine = fmt.Sprintf("Processing conversation %d of %d: %s | Messages: %d (%d created, %d updated) | Attachments: %d found, %d missing | Errors: %d",
+				stats.ConversationsProcessed, stats.TotalConversations, stats.CurrentConversation,
+				stats.MessagesImported, stats.MessagesCreated, stats.MessagesUpdated,
+				stats.AttachmentsFound, stats.AttachmentsMissing, stats.Errors)
+		}
+		job.UpdateState(map[string]any{
+			"conversations":                stats.ConversationsProcessed,
+			"messages_imported":            stats.MessagesImported,
+			"messages_created":             stats.MessagesCreated,
+			"messages_updated":             stats.MessagesUpdated,
+			"attachments_found":            stats.AttachmentsFound,
+			"attachments_missing":          stats.AttachmentsMissing,
+			"missing_attachment_filenames": stats.MissingAttachmentFilenames,
+			"errors":                       stats.Errors,
+			"status_line":                  statusLine,
+		})
+		job.Broadcast("progress", job.GetState())
+	}
+
+	cancelledCheck := func() bool { return job.IsCancelled() }
+
+	stats, err := whatsappimport.ImportWhatsAppFromDirectory(ctx, storage, directoryPath, progressCallback, cancelledCheck)
+
+	if job.IsCancelled() {
+		job.UpdateState(map[string]any{"status": "cancelled", "status_line": "Import cancelled."})
+		job.Broadcast("cancelled", job.GetState())
+		return
+	}
+	if err != nil {
+		msg := fmt.Sprintf("import error: %s", err)
+		job.UpdateState(map[string]any{"status": "error", "status_line": msg, "error_message": msg})
+		job.Broadcast("error", job.GetState())
+		return
+	}
+
+	// Final state from ImportStats
+	statusLine := fmt.Sprintf("Completed: %d conversations, %d messages (%d created, %d updated), %d attachments found, %d missing",
+		stats.ConversationsProcessed, stats.MessagesImported, stats.MessagesCreated, stats.MessagesUpdated,
+		stats.AttachmentsFound, stats.AttachmentsMissing)
+	job.UpdateState(map[string]any{
+		"status":                        "completed",
+		"status_line":                   statusLine,
+		"conversations":                 stats.ConversationsProcessed,
+		"messages_imported":             stats.MessagesImported,
+		"messages_created":              stats.MessagesCreated,
+		"messages_updated":              stats.MessagesUpdated,
+		"attachments_found":             stats.AttachmentsFound,
+		"attachments_missing":           stats.AttachmentsMissing,
+		"missing_attachment_filenames": stats.MissingAttachmentFilenames,
+		"errors":                        stats.Errors,
+	})
+	job.Broadcast("completed", job.GetState())
 }
 
 func (h *ImporterHandler) WhatsAppStream(w http.ResponseWriter, r *http.Request) {
@@ -666,25 +1062,85 @@ func (h *ImporterHandler) IMessageStart(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("directory does not exist: %s", req.DirectoryPath))
 		return
 	}
+	if h.pool == nil || h.subjectConfigRepo == nil {
+		writeError(w, http.StatusServiceUnavailable, "iMessage import not configured")
+		return
+	}
 
 	imessageJob.Start()
 	imessageJob.UpdateState(map[string]any{
-		"status": "in_progress", "status_line": "Starting import-processor...",
+		"status": "in_progress", "status_line": "Starting iMessage import...",
 		"conversations": 0, "messages_imported": 0, "messages_created": 0,
 		"messages_updated": 0, "attachments_found": 0, "attachments_missing": 0,
 		"missing_attachment_filenames": []string{}, "errors": 0,
 	})
-	imessageJob.Broadcast("status", map[string]any{"status_line": "Starting import-processor..."})
+	imessageJob.Broadcast("status", map[string]any{"status_line": "Starting iMessage import..."})
 
-	runJob(imessageJob, []string{"imessage", "--path", req.DirectoryPath}, func(stdout string) {
-		stats := parseMessageStdout(stdout, true)
-		stats["status"] = "completed"
-		stats["status_line"] = "Import completed"
-		imessageJob.UpdateState(stats)
-		imessageJob.Broadcast("completed", imessageJob.GetState())
-	})
+	go runIMessageInProcess(h.pool, h.subjectConfigRepo, imessageJob, req.DirectoryPath)
 
 	writeJSON(w, map[string]any{"message": "iMessage import started", "directory_path": req.DirectoryPath})
+}
+
+func runIMessageInProcess(pool *pgxpool.Pool, subjectRepo *repository.SubjectConfigRepo, job *importer.ImportJob, directoryPath string) {
+	ctx := context.Background()
+	defer job.Finish()
+
+	storage := importstorage.NewMessageStorage(ctx, pool, subjectRepo)
+
+	progressCallback := func(stats imessageimport.ImportStats) {
+		statusLine := ""
+		if stats.TotalConversations > 0 {
+			statusLine = fmt.Sprintf("Processing conversation %d of %d: %s | Messages: %d (%d created, %d updated) | Attachments: %d found, %d missing | Errors: %d",
+				stats.ConversationsProcessed, stats.TotalConversations, stats.CurrentConversation,
+				stats.MessagesImported, stats.MessagesCreated, stats.MessagesUpdated,
+				stats.AttachmentsFound, stats.AttachmentsMissing, stats.Errors)
+		}
+		job.UpdateState(map[string]any{
+			"conversations":                stats.ConversationsProcessed,
+			"messages_imported":            stats.MessagesImported,
+			"messages_created":             stats.MessagesCreated,
+			"messages_updated":             stats.MessagesUpdated,
+			"attachments_found":            stats.AttachmentsFound,
+			"attachments_missing":          stats.AttachmentsMissing,
+			"missing_attachment_filenames": stats.MissingAttachmentFilenames,
+			"errors":                       stats.Errors,
+			"status_line":                  statusLine,
+		})
+		job.Broadcast("progress", job.GetState())
+	}
+
+	cancelledCheck := func() bool { return job.IsCancelled() }
+
+	stats, err := imessageimport.ImportIMessagesFromDirectory(ctx, storage, directoryPath, progressCallback, cancelledCheck)
+
+	if job.IsCancelled() {
+		job.UpdateState(map[string]any{"status": "cancelled", "status_line": "Import cancelled."})
+		job.Broadcast("cancelled", job.GetState())
+		return
+	}
+	if err != nil {
+		msg := fmt.Sprintf("import error: %s", err)
+		job.UpdateState(map[string]any{"status": "error", "status_line": msg, "error_message": msg})
+		job.Broadcast("error", job.GetState())
+		return
+	}
+
+	statusLine := fmt.Sprintf("Completed: %d conversations, %d messages (%d created, %d updated), %d attachments found, %d missing",
+		stats.ConversationsProcessed, stats.MessagesImported, stats.MessagesCreated, stats.MessagesUpdated,
+		stats.AttachmentsFound, stats.AttachmentsMissing)
+	job.UpdateState(map[string]any{
+		"status":                        "completed",
+		"status_line":                   statusLine,
+		"conversations":                 stats.ConversationsProcessed,
+		"messages_imported":             stats.MessagesImported,
+		"messages_created":             stats.MessagesCreated,
+		"messages_updated":              stats.MessagesUpdated,
+		"attachments_found":             stats.AttachmentsFound,
+		"attachments_missing":           stats.AttachmentsMissing,
+		"missing_attachment_filenames": stats.MissingAttachmentFilenames,
+		"errors":                        stats.Errors,
+	})
+	job.Broadcast("completed", job.GetState())
 }
 
 func (h *ImporterHandler) IMessageStream(w http.ResponseWriter, r *http.Request) {
@@ -717,29 +1173,85 @@ func (h *ImporterHandler) InstagramStart(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("directory does not exist: %s", req.DirectoryPath))
 		return
 	}
+	if h.pool == nil || h.subjectConfigRepo == nil {
+		writeError(w, http.StatusServiceUnavailable, "Instagram import not configured")
+		return
+	}
 
 	instagramJob.Start()
 	instagramJob.UpdateState(map[string]any{
-		"status": "in_progress", "status_line": "Starting import-processor...",
+		"status": "in_progress", "status_line": "Starting Instagram import...",
 		"conversations": 0, "messages_imported": 0, "messages_created": 0,
 		"messages_updated": 0, "errors": 0,
 	})
-	instagramJob.Broadcast("status", map[string]any{"status_line": "Starting import-processor..."})
+	instagramJob.Broadcast("status", map[string]any{"status_line": "Starting Instagram import..."})
 
-	args := []string{"instagram", "--path", req.DirectoryPath}
-	if req.ExportRoot != nil && *req.ExportRoot != "" {
-		args = append(args, "--export-root", *req.ExportRoot)
+	userName := ""
+	if req.UserName != nil && *req.UserName != "" {
+		userName = *req.UserName
 	}
-
-	runJob(instagramJob, args, func(stdout string) {
-		stats := parseMessageStdout(stdout, false)
-		stats["status"] = "completed"
-		stats["status_line"] = "Import completed"
-		instagramJob.UpdateState(stats)
-		instagramJob.Broadcast("completed", instagramJob.GetState())
-	})
+	exportRoot := ""
+	if req.ExportRoot != nil && *req.ExportRoot != "" {
+		exportRoot = *req.ExportRoot
+	}
+	go runInstagramInProcess(h.pool, h.subjectConfigRepo, instagramJob, req.DirectoryPath, userName, exportRoot)
 
 	writeJSON(w, map[string]any{"message": "Instagram import started", "directory_path": req.DirectoryPath})
+}
+
+func runInstagramInProcess(pool *pgxpool.Pool, subjectRepo *repository.SubjectConfigRepo, job *importer.ImportJob, directoryPath, userName, exportRoot string) {
+	ctx := context.Background()
+	defer job.Finish()
+
+	storage := importstorage.NewMessageStorage(ctx, pool, subjectRepo)
+
+	progressCallback := func(stats instagramimport.ImportStats) {
+		statusLine := ""
+		if stats.TotalConversations > 0 {
+			statusLine = fmt.Sprintf("Processing conversation %d of %d: %s | Messages: %d (%d created, %d updated) | Attachments: %d found, %d missing | Errors: %d",
+				stats.ConversationsProcessed, stats.TotalConversations, stats.CurrentConversation,
+				stats.MessagesImported, stats.MessagesCreated, stats.MessagesUpdated,
+				stats.AttachmentsFound, stats.AttachmentsMissing, stats.Errors)
+		}
+		job.UpdateState(map[string]any{
+			"conversations": stats.ConversationsProcessed,
+			"messages_imported": stats.MessagesImported,
+			"messages_created": stats.MessagesCreated,
+			"messages_updated": stats.MessagesUpdated,
+			"errors": stats.Errors,
+			"status_line": statusLine,
+		})
+		job.Broadcast("progress", job.GetState())
+	}
+
+	cancelledCheck := func() bool { return job.IsCancelled() }
+
+	stats, err := instagramimport.ImportInstagramFromDirectory(ctx, storage, directoryPath, progressCallback, cancelledCheck, exportRoot, userName)
+
+	if job.IsCancelled() {
+		job.UpdateState(map[string]any{"status": "cancelled", "status_line": "Import cancelled."})
+		job.Broadcast("cancelled", job.GetState())
+		return
+	}
+	if err != nil {
+		msg := fmt.Sprintf("import error: %s", err)
+		job.UpdateState(map[string]any{"status": "error", "status_line": msg, "error_message": msg})
+		job.Broadcast("error", job.GetState())
+		return
+	}
+
+	statusLine := fmt.Sprintf("Completed: %d conversations, %d messages (%d created, %d updated)",
+		stats.ConversationsProcessed, stats.MessagesImported, stats.MessagesCreated, stats.MessagesUpdated)
+	job.UpdateState(map[string]any{
+		"status":            "completed",
+		"status_line":       statusLine,
+		"conversations":     stats.ConversationsProcessed,
+		"messages_imported": stats.MessagesImported,
+		"messages_created": stats.MessagesCreated,
+		"messages_updated": stats.MessagesUpdated,
+		"errors":            stats.Errors,
+	})
+	job.Broadcast("completed", job.GetState())
 }
 
 func (h *ImporterHandler) InstagramStream(w http.ResponseWriter, r *http.Request) {
@@ -771,30 +1283,89 @@ func (h *ImporterHandler) FacebookMessengerStart(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("directory does not exist: %s", req.DirectoryPath))
 		return
 	}
+	if h.pool == nil || h.subjectConfigRepo == nil {
+		writeError(w, http.StatusServiceUnavailable, "Facebook Messenger import not configured")
+		return
+	}
 
 	facebookMessengerJob.Start()
 	facebookMessengerJob.UpdateState(map[string]any{
-		"status": "in_progress", "status_line": "Starting import-processor...",
+		"status": "in_progress", "status_line": "Starting Facebook Messenger import...",
 		"conversations": 0, "messages_imported": 0, "messages_created": 0,
 		"messages_updated": 0, "attachments_found": 0, "attachments_missing": 0,
 		"missing_attachment_filenames": []string{}, "errors": 0,
 	})
-	facebookMessengerJob.Broadcast("status", map[string]any{"status_line": "Starting import-processor..."})
+	facebookMessengerJob.Broadcast("status", map[string]any{"status_line": "Starting Facebook Messenger import..."})
 
-	args := []string{"facebook", "--path", req.DirectoryPath}
+	userName := ""
 	if req.UserName != nil && *req.UserName != "" {
-		args = append(args, "--user-name", *req.UserName)
+		userName = *req.UserName
 	}
-
-	runJob(facebookMessengerJob, args, func(stdout string) {
-		stats := parseMessageStdout(stdout, true)
-		stats["status"] = "completed"
-		stats["status_line"] = "Import completed"
-		facebookMessengerJob.UpdateState(stats)
-		facebookMessengerJob.Broadcast("completed", facebookMessengerJob.GetState())
-	})
+	go runFacebookInProcess(h.pool, h.subjectConfigRepo, facebookMessengerJob, req.DirectoryPath, userName, "")
 
 	writeJSON(w, map[string]any{"message": "Facebook Messenger import started", "directory_path": req.DirectoryPath})
+}
+
+func runFacebookInProcess(pool *pgxpool.Pool, subjectRepo *repository.SubjectConfigRepo, job *importer.ImportJob, directoryPath, userName, exportRoot string) {
+	ctx := context.Background()
+	defer job.Finish()
+
+	storage := importstorage.NewMessageStorage(ctx, pool, subjectRepo)
+
+	progressCallback := func(stats facebookimport.ImportStats) {
+		statusLine := ""
+		if stats.TotalConversations > 0 {
+			statusLine = fmt.Sprintf("Processing conversation %d of %d: %s | Messages: %d (%d created, %d updated) | Attachments: %d found, %d missing | Errors: %d",
+				stats.ConversationsProcessed, stats.TotalConversations, stats.CurrentConversation,
+				stats.MessagesImported, stats.MessagesCreated, stats.MessagesUpdated,
+				stats.AttachmentsFound, stats.AttachmentsMissing, stats.Errors)
+		}
+		job.UpdateState(map[string]any{
+			"conversations":                stats.ConversationsProcessed,
+			"messages_imported":            stats.MessagesImported,
+			"messages_created":             stats.MessagesCreated,
+			"messages_updated":             stats.MessagesUpdated,
+			"attachments_found":            stats.AttachmentsFound,
+			"attachments_missing":          stats.AttachmentsMissing,
+			"missing_attachment_filenames": stats.MissingAttachmentFilenames,
+			"errors":                       stats.Errors,
+			"status_line":                  statusLine,
+		})
+		job.Broadcast("progress", job.GetState())
+	}
+
+	cancelledCheck := func() bool { return job.IsCancelled() }
+
+	stats, err := facebookimport.ImportFacebookFromDirectory(ctx, storage, directoryPath, progressCallback, cancelledCheck, exportRoot, userName)
+
+	if job.IsCancelled() {
+		job.UpdateState(map[string]any{"status": "cancelled", "status_line": "Import cancelled."})
+		job.Broadcast("cancelled", job.GetState())
+		return
+	}
+	if err != nil {
+		msg := fmt.Sprintf("import error: %s", err)
+		job.UpdateState(map[string]any{"status": "error", "status_line": msg, "error_message": msg})
+		job.Broadcast("error", job.GetState())
+		return
+	}
+
+	statusLine := fmt.Sprintf("Completed: %d conversations, %d messages (%d created, %d updated), %d attachments found, %d missing",
+		stats.ConversationsProcessed, stats.MessagesImported, stats.MessagesCreated, stats.MessagesUpdated,
+		stats.AttachmentsFound, stats.AttachmentsMissing)
+	job.UpdateState(map[string]any{
+		"status":                        "completed",
+		"status_line":                   statusLine,
+		"conversations":                 stats.ConversationsProcessed,
+		"messages_imported":             stats.MessagesImported,
+		"messages_created":              stats.MessagesCreated,
+		"messages_updated":              stats.MessagesUpdated,
+		"attachments_found":             stats.AttachmentsFound,
+		"attachments_missing":           stats.AttachmentsMissing,
+		"missing_attachment_filenames": stats.MissingAttachmentFilenames,
+		"errors":                        stats.Errors,
+	})
+	job.Broadcast("completed", job.GetState())
 }
 
 func (h *ImporterHandler) FacebookMessengerStream(w http.ResponseWriter, r *http.Request) {
@@ -898,42 +1469,6 @@ func parseInt(s string) int {
 	}
 	n, _ := strconv.Atoi(m)
 	return n
-}
-
-func parseFilesystemStdout(s string) (total, processed, imp, ref, upd, errs int, errMsgs []string, msg string) {
-	for _, line := range strings.Split(s, "\n") {
-		switch {
-		case strings.HasPrefix(line, "Total files:"):
-			total = parseInt(line)
-		case strings.HasPrefix(line, "Files processed:"):
-			processed = parseInt(line)
-		case strings.HasPrefix(line, "Images imported:"):
-			imp = parseInt(line)
-		case strings.HasPrefix(line, "Images referenced:"):
-			ref = parseInt(line)
-		case strings.HasPrefix(line, "Images updated:"):
-			upd = parseInt(line)
-		case strings.HasPrefix(line, "Errors:"):
-			errs = parseInt(line)
-		case strings.HasPrefix(line, "  - "):
-			errMsgs = append(errMsgs, strings.TrimPrefix(line, "  - "))
-		}
-	}
-	parts := []string{"Import completed"}
-	if total > 0 {
-		parts = append(parts, fmt.Sprintf("Total files: %d", total))
-	}
-	if processed > 0 {
-		parts = append(parts, fmt.Sprintf("Processed: %d", processed))
-	}
-	if imp > 0 || ref > 0 || upd > 0 {
-		parts = append(parts, fmt.Sprintf("Imported: %d, Referenced: %d, Updated: %d", imp, ref, upd))
-	}
-	if errs > 0 {
-		parts = append(parts, fmt.Sprintf("Errors: %d", errs))
-	}
-	msg = strings.Join(parts, ". ")
-	return
 }
 
 func parseThumbnailsStdout(s string) (total, processed, errs int, msg string) {

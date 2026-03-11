@@ -73,9 +73,9 @@ type DefaultsConfig struct {
 	FacebookAlbumsImportDirectory string
 	FacebookAlbumsExportRoot      string
 
-	FilesystemImportDirectory    string
-	FilesystemImportMaxImages    string
-	FilesystemImportCreateThumb  bool
+	FilesystemImportDirectory   string
+	FilesystemImportMaxImages   string
+	FilesystemImportCreateThumb bool
 
 	ImageExportDirectory string
 
@@ -91,8 +91,8 @@ type AIConfig struct {
 	GeminiAPIKey    string
 	GeminiModelName string
 
-	AnthropicAPIKey  string
-	ClaudeModelName  string
+	AnthropicAPIKey string
+	ClaudeModelName string
 
 	TavilyAPIKey string
 }
@@ -136,7 +136,7 @@ func Load() (*Config, error) {
 		DB:     db,
 		Server: ServerConfig{Port: serverPort},
 		App: AppConfig{
-			PageTitle:       getenv("PAGE_TITLE", "Museum of Dave"),
+			PageTitle:       getenv("PAGE_TITLE", "Digital Museum of SUBJECT_NAME"),
 			TemplatesDir:    getenv("TEMPLATES_DIR", "../src/api/templates"),
 			PythonStaticDir: getenv("PYTHON_STATIC_DIR", "../src/api/static"),
 		},

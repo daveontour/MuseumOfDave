@@ -50,6 +50,7 @@ func (h *ContactHandler) RegisterRoutes(r chi.Router) {
 	r.Delete("/email-exclusions/{excl_id}", h.DeleteEmailExclusion)
 
 	// Email classifications
+	r.Get("/email-classifications/options", h.GetEmailClassificationOptions)
 	r.Get("/email-classifications", h.ListEmailClassifications)
 	r.Post("/email-classifications", h.CreateEmailClassification)
 	r.Get("/email-classifications/{cls_id}", h.GetEmailClassification)
@@ -654,4 +655,14 @@ func (h *ContactHandler) DeleteEmailClassification(w http.ResponseWriter, r *htt
 		return
 	}
 	writeJSON(w, map[string]any{"deleted": true, "id": id})
+}
+
+// GetEmailClassificationOptions returns valid classification values for the dropdown.
+// Matches Python relationships.REL_TYPE_KEYS.
+func (h *ContactHandler) GetEmailClassificationOptions(w http.ResponseWriter, r *http.Request) {
+	classifications := []string{
+		"friend", "family", "colleague", "acquaintance", "business",
+		"social", "promotional", "spam", "important", "unknown",
+	}
+	writeJSON(w, map[string]any{"classifications": classifications})
 }
