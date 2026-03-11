@@ -1,6 +1,6 @@
 module github.com/museum-of-dave/app
 
-go 1.23
+go 1.24.0
 
 require (
 	github.com/go-chi/chi/v5 v5.2.1
@@ -14,7 +14,8 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/stretchr/testify v1.8.4 // indirect
 	golang.org/x/crypto v0.31.0 // indirect
-	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/image v0.36.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.28.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/text v0.34.0 // indirect
 )

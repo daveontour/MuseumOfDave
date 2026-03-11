@@ -69,6 +69,12 @@ func New(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
 	sensitiveHandler := handler.NewSensitiveHandler(sensitiveSvc, cfg.App.PythonStaticDir)
 	sensitiveHandler.RegisterRoutes(r)
 
+	// ── Artefacts ─────────────────────────────────────────────────────────────
+	artefactRepo := repository.NewArtefactRepo(pool)
+	artefactSvc := service.NewArtefactService(artefactRepo)
+	artefactHandler := handler.NewArtefactHandler(artefactSvc)
+	artefactHandler.RegisterRoutes(r)
+
 	// ── Chat & AI ────────────────────────────────────────────────────────────
 	geminiProvider := appai.NewGeminiProvider(cfg.AI.GeminiAPIKey, cfg.AI.GeminiModelName)
 	claudeProvider := appai.NewClaudeProvider(cfg.AI.AnthropicAPIKey, cfg.AI.ClaudeModelName)
