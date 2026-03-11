@@ -4,19 +4,36 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
+	"github.com/museum-of-dave/app/internal/ai"
 	"github.com/museum-of-dave/app/internal/model"
 	"github.com/museum-of-dave/app/internal/repository"
 )
 
-// EmailService coordinates email read operations.
+// EmailUpdateParams carries the optional flag fields for PUT /emails/{id}.
+type EmailUpdateParams struct {
+	IsPersonal  *bool
+	IsBusiness  *bool
+	IsImportant *bool
+	UseByAI     *bool
+}
+
+// EmailService coordinates email read and write operations.
 type EmailService struct {
-	repo *repository.EmailRepo
+	repo    *repository.EmailRepo
+	gemini  *ai.GeminiProvider
 }
 
 // NewEmailService creates an EmailService.
 func NewEmailService(repo *repository.EmailRepo) *EmailService {
 	return &EmailService{repo: repo}
+}
+
+// WithGemini attaches a Gemini provider for thread summarization.
+func (s *EmailService) WithGemini(g *ai.GeminiProvider) {
+	s.gemini = g
 }
 
 // Search returns email metadata matching the given optional filters.
@@ -61,6 +78,79 @@ func (s *EmailService) GetMetadata(ctx context.Context, id int64) (*model.EmailM
 // Returns nil, nil when not found (handler maps to 404).
 func (s *EmailService) GetByID(ctx context.Context, id int64) (*model.Email, error) {
 	return s.repo.GetByID(ctx, id)
+}
+
+// Update modifies flag columns on an email.
+// Returns false, nil when the email is not found.
+func (s *EmailService) Update(ctx context.Context, id int64, p EmailUpdateParams) (bool, error) {
+	return s.repo.Update(ctx, id, p.IsPersonal, p.IsBusiness, p.IsImportant, p.UseByAI)
+}
+
+// SoftDelete soft-deletes a single email.
+// Returns false, nil when not found.
+func (s *EmailService) SoftDelete(ctx context.Context, id int64) (bool, error) {
+	return s.repo.SoftDelete(ctx, id)
+}
+
+// BulkSoftDelete soft-deletes multiple emails and returns the deleted count.
+func (s *EmailService) BulkSoftDelete(ctx context.Context, ids []int64) (int64, error) {
+	return s.repo.BulkSoftDelete(ctx, ids)
+}
+
+// SummarizeThread collects all emails involving participant and asks Gemini to
+// produce a concise summary. Returns an error if Gemini is unavailable.
+func (s *EmailService) SummarizeThread(ctx context.Context, participant string) (string, error) {
+	if s.gemini == nil {
+		return "", fmt.Errorf("Gemini provider not configured")
+	}
+
+	emails, err := s.repo.GetThreadEmails(ctx, participant)
+	if err != nil {
+		return "", fmt.Errorf("fetch thread emails: %w", err)
+	}
+	if len(emails) == 0 {
+		return "No emails found for this participant.", nil
+	}
+
+	var sb strings.Builder
+	ptrStr := func(p *string) string {
+		if p == nil {
+			return ""
+		}
+		return *p
+	}
+	for _, e := range emails {
+		dateStr := ""
+		if e.Date != nil {
+			dateStr = e.Date.Format(time.RFC1123)
+		}
+		sb.WriteString(fmt.Sprintf("From: %s\nTo: %s\nDate: %s\nSubject: %s\n",
+			ptrStr(e.FromAddress),
+			ptrStr(e.ToAddresses),
+			dateStr,
+			ptrStr(e.Subject),
+		))
+		if e.PlainText != nil && *e.PlainText != "" {
+			body := *e.PlainText
+			if len(body) > 2000 {
+				body = body[:2000] + "..."
+			}
+			sb.WriteString(body)
+		}
+		sb.WriteString("\n---\n")
+	}
+
+	prompt := "Please provide a concise summary of the following email conversation:\n\n" + sb.String()
+	result, err := s.gemini.GenerateResponse(ctx,
+		ai.GenerateRequest{UserInput: prompt},
+		"You are a helpful assistant that summarises email threads concisely.",
+		nil,
+		nil,
+	)
+	if err != nil {
+		return "", fmt.Errorf("Gemini summarize: %w", err)
+	}
+	return result.PlainText, nil
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

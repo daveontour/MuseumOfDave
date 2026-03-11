@@ -8,7 +8,7 @@ import (
 	"github.com/museum-of-dave/app/internal/model"
 )
 
-// ArtefactRepo accesses artefacts, artefact_media, media_items, and media_blob.
+// ArtefactRepo accesses artefacts, artefact_media, media_items, and media_blobs.
 type ArtefactRepo struct {
 	pool *pgxpool.Pool
 }
@@ -28,7 +28,7 @@ func (r *ArtefactRepo) ListSummaries(ctx context.Context, search, tags string) (
 		       (SELECT mb.id
 		        FROM artefact_media am
 		        JOIN media_items mi ON mi.id = am.media_item_id
-		        JOIN media_blob mb ON mb.id = mi.media_blob_id
+		        JOIN media_blobs mb ON mb.id = mi.media_blob_id
 		        WHERE am.artefact_id = a.id
 		        ORDER BY am.sort_order LIMIT 1) AS primary_blob_id
 		FROM artefacts a`
@@ -219,11 +219,11 @@ func (r *ArtefactRepo) OtherArtefactLinkCount(ctx context.Context, mediaItemID, 
 
 // ── Media blob/metadata creation (for upload) ──────────────────────────────────
 
-// InsertMediaBlob inserts a new media_blob row and returns the new id.
+// InsertMediaBlob inserts a new media_blobs row and returns the new id.
 func (r *ArtefactRepo) InsertMediaBlob(ctx context.Context, imageData, thumbnailData []byte) (int64, error) {
 	var id int64
 	err := r.pool.QueryRow(ctx,
-		`INSERT INTO media_blob (image_data, thumbnail_data) VALUES ($1, $2) RETURNING id`,
+		`INSERT INTO media_blobs (image_data, thumbnail_data) VALUES ($1, $2) RETURNING id`,
 		imageData, thumbnailData,
 	).Scan(&id)
 	if err != nil {
@@ -282,9 +282,9 @@ func (r *ArtefactRepo) DeleteMediaItem(ctx context.Context, id int64) error {
 	return err
 }
 
-// DeleteMediaBlob deletes a media_blob row.
+// DeleteMediaBlob deletes a media_blobs row.
 func (r *ArtefactRepo) DeleteMediaBlob(ctx context.Context, id int64) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM media_blob WHERE id=$1`, id)
+	_, err := r.pool.Exec(ctx, `DELETE FROM media_blobs WHERE id=$1`, id)
 	return err
 }
 
@@ -295,7 +295,7 @@ func (r *ArtefactRepo) GetPrimaryBlob(ctx context.Context, artefactID int64) ([]
 		`SELECT mb.image_data, mb.thumbnail_data
 		 FROM artefact_media am
 		 JOIN media_items mi ON mi.id = am.media_item_id
-		 JOIN media_blob mb ON mb.id = mi.media_blob_id
+		 JOIN media_blobs mb ON mb.id = mi.media_blob_id
 		 WHERE am.artefact_id = $1
 		 ORDER BY am.sort_order
 		 LIMIT 1`, artefactID,

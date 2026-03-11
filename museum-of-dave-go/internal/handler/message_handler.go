@@ -21,12 +21,13 @@ func NewMessageHandler(svc *service.MessageService) *MessageHandler {
 	return &MessageHandler{svc: svc}
 }
 
-// RegisterRoutes mounts all message read routes onto r.
-// Import/cancel/stream (Phase 5), summarize (Phase 3), delete (Phase 6) are not registered here.
+// RegisterRoutes mounts all message routes onto r.
 func (h *MessageHandler) RegisterRoutes(r chi.Router) {
 	// Specific sub-paths before parameterised {message_id}
 	r.Get("/imessages/chat-sessions", h.GetChatSessions)
 	r.Get("/imessages/conversation/{chat_session}", h.GetConversation)
+	r.Delete("/imessages/conversation/{chat_session}", h.DeleteConversation)
+	r.Post("/imessages/conversation/{chat_session}/summarize", h.SummarizeConversation)
 
 	r.Get("/imessages/{message_id}/metadata", h.GetMetadata)
 	r.Get("/imessages/{message_id}/attachment", h.GetAttachment)
@@ -133,6 +134,41 @@ func (h *MessageHandler) GetAttachment(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", content.ContentType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, safe))
 	_, _ = w.Write(content.Data)
+}
+
+// DeleteConversation handles DELETE /imessages/conversation/{chat_session}
+func (h *MessageHandler) DeleteConversation(w http.ResponseWriter, r *http.Request) {
+	raw := chi.URLParam(r, "chat_session")
+	decoded, err := url.PathUnescape(raw)
+	if err != nil {
+		decoded = raw
+	}
+
+	count, err := h.svc.DeleteConversation(r.Context(), decoded)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("error deleting conversation: %s", err))
+		return
+	}
+	writeJSON(w, map[string]any{
+		"message":       fmt.Sprintf("Deleted %d messages", count),
+		"deleted_count": count,
+	})
+}
+
+// SummarizeConversation handles POST /imessages/conversation/{chat_session}/summarize
+func (h *MessageHandler) SummarizeConversation(w http.ResponseWriter, r *http.Request) {
+	raw := chi.URLParam(r, "chat_session")
+	decoded, err := url.PathUnescape(raw)
+	if err != nil {
+		decoded = raw
+	}
+
+	summary, err := h.svc.SummarizeConversation(r.Context(), decoded)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("error summarizing conversation: %s", err))
+		return
+	}
+	writeJSON(w, map[string]any{"summary": summary})
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

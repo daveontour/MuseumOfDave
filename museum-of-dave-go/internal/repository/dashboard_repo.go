@@ -167,7 +167,7 @@ func (r *DashboardRepo) GetStats(ctx context.Context) (*model.DashboardRaw, erro
 	if err := r.pool.QueryRow(ctx,
 		`SELECT COUNT(mi.id)
 		 FROM media_items mi
-		 JOIN media_blob mb ON mb.id = mi.media_blob_id
+		 JOIN media_blobs mb ON mb.id = mi.media_blob_id
 		 WHERE mi.media_type LIKE 'image/%'
 		   AND mb.thumbnail_data IS NOT NULL`,
 	).Scan(&out.ThumbnailCount); err != nil {

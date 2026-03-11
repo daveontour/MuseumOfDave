@@ -30,7 +30,9 @@ func New(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
 	r.Get("/health", healthHandler)
 
 	// ── Static files ───────────────────────────────────────────────────────────
-	fs := http.FileServer(http.Dir("static"))
+	// Serve /static/* from PYTHON_STATIC_DIR (../src/api/static by default).
+	// This covers css/, images/, js/ and any other assets the frontend requests.
+	fs := http.FileServer(http.Dir(cfg.App.PythonStaticDir))
 	r.Handle("/static/*", http.StripPrefix("/static/", fs))
 
 	// ── Emails ─────────────────────────────────────────────────────────────────
@@ -38,6 +40,10 @@ func New(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
 	emailSvc := service.NewEmailService(emailRepo)
 	emailHandler := handler.NewEmailHandler(emailSvc)
 	emailHandler.RegisterRoutes(r)
+
+	// ── IMAP ──────────────────────────────────────────────────────────────────
+	imapHandler := handler.NewIMAPHandler(pool)
+	imapHandler.RegisterRoutes(r)
 
 	// ── Images & media ─────────────────────────────────────────────────────────
 	imageRepo := repository.NewImageRepo(pool)
@@ -99,8 +105,37 @@ func New(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
 	savedResponseHandler := handler.NewSavedResponseHandler(savedResponseSvc)
 	savedResponseHandler.RegisterRoutes(r)
 
+	// ── Configuration ─────────────────────────────────────────────────────────
+	configRepo := repository.NewConfigRepo(pool)
+	configSvc := service.NewConfigService(configRepo)
+	configHandler := handler.NewConfigHandler(configSvc)
+	configHandler.RegisterRoutes(r)
+
+	// ── Contacts, email-matches, exclusions, classifications ──────────────────
+	contactRepo := repository.NewContactRepo(pool)
+	contactSvc := service.NewContactService(contactRepo)
+	contactHandler := handler.NewContactHandler(contactSvc)
+	contactHandler.RegisterRoutes(r)
+
+	// ── Attachments ───────────────────────────────────────────────────────────
+	attachmentRepo := repository.NewAttachmentRepo(pool)
+	attachmentSvc := service.NewAttachmentService(attachmentRepo)
+	attachmentHandler := handler.NewAttachmentHandler(attachmentSvc, cfg.App.PythonStaticDir)
+	attachmentHandler.RegisterRoutes(r)
+
+	// ── Import jobs ───────────────────────────────────────────────────────────
+	importerHandler := handler.NewImporterHandler(cfg.Filesystem.ExcludePatterns)
+	importerHandler.RegisterRoutes(r)
+
 	// ── Chat & AI ────────────────────────────────────────────────────────────
 	geminiProvider := appai.NewGeminiProvider(cfg.AI.GeminiAPIKey, cfg.AI.GeminiModelName)
+	emailSvc.WithGemini(geminiProvider)
+	messageSvc.WithGemini(geminiProvider)
+
+	// ── Admin & AI summarization ───────────────────────────────────────────────
+	adminHandler := handler.NewAdminHandler(pool, subjectConfigRepo)
+	adminHandler.WithGemini(geminiProvider)
+	adminHandler.RegisterRoutes(r)
 	claudeProvider := appai.NewClaudeProvider(cfg.AI.AnthropicAPIKey, cfg.AI.ClaudeModelName)
 	chatRepo := repository.NewChatRepo(pool)
 	chatSvc := service.NewChatService(

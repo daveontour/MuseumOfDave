@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	_ "net/http/pprof" // registers /debug/pprof handlers on DefaultServeMux
 	"os"
 	"os/signal"
 	"syscall"
@@ -65,6 +66,18 @@ func run() error {
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 120 * time.Second, // longer for SSE / streaming endpoints
 		IdleTimeout:  120 * time.Second,
+	}
+
+	// ── Optional pprof debug server ───────────────────────────────────────────
+	// Set ENABLE_PPROF=true to expose Go profiling endpoints on :6060/debug/pprof
+	if os.Getenv("ENABLE_PPROF") == "true" {
+		go func() {
+			pprofAddr := ":6060"
+			slog.Info("pprof server starting", "addr", pprofAddr)
+			if err := http.ListenAndServe(pprofAddr, nil); err != nil {
+				slog.Warn("pprof server stopped", "err", err)
+			}
+		}()
 	}
 
 	// ── Graceful shutdown ──────────────────────────────────────────────────────

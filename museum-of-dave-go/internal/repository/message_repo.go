@@ -176,7 +176,7 @@ func (r *MessageRepo) GetAttachmentMediaForMessage(ctx context.Context, messageI
 	// Get blob
 	blob := &model.MediaBlob{}
 	err = r.pool.QueryRow(ctx,
-		`SELECT id, image_data, thumbnail_data FROM media_blob WHERE id = $1`, item.MediaBlobID,
+		`SELECT id, image_data, thumbnail_data FROM media_blobs WHERE id = $1`, item.MediaBlobID,
 	).Scan(&blob.ID, &blob.ImageData, &blob.ThumbnailData)
 	if err != nil {
 		if isNoRows(err) {
@@ -185,6 +185,22 @@ func (r *MessageRepo) GetAttachmentMediaForMessage(ctx context.Context, messageI
 		return item, nil, fmt.Errorf("get blob: %w", err)
 	}
 	return item, blob, nil
+}
+
+// DeleteBySession deletes all message_attachments and messages for a chat_session.
+// Returns the number of messages deleted.
+func (r *MessageRepo) DeleteBySession(ctx context.Context, chatSession string) (int64, error) {
+	_, err := r.pool.Exec(ctx, `
+		DELETE FROM message_attachments
+		WHERE message_id IN (SELECT id FROM messages WHERE chat_session = $1)`, chatSession)
+	if err != nil {
+		return 0, fmt.Errorf("DeleteBySession attachments: %w", err)
+	}
+	tag, err := r.pool.Exec(ctx, `DELETE FROM messages WHERE chat_session = $1`, chatSession)
+	if err != nil {
+		return 0, fmt.Errorf("DeleteBySession: %w", err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 // ── scanners ──────────────────────────────────────────────────────────────────

@@ -18,6 +18,22 @@ func NewSubjectConfigRepo(pool *pgxpool.Pool) *SubjectConfigRepo {
 	return &SubjectConfigRepo{pool: pool}
 }
 
+// UpdateWritingStyleAI sets the writing_style_ai field on the first config row.
+func (r *SubjectConfigRepo) UpdateWritingStyleAI(ctx context.Context, summary string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE subject_configuration SET writing_style_ai = $1, updated_at = NOW()
+		 WHERE id = (SELECT id FROM subject_configuration LIMIT 1)`, summary)
+	return err
+}
+
+// UpdatePsychologicalProfileAI sets the psychological_profile_ai field on the first config row.
+func (r *SubjectConfigRepo) UpdatePsychologicalProfileAI(ctx context.Context, profile string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE subject_configuration SET psychological_profile_ai = $1, updated_at = NOW()
+		 WHERE id = (SELECT id FROM subject_configuration LIMIT 1)`, profile)
+	return err
+}
+
 // GetFirst returns the first (and only) subject configuration row.
 // Returns nil, nil if no row exists yet.
 func (r *SubjectConfigRepo) GetFirst(ctx context.Context) (*model.SubjectConfig, error) {

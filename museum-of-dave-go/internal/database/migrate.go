@@ -104,8 +104,9 @@ func schemaDDL() []string {
 			created_at       TIMESTAMP DEFAULT NOW()
 		)`,
 
-		// ── media_blob ──────────────────────────────────────────────────────────
-		`CREATE TABLE IF NOT EXISTS media_blob (
+		// ── media_blobs ─────────────────────────────────────────────────────────
+		// Binary blob table shared by both media_items and media_metadata.
+		`CREATE TABLE IF NOT EXISTS media_blobs (
 			id              SERIAL PRIMARY KEY,
 			image_data      BYTEA,
 			thumbnail_data  BYTEA,
@@ -113,10 +114,27 @@ func schemaDDL() []string {
 			updated_at      TIMESTAMP DEFAULT NOW()
 		)`,
 
+		// ── media_metadata ───────────────────────────────────────────────────────
+		// Lightweight attachment metadata used by the attachment viewer.
+		// Each row links a source (e.g. 'email_attachment') + source_reference to a blob.
+		`CREATE TABLE IF NOT EXISTS media_metadata (
+			id                SERIAL PRIMARY KEY,
+			source            VARCHAR(255),
+			source_reference  VARCHAR(500),
+			title             VARCHAR(500),
+			media_type        VARCHAR(255),
+			media_blob_id     INTEGER REFERENCES media_blobs(id) ON DELETE SET NULL,
+			created_at        TIMESTAMP DEFAULT NOW(),
+			updated_at        TIMESTAMP DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_media_metadata_source     ON media_metadata (source)`,
+		`CREATE INDEX IF NOT EXISTS idx_media_metadata_source_ref ON media_metadata (source_reference)`,
+		`CREATE INDEX IF NOT EXISTS idx_media_metadata_blob_id    ON media_metadata (media_blob_id)`,
+
 		// ── media_items ─────────────────────────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS media_items (
 			id                  SERIAL PRIMARY KEY,
-			media_blob_id       INTEGER NOT NULL REFERENCES media_blob(id) ON DELETE RESTRICT,
+			media_blob_id       INTEGER NOT NULL REFERENCES media_blobs(id) ON DELETE RESTRICT,
 			description         TEXT,
 			title               VARCHAR(1000),
 			author              VARCHAR(500),

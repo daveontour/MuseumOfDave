@@ -197,6 +197,130 @@ func (r *EmailRepo) GetAttachmentIDsForEmails(ctx context.Context, emailIDs []in
 	return result, rows.Err()
 }
 
+// Update modifies the flag columns of an existing email.
+// Returns false, nil when the email does not exist (not found or already deleted).
+func (r *EmailRepo) Update(ctx context.Context, id int64, isPersonal, isBusiness, isImportant, useByAI *bool) (bool, error) {
+	var sets []string
+	var args []any
+	n := 1
+
+	addSet := func(col string, val any) {
+		sets = append(sets, fmt.Sprintf("%s = $%d", col, n))
+		args = append(args, val)
+		n++
+	}
+
+	if isPersonal != nil {
+		addSet("is_personal", *isPersonal)
+	}
+	if isBusiness != nil {
+		addSet("is_business", *isBusiness)
+	}
+	if isImportant != nil {
+		addSet("is_important", *isImportant)
+	}
+	if useByAI != nil {
+		addSet("use_by_ai", *useByAI)
+	}
+	if len(sets) == 0 {
+		// nothing to update — check existence
+		var exists bool
+		err := r.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM emails WHERE id = $1 AND user_deleted = FALSE)`, id).Scan(&exists)
+		return exists, err
+	}
+
+	args = append(args, id)
+	sql := fmt.Sprintf(
+		"UPDATE emails SET %s WHERE id = $%d AND user_deleted = FALSE",
+		strings.Join(sets, ", "), n,
+	)
+	tag, err := r.pool.Exec(ctx, sql, args...)
+	if err != nil {
+		return false, fmt.Errorf("email Update %d: %w", id, err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+// SoftDelete nullifies message content and marks the email as deleted.
+// Returns false, nil when the email does not exist.
+func (r *EmailRepo) SoftDelete(ctx context.Context, id int64) (bool, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE emails
+		SET raw_message      = NULL,
+		    plain_text        = NULL,
+		    snippet           = NULL,
+		    embedding         = NULL,
+		    has_attachments   = FALSE,
+		    user_deleted      = TRUE
+		WHERE id = $1 AND user_deleted = FALSE`, id)
+	if err != nil {
+		return false, fmt.Errorf("email SoftDelete %d: %w", id, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return false, nil
+	}
+	// Orphan-clean media blobs attached to this email
+	_, _ = r.pool.Exec(ctx, `
+		DELETE FROM media_blobs
+		WHERE id IN (
+			SELECT mb.id
+			FROM media_blobs mb
+			LEFT JOIN media_metadata mm ON mm.blob_id = mb.id
+			WHERE mm.id IS NULL
+		)`)
+	return true, nil
+}
+
+// BulkSoftDelete soft-deletes a batch of emails by ID.
+// Returns the count of rows actually deleted.
+func (r *EmailRepo) BulkSoftDelete(ctx context.Context, ids []int64) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE emails
+		SET raw_message      = NULL,
+		    plain_text        = NULL,
+		    snippet           = NULL,
+		    embedding         = NULL,
+		    has_attachments   = FALSE,
+		    user_deleted      = TRUE
+		WHERE id = ANY($1::bigint[])
+		  AND user_deleted = FALSE`, ids)
+	if err != nil {
+		return 0, fmt.Errorf("email BulkSoftDelete: %w", err)
+	}
+	// Orphan-clean
+	_, _ = r.pool.Exec(ctx, `
+		DELETE FROM media_blobs
+		WHERE id IN (
+			SELECT mb.id
+			FROM media_blobs mb
+			LEFT JOIN media_metadata mm ON mm.blob_id = mb.id
+			WHERE mm.id IS NULL
+		)`)
+	return tag.RowsAffected(), nil
+}
+
+// GetThreadEmails returns non-deleted emails where from_address or to_addresses
+// contain the given participant address, ordered by date ASC.
+func (r *EmailRepo) GetThreadEmails(ctx context.Context, participant string) ([]*model.Email, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, uid, folder, subject, from_address, to_addresses, cc_addresses, bcc_addresses,
+		       date, raw_message, plain_text, snippet, embedding,
+		       has_attachments, user_deleted, is_personal, is_business, is_social, is_promotional,
+		       is_spam, is_important, use_by_ai, created_at, updated_at
+		FROM emails
+		WHERE (from_address ILIKE $1 OR to_addresses ILIKE $1)
+		  AND user_deleted = FALSE
+		ORDER BY date ASC`, "%"+participant+"%")
+	if err != nil {
+		return nil, fmt.Errorf("GetThreadEmails: %w", err)
+	}
+	defer rows.Close()
+	return scanEmails(rows)
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 // scanEmails collects rows into a slice of Email pointers.

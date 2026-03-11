@@ -45,6 +45,19 @@ type Interest struct {
 	UpdatedAt time.Time
 }
 
+// ── App Configuration ──────────────────────────────────────────────────────────
+
+// AppConfiguration is a row from the app_configuration table.
+type AppConfiguration struct {
+	ID          int64
+	Key         string
+	Value       *string
+	IsMandatory bool
+	Description *string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 // ── Saved Responses ────────────────────────────────────────────────────────────
 
 // SavedResponse is a row from the saved_responses table.

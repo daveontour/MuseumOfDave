@@ -23,18 +23,22 @@ func NewEmailHandler(svc *service.EmailService) *EmailHandler {
 	return &EmailHandler{svc: svc}
 }
 
-// RegisterRoutes mounts all email read routes onto r.
-// Write/import routes (PUT, DELETE, POST /process) are registered in later phases.
+// RegisterRoutes mounts all email routes onto r.
 func (h *EmailHandler) RegisterRoutes(r chi.Router) {
 	// Specific sub-paths before the parameterised {email_id} routes to avoid shadowing
 	r.Get("/emails/folders", h.GetFolders)
 	r.Get("/emails/label", h.GetByLabel)
 	r.Get("/emails/search", h.Search)
+	r.Delete("/emails/bulk-delete", h.BulkDelete)
 
 	r.Get("/emails/{email_id}/html", h.GetHTML)
 	r.Get("/emails/{email_id}/text", h.GetText)
 	r.Get("/emails/{email_id}/snippet", h.GetSnippet)
 	r.Get("/emails/{email_id}/metadata", h.GetMetadata)
+	r.Put("/emails/{email_id}", h.Update)
+	r.Delete("/emails/{email_id}", h.Delete)
+
+	r.Post("/emails/thread/{participant}/summarize", h.SummarizeThread)
 }
 
 // ── Read endpoints ─────────────────────────────────────────────────────────────
@@ -232,6 +236,105 @@ func (h *EmailHandler) GetMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, resp)
+}
+
+// ── Write endpoints ────────────────────────────────────────────────────────────
+
+// Update handles PUT /emails/{email_id}
+// Body: {"is_personal": bool, "is_business": bool, "is_important": bool, "use_by_ai": bool} (all optional)
+func (h *EmailHandler) Update(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseEmailID(w, r)
+	if !ok {
+		return
+	}
+
+	var body struct {
+		IsPersonal  *bool `json:"is_personal"`
+		IsBusiness  *bool `json:"is_business"`
+		IsImportant *bool `json:"is_important"`
+		UseByAI     *bool `json:"use_by_ai"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	found, err := h.svc.Update(r.Context(), id, service.EmailUpdateParams{
+		IsPersonal:  body.IsPersonal,
+		IsBusiness:  body.IsBusiness,
+		IsImportant: body.IsImportant,
+		UseByAI:     body.UseByAI,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("error updating email: %s", err))
+		return
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("email with ID %d not found", id))
+		return
+	}
+	writeJSON(w, map[string]string{"message": "Email updated successfully"})
+}
+
+// Delete handles DELETE /emails/{email_id}
+func (h *EmailHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseEmailID(w, r)
+	if !ok {
+		return
+	}
+
+	found, err := h.svc.SoftDelete(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("error deleting email: %s", err))
+		return
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("email with ID %d not found", id))
+		return
+	}
+	writeJSON(w, map[string]string{"message": "Email deleted successfully"})
+}
+
+// BulkDelete handles DELETE /emails/bulk-delete
+// Body: {"email_ids": [1, 2, 3]}
+func (h *EmailHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		EmailIDs []int64 `json:"email_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if len(body.EmailIDs) == 0 {
+		writeError(w, http.StatusBadRequest, "email_ids must be a non-empty list")
+		return
+	}
+
+	deleted, err := h.svc.BulkSoftDelete(r.Context(), body.EmailIDs)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("error deleting emails: %s", err))
+		return
+	}
+	writeJSON(w, map[string]any{
+		"message":       fmt.Sprintf("Deleted %d emails", deleted),
+		"deleted_count": deleted,
+	})
+}
+
+// SummarizeThread handles POST /emails/thread/{participant}/summarize
+func (h *EmailHandler) SummarizeThread(w http.ResponseWriter, r *http.Request) {
+	participant := chi.URLParam(r, "participant")
+	if participant == "" {
+		writeError(w, http.StatusBadRequest, "participant is required")
+		return
+	}
+
+	summary, err := h.svc.SummarizeThread(r.Context(), participant)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("error summarizing thread: %s", err))
+		return
+	}
+	writeJSON(w, map[string]string{"summary": summary})
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

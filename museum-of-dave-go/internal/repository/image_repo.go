@@ -9,7 +9,7 @@ import (
 	"github.com/museum-of-dave/app/internal/model"
 )
 
-// ImageRepo runs queries against media_items, media_blob, and facebook_albums tables.
+// ImageRepo runs queries against media_items, media_blobs, and facebook_albums tables.
 type ImageRepo struct {
 	pool *pgxpool.Pool
 }
@@ -35,11 +35,11 @@ func (r *ImageRepo) GetMediaItemByID(ctx context.Context, id int64) (*model.Medi
 	return scanMediaItem(row)
 }
 
-// GetBlobByID returns a media_blob row by primary key.
+// GetBlobByID returns a media_blobs row by primary key.
 func (r *ImageRepo) GetBlobByID(ctx context.Context, blobID int64) (*model.MediaBlob, error) {
 	b := &model.MediaBlob{}
 	err := r.pool.QueryRow(ctx,
-		`SELECT id, image_data, thumbnail_data FROM media_blob WHERE id = $1`, blobID,
+		`SELECT id, image_data, thumbnail_data FROM media_blobs WHERE id = $1`, blobID,
 	).Scan(&b.ID, &b.ImageData, &b.ThumbnailData)
 	if err != nil {
 		if isNoRows(err) {
@@ -50,12 +50,12 @@ func (r *ImageRepo) GetBlobByID(ctx context.Context, blobID int64) (*model.Media
 	return b, nil
 }
 
-// GetBlobByMetadataID returns the media_blob row for a given media_items.id.
+// GetBlobByMetadataID returns the media_blobs row for a given media_items.id.
 func (r *ImageRepo) GetBlobByMetadataID(ctx context.Context, metaID int64) (*model.MediaBlob, error) {
 	b := &model.MediaBlob{}
 	err := r.pool.QueryRow(ctx, `
 		SELECT mb.id, mb.image_data, mb.thumbnail_data
-		FROM media_blob mb
+		FROM media_blobs mb
 		JOIN media_items mi ON mi.media_blob_id = mb.id
 		WHERE mi.id = $1`, metaID,
 	).Scan(&b.ID, &b.ImageData, &b.ThumbnailData)

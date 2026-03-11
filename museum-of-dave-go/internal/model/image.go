@@ -39,7 +39,7 @@ type MediaItem struct {
 	SourceReference  *string
 }
 
-// MediaBlob holds the binary image data rows from media_blob.
+// MediaBlob holds the binary image data rows from media_blobs.
 type MediaBlob struct {
 	ID            int64
 	ImageData     []byte

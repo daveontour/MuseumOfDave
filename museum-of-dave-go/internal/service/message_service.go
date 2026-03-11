@@ -8,19 +8,24 @@ import (
 	"time"
 	"unicode"
 
+	appai "github.com/museum-of-dave/app/internal/ai"
 	"github.com/museum-of-dave/app/internal/model"
 	"github.com/museum-of-dave/app/internal/repository"
 )
 
-// MessageService coordinates message read operations.
+// MessageService coordinates message read and write operations.
 type MessageService struct {
-	repo *repository.MessageRepo
+	repo   *repository.MessageRepo
+	gemini *appai.GeminiProvider
 }
 
 // NewMessageService creates a MessageService.
 func NewMessageService(repo *repository.MessageRepo) *MessageService {
 	return &MessageService{repo: repo}
 }
+
+// WithGemini injects a GeminiProvider for AI summarization.
+func (s *MessageService) WithGemini(g *appai.GeminiProvider) { s.gemini = g }
 
 // GetChatSessions returns all chat sessions categorised into contacts, groups, and other.
 // The categorisation logic matches the Python MessageService.get_chat_sessions exactly:
@@ -192,6 +197,60 @@ func (s *MessageService) GetAttachmentContent(ctx context.Context, messageID int
 		ContentType: contentType,
 		Filename:    filename,
 	}, nil
+}
+
+// DeleteConversation removes all messages and attachments for a chat session.
+// Returns the number of messages deleted.
+func (s *MessageService) DeleteConversation(ctx context.Context, chatSession string) (int64, error) {
+	return s.repo.DeleteBySession(ctx, chatSession)
+}
+
+// SummarizeConversation fetches a conversation and asks Gemini to summarize it.
+func (s *MessageService) SummarizeConversation(ctx context.Context, chatSession string) (string, error) {
+	if s.gemini == nil {
+		return "", fmt.Errorf("AI summarization is not configured")
+	}
+	msgs, err := s.repo.GetConversationMessages(ctx, chatSession)
+	if err != nil {
+		return "", fmt.Errorf("get conversation: %w", err)
+	}
+	if len(msgs) == 0 {
+		return "", fmt.Errorf("no messages found for conversation: %s", chatSession)
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Conversation with %s\n\n", chatSession))
+	for _, m := range msgs {
+		sender := "Unknown"
+		if m.SenderName != nil && *m.SenderName != "" {
+			sender = *m.SenderName
+		}
+		date := ""
+		if m.MessageDate != nil {
+			date = m.MessageDate.Format("2006-01-02 15:04")
+		}
+		text := ""
+		if m.Text != nil {
+			text = *m.Text
+		}
+		sb.WriteString(fmt.Sprintf("[%s] %s: %s\n", date, sender, text))
+	}
+
+	prompt := fmt.Sprintf(`Please summarize this conversation. Include:
+- Who the conversation is with
+- The main topics discussed
+- Key events or decisions
+- The overall tone and relationship dynamic
+- Date range of the conversation
+
+Conversation:
+%s`, sb.String())
+
+	result, err := s.gemini.GenerateResponse(ctx, appai.GenerateRequest{UserInput: prompt}, "", nil, nil)
+	if err != nil {
+		return "", fmt.Errorf("AI summarize: %w", err)
+	}
+	return result.PlainText, nil
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
