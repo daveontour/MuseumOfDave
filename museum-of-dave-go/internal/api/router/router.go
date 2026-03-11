@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
+	appai "github.com/museum-of-dave/app/internal/ai"
 	"github.com/museum-of-dave/app/internal/config"
 	"github.com/museum-of-dave/app/internal/handler"
 	"github.com/museum-of-dave/app/internal/middleware"
@@ -67,6 +68,22 @@ func New(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
 	sensitiveSvc := service.NewSensitiveService(sensitiveRepo, pool, cfg.Attachments.RawAllowedTypes)
 	sensitiveHandler := handler.NewSensitiveHandler(sensitiveSvc, cfg.App.PythonStaticDir)
 	sensitiveHandler.RegisterRoutes(r)
+
+	// ── Chat & AI ────────────────────────────────────────────────────────────
+	geminiProvider := appai.NewGeminiProvider(cfg.AI.GeminiAPIKey, cfg.AI.GeminiModelName)
+	claudeProvider := appai.NewClaudeProvider(cfg.AI.AnthropicAPIKey, cfg.AI.ClaudeModelName)
+	chatRepo := repository.NewChatRepo(pool)
+	chatSvc := service.NewChatService(
+		chatRepo,
+		subjectConfigRepo,
+		pool,
+		geminiProvider,
+		claudeProvider,
+		cfg.App.PythonStaticDir,
+		cfg.AI.TavilyAPIKey,
+	)
+	chatHandler := handler.NewChatHandler(chatSvc)
+	chatHandler.RegisterRoutes(r)
 
 	return r
 }

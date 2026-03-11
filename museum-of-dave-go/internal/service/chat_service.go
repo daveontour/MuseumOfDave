@@ -1,0 +1,283 @@
+package service
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	appai "github.com/museum-of-dave/app/internal/ai"
+	"github.com/museum-of-dave/app/internal/model"
+	"github.com/museum-of-dave/app/internal/repository"
+)
+
+// voiceEntry holds one entry from voice_instructions.json.
+type voiceEntry struct {
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	Instructions string `json:"instructions"`
+}
+
+// ChatService orchestrates AI generation, tool calling, and conversation persistence.
+type ChatService struct {
+	chatRepo        *repository.ChatRepo
+	subjectRepo     *repository.SubjectConfigRepo
+	pool            *pgxpool.Pool
+	geminiProvider  appai.ChatProvider
+	claudeProvider  appai.ChatProvider
+	pythonStaticDir string
+	tavilyKey       string
+}
+
+// NewChatService creates a ChatService.
+func NewChatService(
+	chatRepo *repository.ChatRepo,
+	subjectRepo *repository.SubjectConfigRepo,
+	pool *pgxpool.Pool,
+	geminiProvider appai.ChatProvider,
+	claudeProvider appai.ChatProvider,
+	pythonStaticDir string,
+	tavilyKey string,
+) *ChatService {
+	return &ChatService{
+		chatRepo:        chatRepo,
+		subjectRepo:     subjectRepo,
+		pool:            pool,
+		geminiProvider:  geminiProvider,
+		claudeProvider:  claudeProvider,
+		pythonStaticDir: pythonStaticDir,
+		tavilyKey:       tavilyKey,
+	}
+}
+
+// GeminiAvailable reports whether the Gemini provider is configured.
+func (s *ChatService) GeminiAvailable() bool {
+	return s.geminiProvider != nil && s.geminiProvider.IsAvailable()
+}
+
+// ClaudeAvailable reports whether the Claude provider is configured.
+func (s *ChatService) ClaudeAvailable() bool {
+	return s.claudeProvider != nil && s.claudeProvider.IsAvailable()
+}
+
+// GenerateResponse runs a full chat generation cycle.
+func (s *ChatService) GenerateResponse(ctx context.Context, req model.ChatRequest) (*model.ChatResponse, error) {
+	// Choose provider
+	provider := s.geminiProvider
+	providerName := "gemini"
+	if req.Provider == "claude" && s.claudeProvider != nil && s.claudeProvider.IsAvailable() {
+		provider = s.claudeProvider
+		providerName = "claude"
+	}
+	if provider == nil || !provider.IsAvailable() {
+		return nil, fmt.Errorf("provider '%s' is not available — check API key", providerName)
+	}
+
+	voice := "expert"
+	if req.Voice != nil && *req.Voice != "" {
+		voice = *req.Voice
+	}
+	temperature := 0.0
+	if req.Temperature != nil {
+		temperature = *req.Temperature
+	}
+	mood := "neutral"
+	if req.Mood != nil && *req.Mood != "" {
+		mood = *req.Mood
+	}
+	whosAsking := req.WhosAsking
+	if whosAsking == "" {
+		whosAsking = "visitor"
+	}
+
+	// Load subject configuration
+	cfg, _ := s.subjectRepo.GetFirst(ctx)
+	subjectName := "Unknown"
+	subjectGender := "Male"
+	var psychProfile, writingStyle *string
+	var sysInstructions, coreInstructions string
+	if cfg != nil {
+		subjectName = cfg.SubjectName
+		subjectGender = cfg.Gender
+		psychProfile = cfg.PsychologicalProfileAI
+		writingStyle = cfg.WritingStyleAI
+		sysInstructions = cfg.SystemInstructions
+		coreInstructions = cfg.CoreSystemInstructions
+	}
+
+	// Pronoun substitution
+	he, him, his := genderPronouns(subjectGender)
+	replacer := strings.NewReplacer(
+		"{SUBJECT_NAME}", subjectName,
+		"{he}", he, "{him}", him, "{his}", his,
+	)
+	sysInstructions = replacer.Replace(sysInstructions)
+	coreInstructions = replacer.Replace(coreInstructions)
+
+	// Load voice instructions
+	voiceMap := s.loadVoiceInstructions(ctx)
+	entry, ok := voiceMap[voice]
+	if !ok {
+		entry = voiceMap["expert"]
+		voice = "expert"
+	}
+	voiceText := replacer.Replace(entry.Instructions)
+
+	// Build system prompt
+	whosAskingText := fmt.Sprintf("The person asking is a visitor (not the subject %s). They are asking questions about the subject's life and history.", subjectName)
+	if whosAsking == "its-me" {
+		whosAskingText = fmt.Sprintf("The person asking is %s themselves. They are asking questions about their own history and life.", subjectName)
+	}
+	systemPrompt := coreInstructions +
+		"\n\n**Your Personae:**\n" + voiceText +
+		"\n\n**Additional Information:**\n" + sysInstructions +
+		"\n\n**Who is asking:** " + whosAskingText
+
+	// Load conversation history
+	var history []appai.ConvTurn
+	if req.ConversationID != nil {
+		turns, err := s.chatRepo.GetTurns(ctx, *req.ConversationID, 30)
+		if err == nil {
+			for _, t := range turns {
+				history = append(history, appai.ConvTurn{
+					UserInput:    t.UserInput,
+					ResponseText: t.ResponseText,
+				})
+			}
+		}
+	}
+
+	// Build tool executor and generation request
+	executor := appai.NewToolExecutor(s.pool, subjectName, s.tavilyKey)
+	genReq := appai.GenerateRequest{
+		UserInput:     req.Prompt,
+		Temperature:   temperature,
+		Voice:         voice,
+		Mood:          mood,
+		CompanionMode: req.CompanionMode,
+		WhosAsking:    whosAsking,
+		SubjectName:   subjectName,
+		SubjectGender: subjectGender,
+	}
+	if voice == "owner" {
+		genReq.PsychProfile = psychProfile
+		genReq.WritingStyle = writingStyle
+	}
+
+	result, err := provider.GenerateResponse(ctx, genReq, systemPrompt, history, executor)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save turn if conversation ID provided
+	if req.ConversationID != nil {
+		_ = s.chatRepo.SaveTurn(ctx, *req.ConversationID, req.Prompt, result.PlainText, voice, temperature)
+	}
+
+	// Enrich metadata and return
+	var embeddedJSON map[string]any
+	if err := json.Unmarshal([]byte(result.MetadataJSON), &embeddedJSON); err == nil {
+		embeddedJSON["temperature"] = temperature
+		embeddedJSON["prompt"] = req.Prompt
+		embeddedJSON["voice"] = voice
+		embeddedJSON["response_text"] = result.PlainText
+	}
+	return &model.ChatResponse{
+		Response:     result.PlainText,
+		Voice:        voice,
+		EmbeddedJSON: embeddedJSON,
+	}, nil
+}
+
+// loadVoiceInstructions reads voice_instructions.json and merges DB custom voices.
+func (s *ChatService) loadVoiceInstructions(ctx context.Context) map[string]voiceEntry {
+	result := map[string]voiceEntry{
+		"expert": {Name: "Expert", Instructions: "You are a professional expert."},
+	}
+
+	path := fmt.Sprintf("%s/data/voice_instructions.json", s.pythonStaticDir)
+	data, err := os.ReadFile(path)
+	if err == nil {
+		var raw map[string]any
+		if json.Unmarshal(data, &raw) == nil {
+			for key, val := range raw {
+				if vm, ok := val.(map[string]any); ok {
+					entry := voiceEntry{
+						Name:         anyStr(vm["name"]),
+						Description:  anyStr(vm["description"]),
+						Instructions: anyStr(vm["instructions"]),
+					}
+					result[key] = entry
+				}
+			}
+		}
+	}
+
+	// Merge custom voices from DB (built-in keys are never overwritten)
+	rows, err := s.pool.Query(ctx, `SELECT key, name, description, instructions FROM custom_voices`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var key, name, instructions string
+			var desc *string
+			if err := rows.Scan(&key, &name, &desc, &instructions); err == nil {
+				if _, exists := result[key]; !exists {
+					entry := voiceEntry{Name: name, Instructions: instructions}
+					if desc != nil {
+						entry.Description = *desc
+					}
+					result[key] = entry
+				}
+			}
+		}
+	}
+	return result
+}
+
+// ── Conversation CRUD ─────────────────────────────────────────────────────────
+
+func (s *ChatService) CreateConversation(ctx context.Context, title, voice string) (*model.ChatConversation, error) {
+	return s.chatRepo.CreateConversation(ctx, title, voice)
+}
+
+func (s *ChatService) GetConversation(ctx context.Context, id int64) (*model.ChatConversation, error) {
+	return s.chatRepo.GetConversation(ctx, id)
+}
+
+func (s *ChatService) ListConversations(ctx context.Context, limit *int) ([]*model.ChatConversation, error) {
+	return s.chatRepo.ListConversations(ctx, limit)
+}
+
+func (s *ChatService) UpdateConversation(ctx context.Context, id int64, title, voice *string) (*model.ChatConversation, error) {
+	return s.chatRepo.UpdateConversation(ctx, id, title, voice)
+}
+
+func (s *ChatService) DeleteConversation(ctx context.Context, id int64) error {
+	return s.chatRepo.DeleteConversation(ctx, id)
+}
+
+func (s *ChatService) GetTurns(ctx context.Context, conversationID int64, limit int) ([]*model.ChatTurn, error) {
+	return s.chatRepo.GetTurns(ctx, conversationID, limit)
+}
+
+func (s *ChatService) TurnCount(ctx context.Context, conversationID int64) (int64, error) {
+	return s.chatRepo.TurnCount(ctx, conversationID)
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+func genderPronouns(gender string) (he, him, his string) {
+	if gender == "Female" {
+		return "she", "her", "her"
+	}
+	return "he", "him", "his"
+}
+
+func anyStr(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
