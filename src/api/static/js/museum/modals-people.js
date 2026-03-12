@@ -293,10 +293,11 @@ Modals.Contacts = (() => {
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
             try {
+                const provider = (typeof DOM !== 'undefined' && DOM.llmProviderSelect?.value) ? DOM.llmProviderSelect.value : 'gemini';
                 const resp = await fetch('/chat/complete-profile', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ full_name: name })
+                    body: JSON.stringify({ full_name: name, provider })
                 });
                 if (!resp.ok) {
                     const err = await resp.json().catch(() => ({}));
@@ -641,10 +642,11 @@ Modals.Profiles = (() => {
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
             try {
+                const provider = (typeof DOM !== 'undefined' && DOM.llmProviderSelect?.value) ? DOM.llmProviderSelect.value : 'gemini';
                 const resp = await fetch('/chat/complete-profile', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ full_name: name })
+                    body: JSON.stringify({ full_name: name, provider })
                 });
                 if (!resp.ok) {
                     const err = await resp.json().catch(() => ({}));

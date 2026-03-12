@@ -100,9 +100,14 @@
                 <span class="its-me-visitor-option" data-value="its-me">{{owner}}</span>
                 <span class="its-me-visitor-option active" data-value="visitor">Visitor</span>
             </div>
-            <button id="hamburger-menu" class="hamburger-btn">
-                <i class="fas fa-cog"></i>
-            </button>
+            <div class="top-bar-right-buttons" style="display: flex; align-items: center; gap: 8px; margin-left: auto;">
+                <button id="guide-sidebar-btn" class="top-bar-guide-btn" type="button" title="Guide">
+                    <i class="fas fa-question-circle"></i>
+                </button>
+                <button id="hamburger-menu" class="hamburger-btn">
+                    <i class="fas fa-cog"></i>
+                </button>
+            </div>
         </div>
 
         <div class="main-content">
@@ -133,13 +138,10 @@
                 <div class="sidebar-spacer" aria-hidden="true"></div>
                 <div class="sidebar-bottom-tile">
                     <button type="button" class="more-options-btn sidebar-settings-btn" id="data-import-sidebar-btn">
-                        <i class="fas fa-database"></i> Data Import
-                    </button>
-                    <button type="button" class="more-options-btn sidebar-settings-btn" id="guide-sidebar-btn">
-                        <i class="fas fa-book"></i> Guide
+                        <i class="fas fa-database"></i> Import Data
                     </button>
                     <button type="button" class="more-options-btn sidebar-settings-btn" id="settings-data-import-sidebar-btn">
-                        <i class="fas fa-cog"></i> Settings and Data Import
+                        <i class="fas fa-cog"></i> Settings
                     </button>
                 </div>
             </div>
@@ -149,8 +151,9 @@
             <div class="chat-header">
                 <div id="conversation-indicator" style="display: none; margin-left: 1rem; padding: 0.5rem 1rem; background: #e3f2fd; border-radius: 4px; color: #1976d2; font-size: 0.9em;"></div>
             </div>
-            <div id="chat-box">
-                <!-- Chat messages will be loaded here -->
+            <div class="chat-box-wrapper">
+                <div id="chat-box">
+                    <!-- Chat messages will be loaded here -->
                 {% for message in history %}
                 {% set role = message.role | replace('model', 'assistant') %}
                 <div class="message {{ role }}-message">
@@ -175,6 +178,8 @@
                     </div>
                 </div>
                 {% endfor %}
+                </div>
+                <div class="chat-wave-pinned" aria-hidden="true"></div>
             </div>
 
             <!-- Loading Indicator -->

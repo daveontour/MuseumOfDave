@@ -33,6 +33,36 @@ func NewClaudeProvider(apiKey, modelName string) *ClaudeProvider {
 
 func (p *ClaudeProvider) IsAvailable() bool { return p != nil }
 
+// SimpleGenerate sends a prompt to Claude without tools. Returns the response text.
+// Used for summarization and other tasks that don't need tool-calling.
+func (p *ClaudeProvider) SimpleGenerate(ctx context.Context, prompt string) (string, error) {
+	if p == nil || p.apiKey == "" {
+		return "", fmt.Errorf("claude: not configured")
+	}
+	body := map[string]any{
+		"model":       p.modelName,
+		"max_tokens":  8096,
+		"temperature": 0.2,
+		"messages": []map[string]any{
+			{"role": "user", "content": prompt},
+		},
+	}
+	resp, err := claudePost(ctx, p.apiKey, body)
+	if err != nil {
+		return "", err
+	}
+	contentRaw, _ := resp["content"].([]any)
+	var textParts []string
+	for _, item := range contentRaw {
+		if block, ok := item.(map[string]any); ok && block["type"] == "text" {
+			if t, ok := block["text"].(string); ok && t != "" {
+				textParts = append(textParts, t)
+			}
+		}
+	}
+	return strings.TrimSpace(strings.Join(textParts, "")), nil
+}
+
 // GenerateResponse calls Claude with a tool-calling loop.
 func (p *ClaudeProvider) GenerateResponse(
 	ctx context.Context,

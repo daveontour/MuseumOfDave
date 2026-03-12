@@ -147,6 +147,7 @@ func New(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
 	chatSvc := service.NewChatService(
 		chatRepo,
 		subjectConfigRepo,
+		completeProfileRepo,
 		pool,
 		geminiProvider,
 		claudeProvider,

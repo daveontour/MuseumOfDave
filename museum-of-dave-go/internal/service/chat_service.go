@@ -24,6 +24,7 @@ type voiceEntry struct {
 type ChatService struct {
 	chatRepo        *repository.ChatRepo
 	subjectRepo     *repository.SubjectConfigRepo
+	cpRepo          *repository.CompleteProfileRepo
 	pool            *pgxpool.Pool
 	geminiProvider  appai.ChatProvider
 	claudeProvider  appai.ChatProvider
@@ -35,6 +36,7 @@ type ChatService struct {
 func NewChatService(
 	chatRepo *repository.ChatRepo,
 	subjectRepo *repository.SubjectConfigRepo,
+	cpRepo *repository.CompleteProfileRepo,
 	pool *pgxpool.Pool,
 	geminiProvider appai.ChatProvider,
 	claudeProvider appai.ChatProvider,
@@ -44,6 +46,7 @@ func NewChatService(
 	return &ChatService{
 		chatRepo:        chatRepo,
 		subjectRepo:     subjectRepo,
+		cpRepo:          cpRepo,
 		pool:            pool,
 		geminiProvider:  geminiProvider,
 		claudeProvider:  claudeProvider,
@@ -273,6 +276,150 @@ func (s *ChatService) GetTurns(ctx context.Context, conversationID int64, limit 
 
 func (s *ChatService) TurnCount(ctx context.Context, conversationID int64) (int64, error) {
 	return s.chatRepo.TurnCount(ctx, conversationID)
+}
+
+// GenerateCompleteProfile builds a multi-step relationship profile for a contact
+// from messages and emails, using the specified AI provider (gemini or claude) to summarize,
+// and saves it to complete_profiles. Mirrors the Python base_chat_service.get_complete_profile_by_name.
+func (s *ChatService) GenerateCompleteProfile(ctx context.Context, name string, provider string) error {
+	executor := appai.NewToolExecutor(s.pool, "", s.tavilyKey)
+	msgsRaw, err := executor(ctx, "get_imessages_by_chat_session", map[string]any{"chat_session": name})
+	if err != nil {
+		return fmt.Errorf("get messages: %w", err)
+	}
+	emailsRaw, err := executor(ctx, "get_emails_by_contact", map[string]any{"name": name})
+	if err != nil {
+		return fmt.Errorf("get emails: %w", err)
+	}
+
+	// Tools return []map[string]any, not []any; convert so we can append email entries
+	var msgs []any
+	switch v := msgsRaw["messages"].(type) {
+	case []map[string]any:
+		for _, m := range v {
+			msgs = append(msgs, m)
+		}
+	case []any:
+		msgs = v
+	}
+	if msgs == nil {
+		msgs = []any{}
+	}
+	var emails []any
+	switch v := emailsRaw["emails"].(type) {
+	case []map[string]any:
+		for _, e := range v {
+			emails = append(emails, e)
+		}
+	case []any:
+		emails = v
+	}
+	if emails == nil {
+		emails = []any{}
+	}
+
+	// Convert emails to message format and append (match Python)
+	for _, e := range emails {
+		em, ok := e.(map[string]any)
+		if !ok {
+			continue
+		}
+		plainText, _ := em["plain_text"].(string)
+		from, _ := em["from_address"].(string)
+		to, _ := em["to_addresses"].(string)
+		subj, _ := em["subject"].(string)
+		date := em["date"]
+		id := em["id"]
+		if plainText != "" && from != "" && to != "" && subj != "" && date != nil && id != nil {
+			msgs = append(msgs, map[string]any{
+				"id":           id,
+				"message_date": date,
+				"sender_name":  from,
+				"sender_id":    from,
+				"type":         "email",
+				"text":         plainText,
+				"service":      "email",
+			})
+		}
+	}
+
+	// Chunk by ~800KB (Python uses asizeof ~800000)
+	const chunkBytes = 800_000
+	var chunks [][]any
+	var current []any
+	var currentSize int
+	for _, m := range msgs {
+		b, _ := json.Marshal(m)
+		sz := len(b) + 50
+		if currentSize+sz > chunkBytes && len(current) > 0 {
+			chunks = append(chunks, current)
+			current = nil
+			currentSize = 0
+		}
+		current = append(current, m)
+		currentSize += sz
+	}
+	if len(current) > 0 {
+		chunks = append(chunks, current)
+	}
+
+	// Resolve provider: prefer requested, default gemini, fallback claude if gemini unavailable
+	if provider == "" {
+		provider = "gemini"
+	}
+	if provider == "claude" && (s.claudeProvider == nil || !s.claudeProvider.IsAvailable()) {
+		provider = "gemini" // fallback
+	}
+	if provider == "gemini" && (s.geminiProvider == nil || !s.geminiProvider.IsAvailable()) {
+		provider = "claude" // fallback
+	}
+
+	type simpleGen interface {
+		SimpleGenerate(context.Context, string) (string, error)
+	}
+	var ai simpleGen
+	switch provider {
+	case "claude":
+		if cp, ok := s.claudeProvider.(*appai.ClaudeProvider); ok && cp != nil {
+			ai = cp
+		}
+	case "gemini":
+		if gp, ok := s.geminiProvider.(*appai.GeminiProvider); ok && gp != nil {
+			ai = gp
+		}
+	}
+	if ai == nil {
+		return fmt.Errorf("no AI provider available for complete profile (gemini or claude API key required)")
+	}
+
+	var interimSummary string
+	total := len(chunks)
+	for i, chunk := range chunks {
+		chunkMap := map[string]any{"messages": chunk}
+		data, _ := json.Marshal(chunkMap)
+		prompt := fmt.Sprintf(`You are a helpful assistant that summarizes communication patterns, relationships and psychological profiles in multiple steps.
+You will be given a list of messages and an interim summary. Summarize based on the interim summary.
+Build on the interim summary—do not replace it. Return the next cumulative interim summary.
+
+There will be %d chunks total. This is chunk %d.
+
+Interim summary so far:
+%s
+
+Data to process:
+%s`, total, i+1, interimSummary, string(data))
+
+		out, err := ai.SimpleGenerate(ctx, prompt)
+		if err != nil {
+			return fmt.Errorf("summarize chunk %d/%d: %w", i+1, total, err)
+		}
+		interimSummary = out
+	}
+
+	if err := s.cpRepo.Upsert(ctx, name, interimSummary); err != nil {
+		return fmt.Errorf("save profile: %w", err)
+	}
+	return nil
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

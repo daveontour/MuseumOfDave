@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -348,11 +349,12 @@ func (h *ChatHandler) CompleteProfileDelete(w http.ResponseWriter, r *http.Reque
 }
 
 // CompleteProfileStart handles POST /chat/complete-profile.
-// Starts background profile generation. AI generation is not yet implemented in Go;
-// returns success so the frontend doesn't break, but no profile is actually generated.
+// Starts background profile generation using messages and emails for the contact.
+// Provider (gemini or claude) is optional; defaults to gemini.
 func (h *ChatHandler) CompleteProfileStart(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		FullName string `json:"full_name"`
+		Provider string `json:"provider"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
@@ -363,8 +365,12 @@ func (h *ChatHandler) CompleteProfileStart(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "full_name is required")
 		return
 	}
+	provider := strings.TrimSpace(strings.ToLower(req.Provider))
 	go func() {
-		log.Printf("[complete_profile] AI generation for '%s' not yet implemented in Go", name)
+		ctx := context.Background()
+		if err := h.svc.GenerateCompleteProfile(ctx, name, provider); err != nil {
+			log.Printf("[complete_profile] Error for '%s': %v", name, err)
+		}
 	}()
 	writeJSON(w, map[string]any{
 		"status":  "submitted",

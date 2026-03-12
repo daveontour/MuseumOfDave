@@ -31,6 +31,32 @@ func NewGeminiProvider(apiKey, modelName string) *GeminiProvider {
 
 func (p *GeminiProvider) IsAvailable() bool { return p != nil }
 
+// SimpleGenerate sends a prompt to Gemini without tools. Returns the response text.
+// Used for summarization and other tasks that don't need tool-calling.
+func (p *GeminiProvider) SimpleGenerate(ctx context.Context, prompt string) (string, error) {
+	if p == nil || p.apiKey == "" {
+		return "", fmt.Errorf("gemini: not configured")
+	}
+	body := map[string]any{
+		"contents": []map[string]any{
+			{"role": "user", "parts": []map[string]any{{"text": prompt}}},
+		},
+		"generationConfig": map[string]any{"temperature": 0.2},
+	}
+	resp, err := geminiPost(ctx, p.apiKey, p.modelName, body)
+	if err != nil {
+		return "", err
+	}
+	parts := geminiExtractParts(resp)
+	var textParts []string
+	for _, part := range parts {
+		if t, ok := part["text"].(string); ok && t != "" {
+			textParts = append(textParts, t)
+		}
+	}
+	return strings.TrimSpace(strings.Join(textParts, " ")), nil
+}
+
 // GenerateResponse calls Gemini with a tool-calling loop.
 func (p *GeminiProvider) GenerateResponse(
 	ctx context.Context,

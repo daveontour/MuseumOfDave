@@ -188,14 +188,30 @@ body {
     color: #19264d;
 }
 
-.top-bar .hamburger-btn {
+.top-bar .hamburger-btn,
+.top-bar .top-bar-guide-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background-color: rgba(255, 255, 255, 0.2);
     color: #fff;
     padding: 6px 12px;
     border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 1.25rem;
+    min-width: 36px;
+    min-height: 36px;
+    box-sizing: border-box;
 }
 
-.top-bar .hamburger-btn:hover {
+.top-bar .hamburger-btn:hover,
+.top-bar .top-bar-guide-btn:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+    color: #fff;
+}
+
+.top-bar .top-bar-guide-btn:hover {
     background-color: rgba(255, 255, 255, 0.3);
     color: #fff;
 }
@@ -267,8 +283,8 @@ body {
 
 .sidebar button {
     padding: 10px 15px;
-    background-color: #dadfe0;
-    color: gray;
+    background-color: #5c8dd4;
+    color: white;
     border: none;
     border-radius: 4px;
     cursor: pointer;
@@ -277,6 +293,7 @@ body {
 }
 
 .sidebar button:hover {
+    background-color: #64748b;
     color: white;
 }
 
@@ -305,12 +322,12 @@ body {
 }
 
 .sidebar-settings-btn {
-    background-color: #19264d !important;
-    color: rgba(255, 255, 255, 0.9) !important;
+    background-color: #3d5a73 !important;
+    color: rgba(255, 255, 255, 0.95) !important;
 }
 
 .sidebar-settings-btn:hover {
-    background-color: #253a6d !important;
+    background-color: #4a6b8a !important;
 }
 
 .header-container {
@@ -347,15 +364,50 @@ body {
 }
 
 /* --- Chat Area Specifics --- */
+@keyframes wave-flow {
+    0%   { background-position-x: 0; }
+    100% { background-position-x: 400px; }
+}
+
+.chat-box-wrapper {
+    flex-grow: 1;
+    position: relative;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 #chat-box {
     flex-grow: 1;
     overflow-y: auto;
-    background-color: #e6f3ff;
+    background: linear-gradient(160deg, #e8f4fc 0%, #daeaf8 35%, #c8e0f4 70%, #b8d8f0 100%);
     border-radius: 8px;
     padding: 20px;
     padding-top: 50px; /* Add space for the fixed button */
     display: flex;
     flex-direction: column;
+    position: relative;
+}
+
+.chat-wave-pinned {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 180px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 120' preserveAspectRatio='none'%3E%3Cpath fill='rgba(255,255,255,0.15)' d='M0,60 C100,120 300,0 400,60 L400,120 L0,120 Z'%3E%3C/path%3E%3Cpath fill='rgba(255,255,255,0.08)' d='M0,80 C133,30 267,110 400,80 L400,120 L0,120 Z'%3E%3C/path%3E%3C/svg%3E");
+    background-size: 400px 180px;
+    background-repeat: repeat-x;
+    background-position: 0 bottom;
+    animation: wave-flow 12s linear infinite;
+    pointer-events: none;
+    z-index: 1;
+    border-radius: 0 0 8px 8px;
+}
+
+#chat-box > * {
+    position: relative;
+    z-index: 1;
 }
 
 /* Adjust first message in chat to not have extra top margin */
