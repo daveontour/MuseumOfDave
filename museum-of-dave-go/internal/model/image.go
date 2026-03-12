@@ -130,6 +130,34 @@ type FacebookAlbumResponse struct {
 	ImageCount    int     `json:"image_count"`
 }
 
+// FacebookPostListItem is the shape for a single post in GET /facebook/posts.
+type FacebookPostListItem struct {
+	ID         int64      `json:"id"`
+	Timestamp  *time.Time  `json:"timestamp"`
+	Title      *string    `json:"title"`
+	PostText   *string    `json:"post_text"`
+	ExternalURL *string   `json:"external_url"`
+	PostType   *string    `json:"post_type"`
+	MediaCount int        `json:"media_count"`
+}
+
+// FacebookPostsResponse is the paginated response for GET /facebook/posts.
+type FacebookPostsResponse struct {
+	Total    int                     `json:"total"`
+	Page     int                     `json:"page"`
+	PageSize int                     `json:"page_size"`
+	Posts    []FacebookPostListItem  `json:"posts"`
+}
+
+// FacebookPostMediaItem is the shape for a media item in GET /facebook/posts/{id}/media.
+type FacebookPostMediaItem struct {
+	ID          int64   `json:"id"`
+	Title       *string `json:"title"`
+	Description *string `json:"description"`
+	MediaType   *string `json:"media_type"`
+	CreatedAt   *string `json:"created_at"`
+}
+
 // AlbumImageItem is the shape returned by GET /facebook/albums/{id}/images.
 type AlbumImageItem struct {
 	ID        int64   `json:"id"`

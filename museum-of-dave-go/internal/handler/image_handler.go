@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/museum-of-dave/app/internal/model"
+	"github.com/museum-of-dave/app/internal/repository"
 	"github.com/museum-of-dave/app/internal/service"
 )
 
@@ -41,8 +42,12 @@ func (h *ImageHandler) RegisterRoutes(r chi.Router) {
 	// Location map endpoint
 	r.Get("/getLocations", h.GetLocations)
 
-	// Facebook album read endpoints
+	// Facebook album and posts read endpoints
 	r.Get("/facebook/albums", h.GetFacebookAlbums)
+	r.Get("/facebook/posts", h.GetFacebookPosts)
+	// /facebook/posts/media/{media_id} must come before /facebook/posts/{post_id}/media
+	r.Get("/facebook/posts/media/{media_id}", h.GetFacebookPostMediaContent)
+	r.Get("/facebook/posts/{post_id}/media", h.GetFacebookPostMedia)
 	// Note: /facebook/albums/images/{id} must come before /facebook/albums/{album_id}/images
 	// to avoid chi treating "images" as an album_id value.
 	r.Get("/facebook/albums/images/{image_id}", h.GetAlbumImageContent)
@@ -261,7 +266,86 @@ func (h *ImageHandler) GetMetadata(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp)
 }
 
-// ── /facebook/albums/* ────────────────────────────────────────────────────────
+// ── /facebook/albums/* and /facebook/posts ─────────────────────────────────────
+
+func (h *ImageHandler) GetFacebookPosts(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	p := repository.GetFacebookPostsParams{
+		Page:     1,
+		PageSize: 50,
+	}
+	if v := q.Get("search"); v != "" {
+		p.Search = v
+	}
+	if v := q.Get("page"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 {
+			p.Page = n
+		}
+	}
+	if v := q.Get("page_size"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 {
+			if n > 200 {
+				n = 200
+			}
+			p.PageSize = n
+		}
+	}
+	if v := q.Get("post_ids"); v != "" {
+		for _, s := range strings.Split(v, ",") {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				continue
+			}
+			if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+				p.PostIDs = append(p.PostIDs, n)
+			}
+		}
+	}
+
+	resp, err := h.svc.GetFacebookPosts(r.Context(), p)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("error retrieving Facebook posts: %s", err))
+		return
+	}
+	writeJSON(w, resp)
+}
+
+func (h *ImageHandler) GetFacebookPostMediaContent(w http.ResponseWriter, r *http.Request) {
+	mediaID, ok := parseImageID(w, r, "media_id")
+	if !ok {
+		return
+	}
+
+	content, err := h.svc.GetPostMediaContent(r.Context(), mediaID)
+	if err != nil {
+		if strings.Contains(err.Error(), "no image data") {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("media item %d has no image data", mediaID))
+			return
+		}
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("error retrieving media: %s", err))
+		return
+	}
+	if content == nil {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("media item %d not found or not linked to a post", mediaID))
+		return
+	}
+
+	serveBinaryContent(w, content)
+}
+
+func (h *ImageHandler) GetFacebookPostMedia(w http.ResponseWriter, r *http.Request) {
+	postID, ok := parseImageID(w, r, "post_id")
+	if !ok {
+		return
+	}
+
+	items, err := h.svc.GetPostMedia(r.Context(), postID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("error retrieving post media: %s", err))
+		return
+	}
+	writeJSON(w, items)
+}
 
 func (h *ImageHandler) GetFacebookAlbums(w http.ResponseWriter, r *http.Request) {
 	albums, err := h.svc.GetFacebookAlbums(r.Context())

@@ -132,6 +132,9 @@
                 </div>
                 <div class="sidebar-spacer" aria-hidden="true"></div>
                 <div class="sidebar-bottom-tile">
+                    <button type="button" class="more-options-btn sidebar-settings-btn" id="data-import-sidebar-btn">
+                        <i class="fas fa-database"></i> Data Import
+                    </button>
                     <button type="button" class="more-options-btn sidebar-settings-btn" id="guide-sidebar-btn">
                         <i class="fas fa-book"></i> Guide
                     </button>
@@ -1089,6 +1092,81 @@
                     </section>
                 </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Import Modal -->
+        <div id="data-import-modal" class="modal" style="display: none; position: fixed; z-index: 4000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center;">
+            <div class="modal-content" style="max-width: 90vw; width: 90vw; height: 85vh; max-height: 85vh; padding: 0; display: flex; flex-direction: column; overflow: hidden;" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h2>Data Import</h2>
+                    <button class="modal-close-btn" id="close-data-import-modal">&times;</button>
+                </div>
+                <div style="padding: 20px; overflow-y: auto; flex: 1; display: flex; flex-direction: column;">
+                    <h1 style="margin: 0 0 8px 0; font-size: 1.75rem;">Data Import</h1>
+                    <p style="margin: 0 0 20px 0; font-size: 0.95em; color: #64748b; line-height: 1.4;">Click a tile below to run an import. Each import may prompt for a directory path or other parameters before starting.</p>
+                    <section class="config-section" style="display: flex; flex-direction: column; height: 100%; flex: 1;">
+                        <div style="flex: 1; overflow: auto;">
+                            <div class="data-import-tiles" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
+                                <div class="import-control-tile" data-import="email_processing" title="Click to run">
+                                    <div class="import-tile-title">Emails from GMail</div>
+                                    <div data-import-last-run="email_processing" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import emails from <strong>Gmail</strong>. Choose folders or process all, and optionally import only new messages.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="imap_processing" title="Click to run">
+                                    <div class="import-tile-title">Emails from other IMAP sources</div>
+                                    <div data-import-last-run="imap_processing" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import emails from other IMAP sources. Choose folders or process all, and optionally import only new messages.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="imessage" title="Click to run">
+                                    <div class="import-tile-title">iMessage and SMS</div>
+                                    <div data-import-last-run="imessage" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import iMessage and SMS conversations from a directory containing conversation subdirectories created by iMazing or Android backup.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="whatsapp" title="Click to run">
+                                    <div class="import-tile-title">WhatsApp Messages</div>
+                                    <div data-import-last-run="whatsapp" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import messages from a WhatsApp export directory (e.g. from iMazing or Android backup).</div>
+                                </div>
+                                <div style="grid-column: 1 / -1; height: 15px;"></div>
+                                <div class="import-control-tile" data-import="facebook_all" title="Click to run">
+                                    <div class="import-tile-title">Facebook Archive</div>
+                                    <div data-import-last-run="facebook_all" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import Messenger, albums, places, and posts in parallel from a single Facebook export directory.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="instagram" title="Click to run">
+                                    <div class="import-tile-title">Instagram Archive</div>
+                                    <div data-import-last-run="instagram" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Import Instagram direct messages from a Instagram data export directory.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="filesystem" title="Click to run">
+                                    <div class="import-tile-title">Picture and Images</div>
+                                    <div data-import-last-run="filesystem" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Scan directories for images and add them to the media library. Choose reference-only to leave files on disk, or full import to copy into the database.</div>
+                                </div>
+                                <div class="import-control-tile" data-import="thumbnails" title="Click to run">
+                                    <div class="import-tile-title">Generate Thumbnails and Location</div>
+                                    <div data-import-last-run="thumbnails" class="import-tile-last-run"></div>
+                                    <div class="import-tile-explanation">Generate thumbnails and extract location metadata from images.</div>
+                                </div>
+                                <div style="grid-column: 1 / -1; height: 15px;"></div>
+                                <div class="import-control-tile data-import-dialog-tile" data-open-tab="reference-documents" title="Click to open">
+                                    <div class="import-tile-title">Reference Documents</div>
+                                    <div class="import-tile-explanation">Upload and manage reference documents (PDF, Word, images, text) that provide context for the AI. Upload a biography and other documents.</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 15px; display: flex; align-items: stretch; gap: 10px;">
+                            <div class="import-controls-status-box" style="flex: 1; padding: 12px 15px; background-color: #2d3748; border-radius: 6px; border: 1px solid #4a5568; font-size: 0.95em; line-height: 1.5; height: 4.5em; overflow-y: auto; color: #fff;">
+                                <span class="import-controls-status-text" style="color: #fff;">Idle</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;">
+                                <button type="button" class="import-controls-reset-btn modal-btn modal-btn-secondary" title="Reset Import Controls to initial state"><i class="fas fa-undo"></i> Reset</button>
+                                <button type="button" class="import-controls-cancel-btn modal-btn modal-btn-secondary" disabled title="Cancel running import"><i class="fas fa-stop"></i> Cancel</button>
+                            </div>
+                        </div>
+                    </section>
                 </div>
             </div>
         </div>

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/museum-of-dave/app/internal/importstorage"
 	"github.com/museum-of-dave/app/internal/import/utils"
+	"github.com/museum-of-dave/app/internal/importstorage"
 )
 
 var imageExtensions = map[string]bool{
@@ -60,15 +60,15 @@ func shouldExcludeDirectory(dirPath string, dirName string, patterns []string) b
 
 // ImportStats holds statistics about the import process
 type ImportStats struct {
-	TotalFiles     int
-	FilesProcessed int
-	ImagesImported int
-	ImagesUpdated  int
+	TotalFiles       int
+	FilesProcessed   int
+	ImagesImported   int
+	ImagesUpdated    int
 	ImagesReferenced int
-	Errors         int
-	ErrorMessages  []string
-	CurrentFile    string
-	mu             sync.Mutex
+	Errors           int
+	ErrorMessages    []string
+	CurrentFile      string
+	mu               sync.Mutex
 }
 
 func (s *ImportStats) copyStats() ImportStats {
@@ -185,6 +185,8 @@ func ImportImagesFromDirectories(
 
 	workChan := make(chan imageWork, len(workItems))
 	var wg sync.WaitGroup
+
+	numWorkers = 4
 
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)

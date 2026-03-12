@@ -28,6 +28,14 @@ const mediaItemColumns = `
 	region, is_personal, is_business, is_social, is_promotional, is_spam,
 	is_important, use_by_ai, is_referenced, source, source_reference`
 
+// mediaItemColumnsQualified prefixes columns with mi. for use in JOINs with album_media (which also has id).
+const mediaItemColumnsQualified = `
+	mi.id, mi.media_blob_id, mi.description, mi.title, mi.author, mi.tags, mi.categories, mi.notes,
+	mi.available_for_task, mi.media_type, mi.processed, mi.created_at, mi.updated_at, mi.embedding,
+	mi.year, mi.month, mi.latitude, mi.longitude, mi.altitude, mi.rating, mi.has_gps, mi.google_maps_url,
+	mi.region, mi.is_personal, mi.is_business, mi.is_social, mi.is_promotional, mi.is_spam,
+	mi.is_important, mi.use_by_ai, mi.is_referenced, mi.source, mi.source_reference`
+
 // GetMediaItemByID returns a media_items row by primary key.
 func (r *ImageRepo) GetMediaItemByID(ctx context.Context, id int64) (*model.MediaItem, error) {
 	row := r.pool.QueryRow(ctx,
@@ -485,7 +493,7 @@ func (r *ImageRepo) GetFacebookAlbums(ctx context.Context) ([]model.FacebookAlbu
 // GetAlbumImages returns media_items linked to an album, ordered by created_at ASC.
 func (r *ImageRepo) GetAlbumImages(ctx context.Context, albumID int64) ([]*model.MediaItem, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT `+mediaItemColumns+`
+		`SELECT `+mediaItemColumnsQualified+`
 		 FROM media_items mi
 		 JOIN album_media am ON mi.id = am.media_item_id
 		 WHERE am.album_id = $1
@@ -500,12 +508,127 @@ func (r *ImageRepo) GetAlbumImages(ctx context.Context, albumID int64) ([]*model
 // GetAlbumImageByID returns a media_items row that is linked to any album.
 func (r *ImageRepo) GetAlbumImageByID(ctx context.Context, imageID int64) (*model.MediaItem, error) {
 	row := r.pool.QueryRow(ctx,
-		`SELECT `+mediaItemColumns+`
+		`SELECT `+mediaItemColumnsQualified+`
 		 FROM media_items mi
 		 JOIN album_media am ON mi.id = am.media_item_id
 		 WHERE mi.id = $1
 		 LIMIT 1`, imageID)
 	return scanMediaItem(row)
+}
+
+// GetFacebookPostsParams holds optional filters for GetFacebookPosts.
+type GetFacebookPostsParams struct {
+	Search   string  // ILIKE on post_text and title
+	PostIDs  []int64 // filter to these IDs
+	Page     int     // 1-based
+	PageSize int     // 1-200
+}
+
+// GetFacebookPosts returns paginated Facebook posts with media count.
+func (r *ImageRepo) GetFacebookPosts(ctx context.Context, p GetFacebookPostsParams) (*model.FacebookPostsResponse, error) {
+	if p.Page < 1 {
+		p.Page = 1
+	}
+	if p.PageSize < 1 {
+		p.PageSize = 50
+	}
+	if p.PageSize > 200 {
+		p.PageSize = 200
+	}
+
+	baseQuery := `
+		SELECT fp.id, fp.timestamp, fp.title, fp.post_text, fp.external_url, fp.post_type,
+		       COUNT(DISTINCT pm.id)::int AS media_count
+		FROM facebook_posts fp
+		LEFT JOIN post_media pm ON fp.id = pm.post_id
+	`
+
+	var args []any
+	var conds []string
+	argNum := 1
+
+	if p.Search != "" {
+		conds = append(conds, fmt.Sprintf("(fp.post_text ILIKE $%d OR fp.title ILIKE $%d)", argNum, argNum))
+		args = append(args, "%"+p.Search+"%")
+		argNum++
+	}
+	if len(p.PostIDs) > 0 {
+		conds = append(conds, fmt.Sprintf("fp.id = ANY($%d)", argNum))
+		args = append(args, p.PostIDs)
+		argNum++
+	}
+
+	if len(conds) > 0 {
+		baseQuery += " WHERE " + strings.Join(conds, " AND ")
+	}
+	baseQuery += " GROUP BY fp.id, fp.timestamp, fp.title, fp.post_text, fp.external_url, fp.post_type"
+	baseQuery += " ORDER BY fp.timestamp DESC NULLS LAST"
+
+	// Count total
+	countQuery := `SELECT COUNT(*) FROM (` + baseQuery + `) AS sub`
+	var total int
+	if err := r.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, fmt.Errorf("GetFacebookPosts count: %w", err)
+	}
+
+	// Fetch page
+	offset := (p.Page - 1) * p.PageSize
+	args = append(args, p.PageSize, offset)
+	pageQuery := baseQuery + fmt.Sprintf(" LIMIT $%d OFFSET $%d", argNum, argNum+1)
+
+	rows, err := r.pool.Query(ctx, pageQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("GetFacebookPosts: %w", err)
+	}
+	defer rows.Close()
+
+	var posts []model.FacebookPostListItem
+	for rows.Next() {
+		var p model.FacebookPostListItem
+		if err := rows.Scan(&p.ID, &p.Timestamp, &p.Title, &p.PostText, &p.ExternalURL, &p.PostType, &p.MediaCount); err != nil {
+			return nil, err
+		}
+		posts = append(posts, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if posts == nil {
+		posts = []model.FacebookPostListItem{}
+	}
+
+	return &model.FacebookPostsResponse{
+		Total:    total,
+		Page:     p.Page,
+		PageSize: p.PageSize,
+		Posts:    posts,
+	}, nil
+}
+
+// GetPostMediaByID returns a media_items row that is linked to a Facebook post via post_media.
+func (r *ImageRepo) GetPostMediaByID(ctx context.Context, mediaID int64) (*model.MediaItem, error) {
+	row := r.pool.QueryRow(ctx,
+		`SELECT `+mediaItemColumnsQualified+`
+		 FROM media_items mi
+		 JOIN post_media pm ON mi.id = pm.media_item_id
+		 WHERE mi.id = $1
+		 LIMIT 1`, mediaID)
+	return scanMediaItem(row)
+}
+
+// GetPostMedia returns media_items linked to a Facebook post via post_media, ordered by created_at ASC.
+func (r *ImageRepo) GetPostMedia(ctx context.Context, postID int64) ([]*model.MediaItem, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT `+mediaItemColumnsQualified+`
+		 FROM media_items mi
+		 JOIN post_media pm ON mi.id = pm.media_item_id
+		 WHERE pm.post_id = $1
+		 ORDER BY mi.created_at ASC`, postID)
+	if err != nil {
+		return nil, fmt.Errorf("GetPostMedia: %w", err)
+	}
+	defer rows.Close()
+	return scanMediaItems(rows)
 }
 
 // ── scanners ──────────────────────────────────────────────────────────────────

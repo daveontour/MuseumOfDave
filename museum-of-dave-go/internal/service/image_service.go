@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -247,6 +248,17 @@ func (s *ImageService) GetImageContent(ctx context.Context, id int64, idType str
 		}
 	}
 
+	// Convert HEIC to JPEG for browser compatibility
+	if isHeic(contentType, filename) {
+		jpgData, err := convertHeicToJpeg(data)
+		if err != nil {
+			return nil, fmt.Errorf("heic conversion: %w", err)
+		}
+		data = jpgData
+		contentType = "image/jpeg"
+		filename = strings.TrimSuffix(filename, filepath.Ext(filename)) + ".jpg"
+	}
+
 	return &model.ImageContent{
 		Data:        data,
 		ContentType: contentType,
@@ -264,6 +276,69 @@ func (s *ImageService) GetFacebookAlbums(ctx context.Context) ([]model.FacebookA
 		albums = []model.FacebookAlbumResponse{}
 	}
 	return albums, nil
+}
+
+// GetFacebookPosts returns paginated Facebook posts with optional search and post_ids filter.
+func (s *ImageService) GetFacebookPosts(ctx context.Context, p repository.GetFacebookPostsParams) (*model.FacebookPostsResponse, error) {
+	return s.repo.GetFacebookPosts(ctx, p)
+}
+
+// GetPostMediaContent returns image bytes for a Facebook post media item.
+// Returns nil, nil if not found or not linked to a post.
+func (s *ImageService) GetPostMediaContent(ctx context.Context, mediaID int64) (*model.ImageContent, error) {
+	item, err := s.repo.GetPostMediaByID(ctx, mediaID)
+	if err != nil {
+		return nil, err
+	}
+	if item == nil {
+		return nil, nil
+	}
+
+	blob, err := s.repo.GetBlobByID(ctx, item.MediaBlobID)
+	if err != nil {
+		return nil, err
+	}
+	if blob == nil || len(blob.ImageData) == 0 {
+		return nil, fmt.Errorf("no image data")
+	}
+
+	contentType := "image/jpeg"
+	if item.MediaType != nil && *item.MediaType != "" {
+		contentType = *item.MediaType
+	} else if item.Title != nil {
+		if ct := guessMimeFromFilename(*item.Title); ct != "" {
+			contentType = ct
+		}
+	}
+
+	return &model.ImageContent{
+		Data:        blob.ImageData,
+		ContentType: contentType,
+	}, nil
+}
+
+// GetPostMedia returns media items for a Facebook post.
+func (s *ImageService) GetPostMedia(ctx context.Context, postID int64) ([]model.FacebookPostMediaItem, error) {
+	items, err := s.repo.GetPostMedia(ctx, postID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]model.FacebookPostMediaItem, len(items))
+	for i, item := range items {
+		var createdAt *string
+		if item.CreatedAt != nil {
+			s := item.CreatedAt.Format("2006-01-02T15:04:05.999999")
+			createdAt = &s
+		}
+		result[i] = model.FacebookPostMediaItem{
+			ID:          item.ID,
+			Title:       item.Title,
+			Description: item.Description,
+			MediaType:   item.MediaType,
+			CreatedAt:   createdAt,
+		}
+	}
+	return result, nil
 }
 
 // GetAlbumImages returns the image list for a Facebook album.
@@ -386,4 +461,53 @@ func guessMimeFromFilename(name string) string {
 	default:
 		return ""
 	}
+}
+
+// isHeic returns true if the content type or filename indicates HEIC/HEIF.
+func isHeic(contentType, filename string) bool {
+	ct := strings.ToLower(contentType)
+	if ct == "image/heic" || ct == "image/heif" {
+		return true
+	}
+	ext := strings.ToLower(filepath.Ext(filename))
+	return ext == ".heic" || ext == ".heif"
+}
+
+// convertHeicToJpeg uses ImageMagick to convert HEIC data to JPEG.
+// Returns the JPEG bytes or an error if conversion fails.
+func convertHeicToJpeg(data []byte) ([]byte, error) {
+	tmpIn, err := os.CreateTemp("", "heic-*.heic")
+	if err != nil {
+		return nil, fmt.Errorf("create temp heic file: %w", err)
+	}
+	tmpInPath := tmpIn.Name()
+	defer os.Remove(tmpInPath)
+
+	if _, err := tmpIn.Write(data); err != nil {
+		tmpIn.Close()
+		return nil, fmt.Errorf("write temp heic file: %w", err)
+	}
+	if err := tmpIn.Close(); err != nil {
+		return nil, fmt.Errorf("close temp heic file: %w", err)
+	}
+
+	tmpOut, err := os.CreateTemp("", "heic-*.jpg")
+	if err != nil {
+		return nil, fmt.Errorf("create temp jpg file: %w", err)
+	}
+	tmpOutPath := tmpOut.Name()
+	tmpOut.Close()
+	defer os.Remove(tmpOutPath)
+
+	// magick input.heic -quality 95 output.jpg
+	cmd := exec.Command("magick", tmpInPath, "-quality", "95", tmpOutPath)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("imagemagick convert: %w: %s", err, string(out))
+	}
+
+	jpgData, err := os.ReadFile(tmpOutPath)
+	if err != nil {
+		return nil, fmt.Errorf("read converted jpg: %w", err)
+	}
+	return jpgData, nil
 }

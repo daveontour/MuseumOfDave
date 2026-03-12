@@ -2162,6 +2162,9 @@ body {
     margin-bottom: 6px;
     padding-right: 24px;
 }
+#data-import-modal .import-tile-title {
+    font-size: 1.575rem; /* 50% larger than 1.05rem */
+}
 .import-tile-last-run {
     font-size: 0.85em;
     color: #64748b;

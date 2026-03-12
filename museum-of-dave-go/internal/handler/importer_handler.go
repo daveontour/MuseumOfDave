@@ -10,13 +10,19 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	facebookalbumsimport "github.com/museum-of-dave/app/internal/import/facebookalbums"
+	facebookallimport "github.com/museum-of-dave/app/internal/import/facebookall"
 	facebookimport "github.com/museum-of-dave/app/internal/import/facebook"
+	facebookplacesimport "github.com/museum-of-dave/app/internal/import/facebookplaces"
+	facebookpostsimport "github.com/museum-of-dave/app/internal/import/facebookposts"
 	filesystemimport "github.com/museum-of-dave/app/internal/import/filesystem"
 	imessageimport "github.com/museum-of-dave/app/internal/import/imessage"
 	instagramimport "github.com/museum-of-dave/app/internal/import/instagram"
+	thumbnailsimport "github.com/museum-of-dave/app/internal/import/thumbnails"
 	whatsappimport "github.com/museum-of-dave/app/internal/import/whatsapp"
 	"github.com/museum-of-dave/app/internal/importstorage"
 	"github.com/museum-of-dave/app/internal/importer"
@@ -158,7 +164,7 @@ func (h *ImporterHandler) RegisterRoutes(r chi.Router) {
 
 	// Thumbnails
 	r.Post("/images/process-thumbnails", h.ThumbnailsStart)
-	r.Post("/images/process-thumbnails/async", h.ThumbnailsStart) // same handler
+	r.Post("/images/process-thumbnails/async", h.ThumbnailsStartAsync)
 	r.Get("/images/process-thumbnails/stream", h.ThumbnailsStream)
 	r.Post("/images/process-thumbnails/cancel", h.ThumbnailsCancel)
 	r.Get("/images/process-thumbnails/status", h.ThumbnailsStatus)
@@ -409,32 +415,105 @@ func (h *ImporterHandler) ThumbnailsStart(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if h.pool == nil {
+		writeError(w, http.StatusServiceUnavailable, "Thumbnail processing not configured")
+		return
+	}
 
 	reprocess := r.URL.Query().Get("reprocess") == "true" || r.URL.Query().Get("reprocess") == "1"
 
 	thumbnailsJob.Start()
 	thumbnailsJob.UpdateState(map[string]any{
-		"status": "in_progress", "status_line": "Starting import-processor...",
+		"status": "in_progress", "status_line": "Starting thumbnail processing...",
 		"phase": nil, "phase1_scanned": 0, "phase1_updated": 0,
 		"phase2_scanned": 0, "phase2_total": 0, "phase2_processed": 0, "phase2_errors": 0,
 	})
-	thumbnailsJob.Broadcast("status", map[string]any{"status_line": "Starting import-processor..."})
+	thumbnailsJob.Broadcast("status", map[string]any{"status_line": "Starting thumbnail processing..."})
 
-	args := []string{"thumbnails"}
-	if reprocess {
-		args = append(args, "--reprocess")
-	}
-
-	runJob(thumbnailsJob, args, func(stdout string) {
-		total, processed, errs, msg := parseThumbnailsStdout(stdout)
-		thumbnailsJob.UpdateState(map[string]any{
-			"status": "completed", "status_line": msg,
-			"phase2_total": total, "phase2_processed": processed, "phase2_errors": errs,
-		})
-		thumbnailsJob.Broadcast("completed", thumbnailsJob.GetState())
-	})
+	go runThumbnailsInProcess(h.pool, thumbnailsJob, reprocess)
 
 	writeJSON(w, map[string]any{"message": "Thumbnail processing started", "status": "started"})
+}
+
+func (h *ImporterHandler) ThumbnailsStartAsync(w http.ResponseWriter, r *http.Request) {
+	if err := thumbnailsJob.AssertNotRunning(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if h.pool == nil {
+		writeError(w, http.StatusServiceUnavailable, "Thumbnail processing not configured")
+		return
+	}
+
+	reprocess := r.URL.Query().Get("reprocess") == "true" || r.URL.Query().Get("reprocess") == "1"
+
+	thumbnailsJob.Start()
+	thumbnailsJob.UpdateState(map[string]any{
+		"status": "in_progress", "status_line": "Starting thumbnail processing...",
+		"phase": nil, "phase1_scanned": 0, "phase1_updated": 0,
+		"phase2_scanned": 0, "phase2_total": 0, "phase2_processed": 0, "phase2_errors": 0,
+	})
+	thumbnailsJob.Broadcast("status", map[string]any{"status_line": "Starting thumbnail processing..."})
+
+	go runThumbnailsInProcess(h.pool, thumbnailsJob, reprocess)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(w).Encode(map[string]any{"status": "accepted"})
+}
+
+func runThumbnailsInProcess(pool *pgxpool.Pool, job *importer.ImportJob, reprocess bool) {
+	ctx := context.Background()
+	defer job.Finish()
+
+	// Region updates before (match Python behavior)
+	_, _ = pool.Exec(ctx, "SELECT update_location_regions()")
+	_, _ = pool.Exec(ctx, "SELECT update_image_location_regions()")
+
+	progressCallback := func(stats thumbnailsimport.ImportStats) {
+		statusLine := fmt.Sprintf("Processing: %d/%d items (%.1f%%) | Processed: %d | Errors: %d",
+			int(stats.Processed), stats.TotalItems,
+			float64(stats.Processed)/float64(max(1, stats.TotalItems))*100,
+			stats.Processed, stats.Errors)
+		job.UpdateState(map[string]any{
+			"phase2_total":     stats.TotalItems,
+			"phase2_processed": stats.Processed,
+			"phase2_errors":   stats.Errors,
+			"status_line":     statusLine,
+		})
+		job.Broadcast("progress", job.GetState())
+	}
+
+	cancelledCheck := func() bool { return job.IsCancelled() }
+
+	stats, err := thumbnailsimport.ProcessThumbnailsAndExif(ctx, pool, reprocess, progressCallback, cancelledCheck)
+
+	// Region updates after (match Python behavior)
+	_, _ = pool.Exec(ctx, "SELECT update_location_regions()")
+	_, _ = pool.Exec(ctx, "SELECT update_image_location_regions()")
+
+	if job.IsCancelled() {
+		job.UpdateState(map[string]any{"status": "cancelled", "status_line": "Processing cancelled."})
+		job.Broadcast("cancelled", job.GetState())
+		return
+	}
+	if err != nil {
+		msg := fmt.Sprintf("import error: %s", err)
+		job.UpdateState(map[string]any{"status": "error", "status_line": msg, "error_message": msg})
+		job.Broadcast("error", job.GetState())
+		return
+	}
+
+	statusLine := fmt.Sprintf("Completed: %d items processed, %d errors",
+		stats.Processed, stats.Errors)
+	job.UpdateState(map[string]any{
+		"status":            "completed",
+		"status_line":       statusLine,
+		"phase2_total":      stats.TotalItems,
+		"phase2_processed":  stats.Processed,
+		"phase2_errors":     stats.Errors,
+	})
+	job.Broadcast("completed", job.GetState())
 }
 
 func (h *ImporterHandler) ThumbnailsStream(w http.ResponseWriter, r *http.Request) {
@@ -616,7 +695,7 @@ func (h *ImporterHandler) FacebookAllStart(w http.ResponseWriter, r *http.Reques
 
 	facebookAllJob.Start()
 	facebookAllJob.UpdateState(map[string]any{
-		"status": "in_progress", "status_line": "Starting import-processor...",
+		"status": "in_progress", "status_line": "Starting Facebook All import...",
 		"conversations": 0, "messages_imported": 0, "messages_created": 0,
 		"messages_updated": 0, "att_found": 0, "att_missing": 0, "messenger_errors": 0,
 		"albums_processed": 0, "albums_imported": 0, "album_images_imported": 0,
@@ -626,20 +705,13 @@ func (h *ImporterHandler) FacebookAllStart(w http.ResponseWriter, r *http.Reques
 		"with_media": 0, "images_imported": 0, "images_found": 0,
 		"images_missing": 0, "posts_errors": 0,
 	})
-	facebookAllJob.Broadcast("status", map[string]any{"status_line": "Starting import-processor..."})
+	facebookAllJob.Broadcast("status", map[string]any{"status_line": "Starting Facebook All import..."})
 
-	args := []string{"facebook-all", "--path", req.DirectoryPath}
+	userName := ""
 	if req.UserName != nil && *req.UserName != "" {
-		args = append(args, "--user-name", *req.UserName)
+		userName = strings.TrimSpace(*req.UserName)
 	}
-
-	runJob(facebookAllJob, args, func(stdout string) {
-		stats := parseFacebookAllStdout(stdout)
-		stats["status"] = "completed"
-		stats["status_line"] = "Import completed"
-		facebookAllJob.UpdateState(stats)
-		facebookAllJob.Broadcast("completed", facebookAllJob.GetState())
-	})
+	go runFacebookAllInProcess(h.pool, h.subjectConfigRepo, facebookAllJob, req.DirectoryPath, userName)
 
 	writeJSON(w, map[string]any{"message": "Facebook All import started", "directory_path": req.DirectoryPath})
 }
@@ -1368,6 +1440,196 @@ func runFacebookInProcess(pool *pgxpool.Pool, subjectRepo *repository.SubjectCon
 	job.Broadcast("completed", job.GetState())
 }
 
+func runFacebookAllInProcess(pool *pgxpool.Pool, subjectRepo *repository.SubjectConfigRepo, job *importer.ImportJob, directoryPath, userName string) {
+	ctx := context.Background()
+	defer job.Finish()
+
+	// Clear all existing Facebook data before re-importing
+	job.UpdateState(map[string]any{"status_line": "Clearing existing Facebook data..."})
+	job.Broadcast("progress", job.GetState())
+	if err := facebookallimport.ClearFacebookAllData(ctx, pool); err != nil {
+		msg := fmt.Sprintf("failed to clear Facebook data: %s", err)
+		job.UpdateState(map[string]any{"status": "error", "status_line": msg, "error_message": msg})
+		job.Broadcast("error", job.GetState())
+		return
+	}
+
+	job.UpdateState(map[string]any{"status_line": "Running parallel imports (Messenger, Albums, Places, Posts)..."})
+	job.Broadcast("progress", job.GetState())
+
+	storage := importstorage.NewMessageStorage(ctx, pool, subjectRepo)
+	exportRoot := directoryPath
+	cancelledCheck := func() bool { return job.IsCancelled() }
+
+	var wg sync.WaitGroup
+	var (
+		messengerStats *facebookimport.ImportStats
+		albumsStats    *facebookalbumsimport.ImportStats
+		placesStats    *facebookplacesimport.ImportStats
+		postsStats     *facebookpostsimport.ImportStats
+		messengerErr   error
+		albumsErr      error
+		placesErr      error
+		postsErr       error
+	)
+
+	// Messenger
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		progressCallback := func(stats facebookimport.ImportStats) {
+			job.UpdateState(map[string]any{
+				"conversations":     stats.ConversationsProcessed,
+				"messages_imported": stats.MessagesImported,
+				"messages_created": stats.MessagesCreated,
+				"messages_updated": stats.MessagesUpdated,
+				"att_found":        stats.AttachmentsFound,
+				"att_missing":      stats.AttachmentsMissing,
+				"messenger_errors": stats.Errors,
+			})
+			job.Broadcast("progress", job.GetState())
+		}
+		messengerStats, messengerErr = facebookimport.ImportFacebookFromDirectory(
+			ctx, storage, directoryPath, progressCallback, cancelledCheck, exportRoot, userName,
+		)
+	}()
+
+	// Albums
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		progressCallback := func(stats facebookalbumsimport.ImportStats) {
+			job.UpdateState(map[string]any{
+				"albums_processed":       stats.AlbumsProcessed,
+				"albums_imported":        stats.AlbumsImported,
+				"album_images_imported":  stats.ImagesImported,
+				"album_images_found":     stats.ImagesFound,
+				"album_images_missing":   stats.ImagesMissing,
+				"albums_errors":          stats.Errors,
+			})
+			job.Broadcast("progress", job.GetState())
+		}
+		albumsStats, albumsErr = facebookalbumsimport.ImportFacebookAlbumsFromDirectory(
+			ctx, pool, directoryPath, progressCallback, cancelledCheck, exportRoot,
+		)
+	}()
+
+	// Places
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		progressCallback := func(stats facebookplacesimport.ImportStats) {
+			job.UpdateState(map[string]any{
+				"places_imported": stats.PlacesImported,
+				"places_created":  stats.PlacesCreated,
+				"places_updated": stats.PlacesUpdated,
+			})
+			job.Broadcast("progress", job.GetState())
+		}
+		placesStats, placesErr = facebookplacesimport.ImportFacebookPlacesFromDirectory(
+			ctx, pool, directoryPath, progressCallback, cancelledCheck,
+		)
+	}()
+
+	// Posts
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		progressCallback := func(stats facebookpostsimport.ImportStats) {
+			job.UpdateState(map[string]any{
+				"posts_processed": stats.PostsProcessed,
+				"posts_imported":  stats.PostsImported,
+				"posts_updated":   stats.PostsUpdated,
+				"with_media":      stats.WithMedia,
+				"images_imported": stats.ImagesImported,
+				"images_found":    stats.ImagesFound,
+				"images_missing":  stats.ImagesMissing,
+				"posts_errors":    stats.Errors,
+			})
+			job.Broadcast("progress", job.GetState())
+		}
+		postsStats, postsErr = facebookpostsimport.ImportFacebookPostsFromPath(
+			ctx, pool, directoryPath, exportRoot, progressCallback, cancelledCheck,
+		)
+	}()
+
+	wg.Wait()
+
+	if job.IsCancelled() {
+		job.UpdateState(map[string]any{"status": "cancelled", "status_line": "Import cancelled."})
+		job.Broadcast("cancelled", job.GetState())
+		return
+	}
+
+	// Build final stats
+	stats := map[string]any{
+		"status": "completed", "status_line": "Import completed",
+		"conversations": 0, "messages_imported": 0, "messages_created": 0,
+		"messages_updated": 0, "att_found": 0, "att_missing": 0, "messenger_errors": 0,
+		"albums_processed": 0, "albums_imported": 0, "album_images_imported": 0,
+		"album_images_found": 0, "album_images_missing": 0, "albums_errors": 0,
+		"places_imported": 0, "places_created": 0, "places_updated": 0,
+		"posts_processed": 0, "posts_imported": 0, "posts_updated": 0,
+		"with_media": 0, "images_imported": 0, "images_found": 0,
+		"images_missing": 0, "posts_errors": 0,
+	}
+	if messengerStats != nil {
+		stats["conversations"] = messengerStats.ConversationsProcessed
+		stats["messages_imported"] = messengerStats.MessagesImported
+		stats["messages_created"] = messengerStats.MessagesCreated
+		stats["messages_updated"] = messengerStats.MessagesUpdated
+		stats["att_found"] = messengerStats.AttachmentsFound
+		stats["att_missing"] = messengerStats.AttachmentsMissing
+		stats["messenger_errors"] = messengerStats.Errors
+	}
+	if albumsStats != nil {
+		stats["albums_processed"] = albumsStats.AlbumsProcessed
+		stats["albums_imported"] = albumsStats.AlbumsImported
+		stats["album_images_imported"] = albumsStats.ImagesImported
+		stats["album_images_found"] = albumsStats.ImagesFound
+		stats["album_images_missing"] = albumsStats.ImagesMissing
+		stats["albums_errors"] = albumsStats.Errors
+	}
+	if placesStats != nil {
+		stats["places_imported"] = placesStats.PlacesImported
+		stats["places_created"] = placesStats.PlacesCreated
+		stats["places_updated"] = placesStats.PlacesUpdated
+	}
+	if postsStats != nil {
+		stats["posts_processed"] = postsStats.PostsProcessed
+		stats["posts_imported"] = postsStats.PostsImported
+		stats["posts_updated"] = postsStats.PostsUpdated
+		stats["with_media"] = postsStats.WithMedia
+		stats["images_imported"] = postsStats.ImagesImported
+		stats["images_found"] = postsStats.ImagesFound
+		stats["images_missing"] = postsStats.ImagesMissing
+		stats["posts_errors"] = postsStats.Errors
+	}
+
+	anyErr := messengerErr != nil || albumsErr != nil || placesErr != nil || postsErr != nil
+	if anyErr {
+		var errMsgs []string
+		if messengerErr != nil {
+			errMsgs = append(errMsgs, fmt.Sprintf("Messenger: %v", messengerErr))
+		}
+		if albumsErr != nil {
+			errMsgs = append(errMsgs, fmt.Sprintf("Albums: %v", albumsErr))
+		}
+		if placesErr != nil {
+			errMsgs = append(errMsgs, fmt.Sprintf("Places: %v", placesErr))
+		}
+		if postsErr != nil {
+			errMsgs = append(errMsgs, fmt.Sprintf("Posts: %v", postsErr))
+		}
+		stats["status"] = "completed"
+		stats["status_line"] = "Import completed with errors: " + strings.Join(errMsgs, "; ")
+		stats["error_message"] = strings.Join(errMsgs, "; ")
+	}
+
+	job.UpdateState(stats)
+	job.Broadcast("completed", job.GetState())
+}
+
 func (h *ImporterHandler) FacebookMessengerStream(w http.ResponseWriter, r *http.Request) {
 	facebookMessengerJob.ServeSSE(w, r)
 }
@@ -1471,31 +1733,6 @@ func parseInt(s string) int {
 	return n
 }
 
-func parseThumbnailsStdout(s string) (total, processed, errs int, msg string) {
-	for _, line := range strings.Split(s, "\n") {
-		switch {
-		case strings.Contains(line, "Total items to process:"):
-			total = parseInt(line)
-		case strings.Contains(line, "Successfully processed:"):
-			processed = parseInt(line)
-		case strings.HasPrefix(line, "Errors:"):
-			errs = parseInt(line)
-		}
-	}
-	parts := []string{"Thumbnail processing completed"}
-	if total > 0 {
-		parts = append(parts, fmt.Sprintf("Total: %d", total))
-	}
-	if processed > 0 {
-		parts = append(parts, fmt.Sprintf("Processed: %d", processed))
-	}
-	if errs > 0 {
-		parts = append(parts, fmt.Sprintf("Errors: %d", errs))
-	}
-	msg = strings.Join(parts, ". ")
-	return
-}
-
 func parseFacebookAlbumsStdout(s string) (albumsProcessed, albumsImported, imagesImported, imagesFound, imagesMissing, errs int, missing []string, msg string) {
 	reAlbums := regexp.MustCompile(`Processed (\d+) album\(s\)`)
 	reAlbumsImported := regexp.MustCompile(`Albums imported: (\d+)`)
@@ -1586,100 +1823,6 @@ func parseFacebookPlacesStdout(s string) map[string]any {
 						stats["places_created"] = n
 					case "updated":
 						stats["places_updated"] = n
-					}
-				}
-			}
-		}
-	}
-	return stats
-}
-
-func parseFacebookAllStdout(s string) map[string]any {
-	stats := map[string]any{}
-	for _, line := range strings.Split(s, "\n") {
-		line = strings.TrimSpace(line)
-		switch {
-		case strings.HasPrefix(line, "FACEBOOK_COMPLETE: "):
-			for _, part := range strings.Fields(line[len("FACEBOOK_COMPLETE: "):]) {
-				kv := strings.SplitN(part, "=", 2)
-				if len(kv) == 2 {
-					n, _ := strconv.Atoi(kv[1])
-					switch kv[0] {
-					case "conversations":
-						stats["conversations"] = n
-					case "messages":
-						stats["messages_imported"] = n
-					case "created":
-						stats["messages_created"] = n
-					case "updated":
-						stats["messages_updated"] = n
-					case "att_found":
-						stats["att_found"] = n
-					case "att_missing":
-						stats["att_missing"] = n
-					case "errors":
-						stats["messenger_errors"] = n
-					}
-				}
-			}
-		case strings.HasPrefix(line, "ALBUMS_COMPLETE: "):
-			for _, part := range strings.Fields(line[len("ALBUMS_COMPLETE: "):]) {
-				kv := strings.SplitN(part, "=", 2)
-				if len(kv) == 2 {
-					n, _ := strconv.Atoi(kv[1])
-					switch kv[0] {
-					case "albums":
-						stats["albums_processed"] = n
-					case "albums_imported":
-						stats["albums_imported"] = n
-					case "images":
-						stats["album_images_imported"] = n
-					case "found":
-						stats["album_images_found"] = n
-					case "missing":
-						stats["album_images_missing"] = n
-					case "errors":
-						stats["albums_errors"] = n
-					}
-				}
-			}
-		case strings.HasPrefix(line, "PLACES_COMPLETE: "):
-			for _, part := range strings.Fields(line[len("PLACES_COMPLETE: "):]) {
-				kv := strings.SplitN(part, "=", 2)
-				if len(kv) == 2 {
-					n, _ := strconv.Atoi(kv[1])
-					switch kv[0] {
-					case "places":
-						stats["places_imported"] = n
-					case "created":
-						stats["places_created"] = n
-					case "updated":
-						stats["places_updated"] = n
-					}
-				}
-			}
-		case strings.HasPrefix(line, "POSTS_COMPLETE: "):
-			for _, part := range strings.Fields(line[len("POSTS_COMPLETE: "):]) {
-				kv := strings.SplitN(part, "=", 2)
-				if len(kv) == 2 {
-					n, _ := strconv.Atoi(kv[1])
-					switch kv[0] {
-					case "posts":
-						stats["posts_processed"] = n
-					case "new":
-						stats["posts_imported"] = n
-					case "updated":
-						stats["posts_updated"] = n
-					case "with_media":
-						stats["with_media"] = n
-					case "images":
-						stats["images_imported"] = n
-					case "found":
-						stats["images_found"] = n
-					case "missing":
-						stats["images_missing"] = n
-					case "errors":
-						stats["posts_errors"] = n
 					}
 				}
 			}

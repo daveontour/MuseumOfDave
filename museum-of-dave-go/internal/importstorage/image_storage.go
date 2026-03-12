@@ -193,7 +193,7 @@ func (s *ImageStorage) SaveImagesBatch(ctx context.Context, items []BatchImageIt
 				nullIfEmpty(item.MediaType),
 				nil, nil, nil, nil, nil,
 				false, false, false, 5,
-				false, false, false, false, false, false, false,
+				false, false, false, false, false, false,
 				item.IsReferenced,
 			)
 			if err != nil {

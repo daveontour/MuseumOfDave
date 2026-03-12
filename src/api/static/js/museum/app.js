@@ -1671,7 +1671,6 @@ const App = (() => {
             currentEventSource = new EventSource(cfg.stream);
             currentEventSource.onmessage = (event) => {
                 try {
-                    debugger;
                     const ed = JSON.parse(event.data);
                     const type = ed.type;
                     const data = ed.data || {};
@@ -1737,7 +1736,23 @@ const App = (() => {
         });
 
         document.querySelectorAll('.import-control-tile').forEach(tile => {
-            tile.addEventListener('click', () => triggerImport(tile.getAttribute('data-import')));
+            tile.addEventListener('click', (e) => {
+                const openTab = tile.getAttribute('data-open-tab');
+                if (openTab) {
+                    const dataImportModal = document.getElementById('data-import-modal');
+                    if (dataImportModal) dataImportModal.style.display = 'none';
+                    if (DOM.configPage) {
+                        DOM.configPage.style.display = 'flex';
+                        loadControlDefaults();
+                        const tabBtn = document.querySelector(`.config-tab-button[data-tab="${openTab}"]`);
+                        if (tabBtn) {
+                            tabBtn.click();
+                        }
+                    }
+                    return;
+                }
+                triggerImport(tile.getAttribute('data-import'));
+            });
         });
 
         importCancelBtns().forEach(btn => {
@@ -1903,6 +1918,27 @@ const App = (() => {
                 DOM.configPage.style.display = 'flex';
                 loadControlDefaults();
                 if (Modals.AppConfig && Modals.AppConfig.load) Modals.AppConfig.load();
+            });
+        }
+
+        const dataImportSidebarBtn = document.getElementById('data-import-sidebar-btn');
+        const dataImportModal = document.getElementById('data-import-modal');
+        const closeDataImportModalBtn = document.getElementById('close-data-import-modal');
+        if (dataImportSidebarBtn && dataImportModal) {
+            dataImportSidebarBtn.addEventListener('click', () => {
+                dataImportModal.style.display = 'flex';
+                loadControlDefaults();
+            });
+        }
+        const closeDataImportModal = () => {
+            if (dataImportModal) dataImportModal.style.display = 'none';
+        };
+        if (closeDataImportModalBtn && dataImportModal) {
+            closeDataImportModalBtn.addEventListener('click', closeDataImportModal);
+        }
+        if (dataImportModal) {
+            dataImportModal.addEventListener('click', (e) => {
+                if (e.target === dataImportModal) closeDataImportModal();
             });
         }
 

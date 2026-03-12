@@ -1,7 +1,7 @@
 // Package importer provides RunSubprocess for imports that still run as a separate
-// import-processor binary (thumbnails, contacts, facebook-albums, facebook-posts,
-// facebook-places, facebook-all). WhatsApp, iMessage, Facebook Messenger, Instagram,
-// and filesystem images run in-process instead.
+// import-processor binary (contacts). WhatsApp, iMessage, Facebook Messenger,
+// Instagram, Facebook All (Messenger+Albums+Places+Posts), filesystem images,
+// and thumbnails run in-process instead.
 package importer
 
 import (
