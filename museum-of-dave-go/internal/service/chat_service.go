@@ -183,6 +183,15 @@ func (s *ChatService) GenerateResponse(ctx context.Context, req model.ChatReques
 		embeddedJSON["prompt"] = req.Prompt
 		embeddedJSON["voice"] = voice
 		embeddedJSON["response_text"] = result.PlainText
+		// Flatten: if embedded_json contains an array of parsed blocks, merge the first into top level and remove the nested key
+		if arr, ok := embeddedJSON["embedded_json"].([]any); ok && len(arr) > 0 {
+			if first, ok := arr[0].(map[string]any); ok {
+				for k, v := range first {
+					embeddedJSON[k] = v
+				}
+			}
+			delete(embeddedJSON, "embedded_json")
+		}
 	}
 	return &model.ChatResponse{
 		Response:     result.PlainText,

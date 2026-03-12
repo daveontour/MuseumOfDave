@@ -481,7 +481,7 @@ const App = (() => {
                 }
                 
                 // Load control defaults when any control tab is opened (if not already loaded)
-                const controlTabs = ['import-messages-controls', 'import-images-controls', 'facebook-instagram-whatsapp-controls'];
+                const controlTabs = ['manage-imported-data'];
                 if (controlTabs.includes(targetTab) && Object.keys(controlDefaults).length === 0) {
                     loadControlDefaults();
                 } else if (controlTabs.includes(targetTab)) {
@@ -748,6 +748,7 @@ const App = (() => {
             const thumbBorder = thumbPct >= 100 ? '#22c55e' : (thumbPct < 80 ? '#dc3545' : (thumbPct < 95 ? '#eab308' : null));
             cards.push({ label: 'Images with thumbnails', value: thumbVal, num: data.thumbnail_count ?? 0, borderColor: thumbBorder });
             add('Facebook albums', data.facebook_albums_count);
+            add('Facebook posts', data.facebook_posts_count);
             add('Locations', data.locations_count);
             add('Places', data.places_count);
             add('Artefacts', data.artefacts_count);
@@ -1737,6 +1738,18 @@ const App = (() => {
 
         document.querySelectorAll('.import-control-tile').forEach(tile => {
             tile.addEventListener('click', (e) => {
+                const openModal = tile.getAttribute('data-open-modal');
+                if (openModal) {
+                    const modal = document.getElementById(openModal);
+                    if (modal) {
+                        modal.style.display = 'flex';
+                        if (openModal === 'data-import-modal') {
+                            if (DOM.configPage) DOM.configPage.style.display = 'none';
+                            if (typeof loadControlDefaults === 'function') loadControlDefaults();
+                        }
+                    }
+                    return;
+                }
                 const openTab = tile.getAttribute('data-open-tab');
                 if (openTab) {
                     const dataImportModal = document.getElementById('data-import-modal');

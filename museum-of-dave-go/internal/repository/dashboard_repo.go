@@ -205,6 +205,7 @@ func (r *DashboardRepo) GetStats(ctx context.Context) (*model.DashboardRaw, erro
 		label string
 	}{
 		{&out.FacebookAlbumsCount, `SELECT COUNT(id) FROM facebook_albums`, "facebook_albums"},
+		{&out.FacebookPostsCount, `SELECT COUNT(id) FROM facebook_posts`, "facebook_posts"},
 		{&out.LocationsCount, `SELECT COUNT(id) FROM locations`, "locations"},
 		{&out.PlacesCount, `SELECT COUNT(id) FROM places`, "places"},
 		{&out.EmailsCount, `SELECT COUNT(id) FROM emails`, "emails"},

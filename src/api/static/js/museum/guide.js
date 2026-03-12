@@ -59,7 +59,7 @@ const Guide = {
                 position: 'bottom-center'
             },
             {
-                text:'Then select the "Facebook and Instagram" tab.',
+                text:'Then select the "Manage Imported Data" tab.',
                 navigate() {
                     const settingsBtn = document.getElementById('settings-data-import-sidebar-btn');
                     if (settingsBtn) settingsBtn.click();
@@ -70,7 +70,7 @@ const Guide = {
                 position: 'top-right',
                 glow: '.import-control-tile[data-import="facebook_all"]',
                 navigate() {
-                    const fbTab = document.querySelector('.config-tab-button[data-tab="facebook-instagram-whatsapp-controls"]');
+                    const fbTab = document.querySelector('.config-tab-button[data-tab="manage-imported-data"]');
                     if (fbTab) fbTab.click();
                 }
             }
@@ -85,7 +85,7 @@ const Guide = {
                 position: 'bottom-center'
             },
             {
-                text:'Then select the "Facebook and Instagram" tab.',
+                text:'Then select the "Manage Imported Data" tab.',
                 navigate() {
                     const settingsBtn = document.getElementById('settings-data-import-sidebar-btn');
                     if (settingsBtn) settingsBtn.click();
@@ -95,7 +95,7 @@ const Guide = {
                 text: 'Click the highlighted Instagram Archive Import tile to run the import. Request a download of your Instagram data from instagram.com, then select the export directory when prompted.',
                 glow: '.import-control-tile[data-import="instagram"]',
                 navigate() {
-                    const fbTab = document.querySelector('.config-tab-button[data-tab="facebook-instagram-whatsapp-controls"]');
+                    const fbTab = document.querySelector('.config-tab-button[data-tab="manage-imported-data"]');
                     if (fbTab) fbTab.click();
                 }
             }

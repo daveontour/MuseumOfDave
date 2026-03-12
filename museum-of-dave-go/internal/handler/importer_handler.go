@@ -275,6 +275,25 @@ func runJob(job *importer.ImportJob, args []string, onComplete func(stdout strin
 	}()
 }
 
+// runThumbnailsAfterImportIfIdle starts thumbnail processing if the thumbnails job is idle.
+// Called after image-loading imports complete successfully.
+func runThumbnailsAfterImportIfIdle(pool *pgxpool.Pool) {
+	if pool == nil {
+		return
+	}
+	if err := thumbnailsJob.AssertNotRunning(); err != nil {
+		return // already running, skip
+	}
+	thumbnailsJob.Start()
+	thumbnailsJob.UpdateState(map[string]any{
+		"status": "in_progress", "status_line": "Starting thumbnail processing (auto after import)...",
+		"phase": nil, "phase1_scanned": 0, "phase1_updated": 0,
+		"phase2_scanned": 0, "phase2_total": 0, "phase2_processed": 0, "phase2_errors": 0,
+	})
+	thumbnailsJob.Broadcast("status", map[string]any{"status_line": "Starting thumbnail processing (auto after import)..."})
+	go runThumbnailsInProcess(pool, thumbnailsJob, false)
+}
+
 // ── Filesystem ────────────────────────────────────────────────────────────────
 
 func (h *ImporterHandler) FilesystemStart(w http.ResponseWriter, r *http.Request) {
@@ -395,6 +414,7 @@ func runFilesystemInProcess(pool *pgxpool.Pool, job *importer.ImportJob, directo
 		"errors":            stats.Errors,
 		"error_messages":    stats.ErrorMessages,
 	})
+	runThumbnailsAfterImportIfIdle(pool)
 	job.Broadcast("completed", job.GetState())
 }
 
@@ -562,6 +582,7 @@ func (h *ImporterHandler) FacebookAlbumsStart(w http.ResponseWriter, r *http.Req
 			"images_imported": ii, "images_found": ifound, "images_missing": imiss,
 			"missing_image_filenames": missing, "errors": errs,
 		})
+		runThumbnailsAfterImportIfIdle(h.pool)
 		facebookAlbumsJob.Broadcast("completed", facebookAlbumsJob.GetState())
 	})
 
@@ -610,6 +631,7 @@ func (h *ImporterHandler) FacebookPostsStart(w http.ResponseWriter, r *http.Requ
 		stats["status"] = "completed"
 		stats["status_line"] = "Import completed"
 		facebookPostsJob.UpdateState(stats)
+		runThumbnailsAfterImportIfIdle(h.pool)
 		facebookPostsJob.Broadcast("completed", facebookPostsJob.GetState())
 	})
 
@@ -781,12 +803,12 @@ func (h *ImporterHandler) ReferenceImportStart(w http.ResponseWriter, r *http.Re
 	})
 	referenceImportJob.Broadcast("status", map[string]any{"status_line": "Starting reference import..."})
 
-	go runReferenceImport(h.imageRepo, referenceImportJob)
+	go runReferenceImport(h.imageRepo, referenceImportJob, h.pool)
 
 	writeJSON(w, map[string]any{"message": "Reference import started", "status": "started"})
 }
 
-func runReferenceImport(repo *repository.ImageRepo, job *importer.ImportJob) {
+func runReferenceImport(repo *repository.ImageRepo, job *importer.ImportJob, pool *pgxpool.Pool) {
 	ctx := context.Background()
 	defer job.Finish()
 
@@ -841,6 +863,7 @@ func runReferenceImport(repo *repository.ImageRepo, job *importer.ImportJob) {
 		"processed": total, "imported": imported, "skipped": skipped, "errors": errCount,
 		"error_message": errMsg, "error_messages": errMsgs,
 	})
+	runThumbnailsAfterImportIfIdle(pool)
 	job.Broadcast("completed", job.GetState())
 }
 
@@ -1103,6 +1126,7 @@ func runWhatsAppInProcess(pool *pgxpool.Pool, subjectRepo *repository.SubjectCon
 		"missing_attachment_filenames": stats.MissingAttachmentFilenames,
 		"errors":                        stats.Errors,
 	})
+	runThumbnailsAfterImportIfIdle(pool)
 	job.Broadcast("completed", job.GetState())
 }
 
@@ -1212,6 +1236,7 @@ func runIMessageInProcess(pool *pgxpool.Pool, subjectRepo *repository.SubjectCon
 		"missing_attachment_filenames": stats.MissingAttachmentFilenames,
 		"errors":                        stats.Errors,
 	})
+	runThumbnailsAfterImportIfIdle(pool)
 	job.Broadcast("completed", job.GetState())
 }
 
@@ -1323,6 +1348,7 @@ func runInstagramInProcess(pool *pgxpool.Pool, subjectRepo *repository.SubjectCo
 		"messages_updated": stats.MessagesUpdated,
 		"errors":            stats.Errors,
 	})
+	runThumbnailsAfterImportIfIdle(pool)
 	job.Broadcast("completed", job.GetState())
 }
 
@@ -1437,6 +1463,7 @@ func runFacebookInProcess(pool *pgxpool.Pool, subjectRepo *repository.SubjectCon
 		"missing_attachment_filenames": stats.MissingAttachmentFilenames,
 		"errors":                        stats.Errors,
 	})
+	runThumbnailsAfterImportIfIdle(pool)
 	job.Broadcast("completed", job.GetState())
 }
 
@@ -1627,6 +1654,7 @@ func runFacebookAllInProcess(pool *pgxpool.Pool, subjectRepo *repository.Subject
 	}
 
 	job.UpdateState(stats)
+	runThumbnailsAfterImportIfIdle(pool)
 	job.Broadcast("completed", job.GetState())
 }
 

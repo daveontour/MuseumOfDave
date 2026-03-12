@@ -99,7 +99,7 @@ func (p *ClaudeProvider) GenerateResponse(
 			if responseText == "" {
 				responseText = "I apologize, but I couldn't generate a response."
 			}
-			plainText := stripEmbeddedJSON(responseText)
+			plainText, embeddedElements := extractEmbeddedJSON(responseText)
 			metadata := map[string]any{
 				"referenced_files": []any{},
 				"function_calls":   funcCallsMade,
@@ -108,6 +108,9 @@ func (p *ClaudeProvider) GenerateResponse(
 				"total_tokens":     inputTokens + outputTokens,
 				"provider":         "claude",
 				"model":            p.modelName,
+			}
+			if len(embeddedElements) > 0 {
+				metadata["embedded_json"] = embeddedElements
 			}
 			metaJSON, _ := json.Marshal(metadata)
 			return GenerateResult{

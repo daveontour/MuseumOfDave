@@ -149,6 +149,7 @@ func (s *DashboardService) GetDashboard(ctx context.Context) (*model.DashboardRe
 		ThumbnailCount:            raw.ThumbnailCount,
 		ThumbnailPercentage:       thumbPct,
 		FacebookAlbumsCount:       raw.FacebookAlbumsCount,
+		FacebookPostsCount:        raw.FacebookPostsCount,
 		LocationsCount:            raw.LocationsCount,
 		PlacesCount:               raw.PlacesCount,
 		EmailsCount:               raw.EmailsCount,

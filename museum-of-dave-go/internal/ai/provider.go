@@ -3,6 +3,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"regexp"
 	"strings"
 )
@@ -166,4 +167,26 @@ var embeddedJSONRe = regexp.MustCompile("(?s)```json\\s*(.*?)\\s*```")
 // stripEmbeddedJSON removes ```json ... ``` blocks from the response text.
 func stripEmbeddedJSON(text string) string {
 	return strings.TrimSpace(embeddedJSONRe.ReplaceAllString(text, ""))
+}
+
+// extractEmbeddedJSON removes ```json ... ``` blocks from text and returns the stripped
+// text plus any successfully parsed JSON elements from those blocks.
+func extractEmbeddedJSON(text string) (stripped string, elements []any) {
+	matches := embeddedJSONRe.FindAllStringSubmatch(text, -1)
+	for _, m := range matches {
+		if len(m) < 2 {
+			continue
+		}
+		raw := strings.TrimSpace(m[1])
+		if raw == "" {
+			continue
+		}
+		var v any
+		if err := json.Unmarshal([]byte(raw), &v); err != nil {
+			continue
+		}
+		elements = append(elements, v)
+	}
+	stripped = strings.TrimSpace(embeddedJSONRe.ReplaceAllString(text, ""))
+	return stripped, elements
 }

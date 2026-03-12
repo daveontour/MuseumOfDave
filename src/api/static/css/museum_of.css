@@ -2151,6 +2151,9 @@ body {
     opacity: 1;
     animation: import-tile-spin 1s linear infinite;
 }
+.import-control-tile.import-data-dialog-tile:hover {
+    background-color: rgba(34, 197, 94, 0.25);
+}
 @keyframes import-tile-spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
@@ -2161,6 +2164,14 @@ body {
     color: #1e293b;
     margin-bottom: 6px;
     padding-right: 24px;
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+}
+.import-tile-title i {
+    width: 1.1em;
+    text-align: center;
+    opacity: 0.85;
 }
 #data-import-modal .import-tile-title {
     font-size: 1.575rem; /* 50% larger than 1.05rem */
@@ -4264,6 +4275,59 @@ body {
     flex: 1;
     min-height: 0;
     position: relative;
+}
+
+/* Thumbnail processing warning banner (full width, under header, dismissable) */
+.image-gallery-thumbnail-warning-banner {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 20px;
+    background: #fef3c7;
+    border-bottom: 1px solid #f59e0b;
+    color: #92400e;
+    font-size: 0.95rem;
+    font-weight: 500;
+    box-sizing: border-box;
+}
+
+.image-gallery-thumbnail-warning-banner span {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.image-gallery-thumbnail-warning-banner span i {
+    font-size: 1.1em;
+    opacity: 0.9;
+}
+
+.image-gallery-thumbnail-warning-dismiss {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    background: rgba(146, 64, 14, 0.15);
+    color: #92400e;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.image-gallery-thumbnail-warning-dismiss:hover {
+    background: rgba(146, 64, 14, 0.25);
+}
+
+.image-gallery-thumbnail-warning-dismiss:focus {
+    outline: 2px solid #f59e0b;
+    outline-offset: 2px;
 }
 
 /* Master Pane */

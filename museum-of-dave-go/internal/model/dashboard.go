@@ -18,6 +18,7 @@ type DashboardResponse struct {
 	ThumbnailCount            int64            `json:"thumbnail_count"`
 	ThumbnailPercentage       float64          `json:"thumbnail_percentage"`
 	FacebookAlbumsCount       int64            `json:"facebook_albums_count"`
+	FacebookPostsCount        int64            `json:"facebook_posts_count"`
 	LocationsCount            int64            `json:"locations_count"`
 	PlacesCount               int64            `json:"places_count"`
 	EmailsCount               int64            `json:"emails_count"`
@@ -88,6 +89,7 @@ type DashboardRaw struct {
 	ThumbnailCount       int64
 	ImagesByRegion       map[string]int64
 	FacebookAlbumsCount  int64
+	FacebookPostsCount   int64
 	LocationsCount       int64
 	PlacesCount          int64
 	EmailsCount          int64

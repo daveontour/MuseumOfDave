@@ -720,6 +720,7 @@ Modals.NewImageGallery = (() => {
             }
             _updateSelectModeUI();
             _updatePickModeBanner();
+            await _updateThumbnailProcessingBanner();
             _renderThumbnailGrid();
         }
 
@@ -743,6 +744,31 @@ Modals.NewImageGallery = (() => {
                 }
             } else {
                 if (banner) banner.remove();
+            }
+        }
+
+        async function _updateThumbnailProcessingBanner() {
+            const modal = DOM.newImageGalleryModal;
+            if (!modal) return;
+            const modalContent = modal.querySelector('.new-image-gallery-modal-content');
+            if (!modalContent) return;
+            let banner = modal.querySelector('.image-gallery-thumbnail-warning-banner');
+            if (banner) banner.remove();
+            try {
+                const response = await fetch('/images/process-thumbnails/status');
+                if (!response.ok) return;
+                const data = await response.json();
+                const inProgress = data.status === 'in_progress' || data.in_progress === true;
+                if (!inProgress) return;
+                banner = document.createElement('div');
+                banner.className = 'image-gallery-thumbnail-warning-banner';
+                banner.innerHTML = '<span><i class="fas fa-info-circle"></i> Some thumbnails are still being created.</span><button class="image-gallery-thumbnail-warning-dismiss" type="button" aria-label="Dismiss"><i class="fas fa-times"></i></button>';
+                const body = modal.querySelector('.new-image-gallery-modal-body');
+                if (body) modalContent.insertBefore(banner, body);
+                else modalContent.appendChild(banner);
+                banner.querySelector('.image-gallery-thumbnail-warning-dismiss').addEventListener('click', () => banner.remove());
+            } catch (e) {
+                // Ignore fetch errors (e.g. network, 404)
             }
         }
 
