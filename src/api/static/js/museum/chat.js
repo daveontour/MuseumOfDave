@@ -263,8 +263,8 @@ const Chat = (() => {
             answerBtn.className = 'response-action-btn response-action-btn--answer';
             answerBtn.textContent = 'Answer';
             answerBtn.addEventListener('click', () => {
-                if (typeof App !== 'undefined' && App.processFormSubmit) {
-                    App.processFormSubmit(embeddedJson.randomQuestionText, 'Random Question', 'Answer');
+                if (typeof App !== 'undefined' && App.processAnswerSubmit) {
+                    App.processAnswerSubmit(embeddedJson.randomQuestionText);
                 }
             });
             row.appendChild(answerBtn);

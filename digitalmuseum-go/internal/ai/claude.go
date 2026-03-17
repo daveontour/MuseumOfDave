@@ -181,11 +181,21 @@ func (p *ClaudeProvider) GenerateResponse(
 				result = map[string]any{"error": err.Error()}
 			}
 			resultJSON, _ := json.Marshal(result)
-			toolResults = append(toolResults, map[string]any{
+			toolResult := map[string]any{
 				"type":        "tool_result",
 				"tool_use_id": toolID,
 				"content":     string(resultJSON),
-			})
+			}
+			if toolName == "get_reference_documents" {
+				toolResult["content"] = []map[string]any{
+					{
+						"type":          "text",
+						"text":          string(resultJSON),
+						"cache_control": map[string]any{"type": "ephemeral", "ttl": 3600},
+					},
+				}
+			}
+			toolResults = append(toolResults, toolResult)
 		}
 
 		messages = append(messages, map[string]any{
@@ -245,6 +255,7 @@ func claudePost(ctx context.Context, apiKey string, body map[string]any) (map[st
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("x-api-key", apiKey)
 	httpReq.Header.Set("anthropic-version", claudeAPIVersion)
+	httpReq.Header.Set("anthropic-beta", "extended-cache-ttl-2025-04-11")
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
 		return nil, err

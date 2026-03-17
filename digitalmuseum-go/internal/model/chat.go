@@ -34,6 +34,7 @@ type ChatRequest struct {
 	CompanionMode  bool     `json:"companionMode"`
 	Provider       string   `json:"provider"`
 	WhosAsking     string   `json:"whos_asking"`
+	RepeatQuestion bool     `json:"repeat_question"`
 }
 
 // ChatResponse is the JSON response for POST /chat/generate.

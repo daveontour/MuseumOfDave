@@ -96,6 +96,8 @@ func (s *ChatService) GenerateResponse(ctx context.Context, req model.ChatReques
 		whosAsking = "visitor"
 	}
 
+	repeatQuestion := req.RepeatQuestion
+
 	// Load subject configuration
 	cfg, _ := s.subjectRepo.GetFirst(ctx)
 	subjectName := "Unknown"
@@ -139,6 +141,9 @@ func (s *ChatService) GenerateResponse(ctx context.Context, req model.ChatReques
 		"\n\n**Additional Information:**\n" + sysInstructions +
 		"\n\n**Who is asking:** " + whosAskingText
 
+	if repeatQuestion {
+		systemPrompt += "\n\n**IMPORTANT Repeat Question:** Repeat the question in the same language and tone as the original question at the begining of the response"
+	}
 	// Load conversation history
 	var history []appai.ConvTurn
 	if req.ConversationID != nil {
@@ -226,24 +231,17 @@ func (s *ChatService) GenerateRandomQuestion(ctx context.Context, req model.Chat
 	if req.Mood != nil && *req.Mood != "" {
 		mood = *req.Mood
 	}
-	whosAsking := req.WhosAsking
-	if whosAsking == "" {
-		whosAsking = "visitor"
-	}
 
 	// Load subject configuration
 	cfg, _ := s.subjectRepo.GetFirst(ctx)
 	subjectName := "Unknown"
 	subjectGender := "Male"
-	var psychProfile, writingStyle *string
-	var sysInstructions, coreInstructions string
+	// var sysInstructions, coreInstructions string
 	if cfg != nil {
 		subjectName = cfg.SubjectName
 		subjectGender = cfg.Gender
-		psychProfile = cfg.PsychologicalProfileAI
-		writingStyle = cfg.WritingStyleAI
-		sysInstructions = cfg.SystemInstructions
-		coreInstructions = cfg.CoreSystemInstructions
+		// sysInstructions = cfg.SystemInstructions
+		// coreInstructions = cfg.CoreSystemInstructions
 	}
 
 	// Pronoun substitution
@@ -252,8 +250,8 @@ func (s *ChatService) GenerateRandomQuestion(ctx context.Context, req model.Chat
 		"{SUBJECT_NAME}", subjectName,
 		"{he}", he, "{him}", him, "{his}", his,
 	)
-	sysInstructions = replacer.Replace(sysInstructions)
-	coreInstructions = replacer.Replace(coreInstructions)
+	// sysInstructions = replacer.Replace(sysInstructions)
+	// coreInstructions = replacer.Replace(coreInstructions)
 
 	// Load voice instructions
 	voiceMap := s.loadVoiceInstructions(ctx)
@@ -264,29 +262,41 @@ func (s *ChatService) GenerateRandomQuestion(ctx context.Context, req model.Chat
 	}
 	voiceText := replacer.Replace(entry.Instructions)
 
-	// Build system prompt
+	whosAsking := req.WhosAsking
+	if whosAsking == "" {
+		whosAsking = "visitor"
+	}
 	whosAskingText := fmt.Sprintf("The person asking is a visitor (not the subject %s). They are asking questions about the subject's life and history.", subjectName)
 	if whosAsking == "its-me" {
 		whosAskingText = fmt.Sprintf("The person asking is %s themselves. They are asking questions about their own history and life.", subjectName)
 	}
-	systemPrompt := coreInstructions +
+
+	// Load system instructions
+	coreInstructions, err := os.ReadFile(fmt.Sprintf("%s/data/system_instructions_question.txt", s.pythonStaticDir))
+	if err != nil {
+		return nil, fmt.Errorf("load system instructions: %w", err)
+	}
+
+	// Build system prompt
+	systemPrompt := string(coreInstructions) +
 		"\n\n**Your Personae:**\n" + voiceText +
-		"\n\n**Additional Information:**\n" + sysInstructions +
 		"\n\n**Who is asking:** " + whosAskingText
 
 	// Load conversation history
 	var history []appai.ConvTurn
-	if req.ConversationID != nil {
-		turns, err := s.chatRepo.GetTurns(ctx, *req.ConversationID, 30)
-		if err == nil {
-			for _, t := range turns {
-				history = append(history, appai.ConvTurn{
-					UserInput:    t.UserInput,
-					ResponseText: t.ResponseText,
-				})
-			}
-		}
-	}
+	//Dont' want history when generating a random question
+
+	// if req.ConversationID != nil {
+	// 	turns, err := s.chatRepo.GetTurns(ctx, *req.ConversationID, 30)
+	// 	if err == nil {
+	// 		for _, t := range turns {
+	// 			history = append(history, appai.ConvTurn{
+	// 				UserInput:    t.UserInput,
+	// 				ResponseText: t.ResponseText,
+	// 			})
+	// 		}
+	// 	}
+	// }
 
 	//Select a random topic from the following list:
 	topics := []string{
@@ -298,12 +308,17 @@ func (s *ChatService) GenerateRandomQuestion(ctx context.Context, req model.Chat
 		"relationships",
 		"psychology",
 		"interest",
+		"family",
+		"friends",
+		"childhood",
+		"sports",
+		"creative and artistic endeavours",
+		"philosophy",
 	}
 	randomTopic := topics[rand.Intn(len(topics))]
 
 	prompt := "Generate a random question about " + subjectName + "'s life." +
 		" It could be about any aspect of " + randomTopic + "." +
-		//	" It could be about any aspect of " + him + " biography, people "+he+"'s known, travels, work, hobbies, relationships, psychology, interest, anything."+
 		" The objective is that by answering the question it would provide insight into " + him + " or " +
 		" reveal hidden or understated aspects of " + him + " or amusing facts." +
 		" Do not answer the question, just generate it."
@@ -320,28 +335,24 @@ func (s *ChatService) GenerateRandomQuestion(ctx context.Context, req model.Chat
 		SubjectName:   subjectName,
 		SubjectGender: subjectGender,
 	}
-	if voice == "owner" {
-		genReq.PsychProfile = psychProfile
-		genReq.WritingStyle = writingStyle
-	}
+
+	// if voice == "owner" {
+	// 	genReq.PsychProfile = psychProfile
+	// 	genReq.WritingStyle = writingStyle
+	// }
 
 	result, err := provider.GenerateResponse(ctx, genReq, systemPrompt, history, executor)
 	if err != nil {
 		return nil, err
 	}
 
-	// Save turn if conversation ID provided
-	if req.ConversationID != nil {
-		_ = s.chatRepo.SaveTurn(ctx, *req.ConversationID, req.Prompt, result.PlainText, voice, temperature)
-	}
-
 	// Enrich metadata and return
 	var embeddedJSON map[string]any
 	if err := json.Unmarshal([]byte(result.MetadataJSON), &embeddedJSON); err == nil {
 		embeddedJSON["temperature"] = temperature
-		embeddedJSON["prompt"] = req.Prompt
+		embeddedJSON["prompt"] = prompt
 		embeddedJSON["voice"] = voice
-		embeddedJSON["resporeq.nse_text"] = result.PlainText
+		embeddedJSON["response_text"] = result.PlainText
 		// Flatten: if embedded_json contains an array of parsed blocks, merge the first into top level and remove the nested key
 		if arr, ok := embeddedJSON["embedded_json"].([]any); ok && len(arr) > 0 {
 			if first, ok := arr[0].(map[string]any); ok {
