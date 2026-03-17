@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 
@@ -186,6 +187,161 @@ func (s *ChatService) GenerateResponse(ctx context.Context, req model.ChatReques
 		embeddedJSON["prompt"] = req.Prompt
 		embeddedJSON["voice"] = voice
 		embeddedJSON["response_text"] = result.PlainText
+		// Flatten: if embedded_json contains an array of parsed blocks, merge the first into top level and remove the nested key
+		if arr, ok := embeddedJSON["embedded_json"].([]any); ok && len(arr) > 0 {
+			if first, ok := arr[0].(map[string]any); ok {
+				for k, v := range first {
+					embeddedJSON[k] = v
+				}
+			}
+			delete(embeddedJSON, "embedded_json")
+		}
+	}
+	return &model.ChatResponse{
+		Response:     result.PlainText,
+		Voice:        voice,
+		EmbeddedJSON: embeddedJSON,
+	}, nil
+}
+
+// Generate A Random Question
+func (s *ChatService) GenerateRandomQuestion(ctx context.Context, req model.ChatRequest) (*model.ChatResponse, error) {
+	// Choose provider
+	provider := s.geminiProvider
+	providerName := "gemini"
+	if req.Provider == "claude" && s.claudeProvider != nil && s.claudeProvider.IsAvailable() {
+		provider = s.claudeProvider
+		providerName = "claude"
+	}
+	if provider == nil || !provider.IsAvailable() {
+		return nil, fmt.Errorf("provider '%s' is not available — check API key", providerName)
+	}
+
+	voice := "expert"
+	if req.Voice != nil && *req.Voice != "" {
+		voice = *req.Voice
+	}
+	temperature := 0.5
+	mood := "neutral"
+	if req.Mood != nil && *req.Mood != "" {
+		mood = *req.Mood
+	}
+	whosAsking := req.WhosAsking
+	if whosAsking == "" {
+		whosAsking = "visitor"
+	}
+
+	// Load subject configuration
+	cfg, _ := s.subjectRepo.GetFirst(ctx)
+	subjectName := "Unknown"
+	subjectGender := "Male"
+	var psychProfile, writingStyle *string
+	var sysInstructions, coreInstructions string
+	if cfg != nil {
+		subjectName = cfg.SubjectName
+		subjectGender = cfg.Gender
+		psychProfile = cfg.PsychologicalProfileAI
+		writingStyle = cfg.WritingStyleAI
+		sysInstructions = cfg.SystemInstructions
+		coreInstructions = cfg.CoreSystemInstructions
+	}
+
+	// Pronoun substitution
+	he, him, his := genderPronouns(subjectGender)
+	replacer := strings.NewReplacer(
+		"{SUBJECT_NAME}", subjectName,
+		"{he}", he, "{him}", him, "{his}", his,
+	)
+	sysInstructions = replacer.Replace(sysInstructions)
+	coreInstructions = replacer.Replace(coreInstructions)
+
+	// Load voice instructions
+	voiceMap := s.loadVoiceInstructions(ctx)
+	entry, ok := voiceMap[voice]
+	if !ok {
+		entry = voiceMap["expert"]
+		voice = "expert"
+	}
+	voiceText := replacer.Replace(entry.Instructions)
+
+	// Build system prompt
+	whosAskingText := fmt.Sprintf("The person asking is a visitor (not the subject %s). They are asking questions about the subject's life and history.", subjectName)
+	if whosAsking == "its-me" {
+		whosAskingText = fmt.Sprintf("The person asking is %s themselves. They are asking questions about their own history and life.", subjectName)
+	}
+	systemPrompt := coreInstructions +
+		"\n\n**Your Personae:**\n" + voiceText +
+		"\n\n**Additional Information:**\n" + sysInstructions +
+		"\n\n**Who is asking:** " + whosAskingText
+
+	// Load conversation history
+	var history []appai.ConvTurn
+	if req.ConversationID != nil {
+		turns, err := s.chatRepo.GetTurns(ctx, *req.ConversationID, 30)
+		if err == nil {
+			for _, t := range turns {
+				history = append(history, appai.ConvTurn{
+					UserInput:    t.UserInput,
+					ResponseText: t.ResponseText,
+				})
+			}
+		}
+	}
+
+	//Select a random topic from the following list:
+	topics := []string{
+		"biography",
+		"people " + he + "'s known",
+		"travels",
+		"work",
+		"hobbies",
+		"relationships",
+		"psychology",
+		"interest",
+	}
+	randomTopic := topics[rand.Intn(len(topics))]
+
+	prompt := "Generate a random question about " + subjectName + "'s life." +
+		" It could be about any aspect of " + randomTopic + "." +
+		//	" It could be about any aspect of " + him + " biography, people "+he+"'s known, travels, work, hobbies, relationships, psychology, interest, anything."+
+		" The objective is that by answering the question it would provide insight into " + him + " or " +
+		" reveal hidden or understated aspects of " + him + " or amusing facts." +
+		" Do not answer the question, just generate it."
+
+	// Build tool executor and generation request
+	executor := appai.NewToolExecutor(s.pool, subjectName, s.tavilyKey)
+	genReq := appai.GenerateRequest{
+		UserInput:     prompt,
+		Temperature:   temperature,
+		Voice:         voice,
+		Mood:          mood,
+		CompanionMode: false,
+		WhosAsking:    whosAsking,
+		SubjectName:   subjectName,
+		SubjectGender: subjectGender,
+	}
+	if voice == "owner" {
+		genReq.PsychProfile = psychProfile
+		genReq.WritingStyle = writingStyle
+	}
+
+	result, err := provider.GenerateResponse(ctx, genReq, systemPrompt, history, executor)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save turn if conversation ID provided
+	if req.ConversationID != nil {
+		_ = s.chatRepo.SaveTurn(ctx, *req.ConversationID, req.Prompt, result.PlainText, voice, temperature)
+	}
+
+	// Enrich metadata and return
+	var embeddedJSON map[string]any
+	if err := json.Unmarshal([]byte(result.MetadataJSON), &embeddedJSON); err == nil {
+		embeddedJSON["temperature"] = temperature
+		embeddedJSON["prompt"] = req.Prompt
+		embeddedJSON["voice"] = voice
+		embeddedJSON["resporeq.nse_text"] = result.PlainText
 		// Flatten: if embedded_json contains an array of parsed blocks, merge the first into top level and remove the nested key
 		if arr, ok := embeddedJSON["embedded_json"].([]any); ok && len(arr) > 0 {
 			if first, ok := arr[0].(map[string]any); ok {

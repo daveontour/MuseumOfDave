@@ -93,6 +93,62 @@ const App = (() => {
             }
         });
     }
+    async function processQuestionSubmit() {
+        
+        var userPrompt = CONSTANTS.RANDOM_QUESTION_PROMPT;
+        var title = "Generate a random question about " + CONSTANTS.OWNER_NAME + "'s life.";
+
+        if (!userPrompt && !category && !title) return;
+
+        // Check and show reference documents notification before proceeding
+        await Modals.ReferenceDocumentsNotification.checkAndShow(async () => {
+            // This callback is called when user proceeds
+            UI.clearError();
+            UI.setControlsEnabled(false);
+            UI.showLoadingIndicator();
+
+            const selectedVoice = VoiceSelector.getSelectedVoice();
+            const selectedMood = (selectedVoice === 'owner' && DOM.ownerMood) ? DOM.ownerMood.value : null;
+            
+            try {
+                const finalMessage = UI.getWorkModePrefix() + userPrompt;
+
+                Chat.addMessage('suggestion', `**Random Question:** ${title}`, true); // User messages are not markdown by default
+                
+                DOM.userInput.value = '';
+
+                const currentUserId = localStorage.getItem('userId') || 'default';
+                // Get current conversation ID if available
+                const conversationId = Modals.ConversationManager ? Modals.ConversationManager.getCurrentConversationId() : null;
+                
+                const itsMeVisitorSwitch = document.getElementById('its-me-visitor-switch');
+                const whosAsking = itsMeVisitorSwitch?.querySelector('.its-me-visitor-option.active')?.dataset?.value || 'visitor';
+
+                const response = await ApiService.fetchRandomQuestion({
+                    prompt: finalMessage,
+                    voice: selectedVoice,
+                    mood: selectedMood,
+                    companionMode: DOM.companionModeCheckbox ? DOM.companionModeCheckbox.checked : false,
+                    provider: DOM.llmProviderSelect ? DOM.llmProviderSelect.value : 'gemini',
+                    whos_asking: whosAsking,
+                });
+                
+                // Non-streaming JSON response handling (original code commented out streaming)
+                const data = await response.json();
+                UI.hideLoadingIndicator(); // Hide after getting response, before adding message
+                if (data.error) UI.displayError(data.error);
+                else Chat.addMessage('assistant', data.response, true, null, data.embedded_json);
+
+            } catch (error) {
+                console.error('Form submit error:', error);
+                UI.displayError(error.message || 'An unknown error occurred.');
+                // UI.hideLoadingIndicator(); // Already handled in displayError or finally
+            } finally {
+                UI.setControlsEnabled(true);
+                UI.hideLoadingIndicator(); // Ensure it's hidden
+            }
+        });
+    }
 
     function initEventListeners() {
         DOM.chatForm.addEventListener('submit', (event) => {
@@ -1958,11 +2014,7 @@ const App = (() => {
         const randomQuestionSidebarBtn = document.getElementById('random-question-sidebar-btn');
         if (randomQuestionSidebarBtn) {
             randomQuestionSidebarBtn.addEventListener('click', () => {
-                App.processFormSubmit(
-                    CONSTANTS.RANDOM_QUESTION_PROMPT,
-                    "Random Question",
-                    "Generate a random question about " + CONSTANTS.OWNER_NAME + "'s life."
-                );
+                App.processQuestionSubmit();
             });
         }
 
@@ -2103,7 +2155,7 @@ const App = (() => {
         loadLLMProviderAvailability();
         window.onbeforeunload = () => { SSE.close(); };
     }
-    return { init, processFormSubmit };
+    return { init, processFormSubmit, processQuestionSubmit };
 })();
 
 App.init();

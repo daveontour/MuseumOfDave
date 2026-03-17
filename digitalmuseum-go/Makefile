@@ -7,6 +7,9 @@ CMD     := ./cmd/server
 build:
 	go build -o bin/$(BINARY) $(CMD)
 
+build-exe:
+	go build -o bin/$(BINARY).exe $(CMD)
+
 run:
 	go run $(CMD)
 

@@ -61,6 +61,7 @@ const CONSTANTS = {
     },
     API_PATHS: {
         CHAT: '/chat/generate',
+        RANDOM_QUESTION: '/chat/generate-random-question',
         NEW_CHAT: '/new',
         VOICE: '/voice',
         SUGGESTIONS_JSON: '/api/suggestions',

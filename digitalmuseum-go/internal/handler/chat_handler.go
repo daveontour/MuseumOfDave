@@ -29,6 +29,7 @@ func NewChatHandler(svc *service.ChatService, cpRepo *repository.CompleteProfile
 func (h *ChatHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/chat/availability", h.GetAvailability)
 	r.Post("/chat/generate", h.Generate)
+	r.Post("/chat/generate-random-question", h.GenerateRandomQuestion)
 	r.Post("/chat/conversations", h.CreateConversation)
 	r.Get("/chat/conversations", h.ListConversations)
 	r.Get("/chat/conversations/{id}", h.GetConversation)
@@ -68,6 +69,29 @@ func (h *ChatHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, err := h.svc.GenerateResponse(r.Context(), req)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, resp)
+}
+
+// POST /chat/generate
+func (h *ChatHandler) GenerateRandomQuestion(w http.ResponseWriter, r *http.Request) {
+	var req model.ChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return
+	}
+	if req.Prompt == "" {
+		writeError(w, http.StatusBadRequest, "prompt is required")
+		return
+	}
+	if req.Provider == "" {
+		req.Provider = "gemini"
+	}
+
+	resp, err := h.svc.GenerateRandomQuestion(r.Context(), req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

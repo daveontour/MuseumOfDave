@@ -694,6 +694,13 @@ const ApiService = (() => {
             body: JSON.stringify(payload)
         });
     }
+    async function fetchRandomQuestion(payload) {
+        return _fetch(CONSTANTS.API_PATHS.RANDOM_QUESTION, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+    }
 
     async function fetchNewChat(payload) {
 
@@ -757,7 +764,7 @@ const ApiService = (() => {
     }
 
     return {
-        fetchChat, fetchNewChat, fetchVoice, fetchSuggestionsConfig,
+        fetchChat, fetchRandomQuestion, fetchNewChat, fetchVoice, fetchSuggestionsConfig,
         fetchFacebookChatters, fetchContacts, fetchMessagesByContact, fetchAlbums, fetchMessagesByContactV2,
         fetchVoices
     };
