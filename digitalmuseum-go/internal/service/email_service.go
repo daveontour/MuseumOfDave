@@ -97,6 +97,11 @@ func (s *EmailService) BulkSoftDelete(ctx context.Context, ids []int64) (int64, 
 	return s.repo.BulkSoftDelete(ctx, ids)
 }
 
+// GetFolders returns the distinct folder/label names from stored emails.
+func (s *EmailService) GetFolders(ctx context.Context) ([]string, error) {
+	return s.repo.ListFolders(ctx)
+}
+
 // SummarizeThread collects all emails involving participant and asks Gemini to
 // produce a concise summary. Returns an error if Gemini is unavailable.
 func (s *EmailService) SummarizeThread(ctx context.Context, participant string) (string, error) {

@@ -11,11 +11,12 @@ import (
 	"strings"
 	"time"
 
+	appcrypto "github.com/daveontour/digitalmuseum/internal/crypto"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // NewToolExecutor creates a ToolExecutor backed by the provided pool.
-func NewToolExecutor(pool *pgxpool.Pool, subjectName, tavilyKey string) ToolExecutor {
+func NewToolExecutor(pool *pgxpool.Pool, subjectName, tavilyKey, pepper, documentPassword string) ToolExecutor {
 	return func(ctx context.Context, name string, args map[string]any) (map[string]any, error) {
 		switch name {
 		case "get_current_time":
@@ -60,7 +61,7 @@ func NewToolExecutor(pool *pgxpool.Pool, subjectName, tavilyKey string) ToolExec
 					ids = append(ids, x)
 				}
 			}
-			return getReferenceDocuments(ctx, pool, ids)
+			return getReferenceDocuments(ctx, pool, ids, pepper, documentPassword)
 		default:
 			return nil, fmt.Errorf("unknown tool: %s", name)
 		}
@@ -372,14 +373,15 @@ func getUserInterests(ctx context.Context, pool *pgxpool.Pool) (map[string]any, 
 	return map[string]any{"interests": interests, "count": len(interests)}, nil
 }
 
-func getReferenceDocuments(ctx context.Context, pool *pgxpool.Pool, ids []int64) (map[string]any, error) {
+func getReferenceDocuments(ctx context.Context, pool *pgxpool.Pool, ids []int64, pepper, documentPassword string) (map[string]any, error) {
 	var results []map[string]any
 	for _, id := range ids {
 		var title, filename, contentType *string
 		var data []byte
+		var isEncrypted bool
 		err := pool.QueryRow(ctx,
-			`SELECT title, filename, content_type, data FROM reference_documents WHERE id = $1`, id,
-		).Scan(&title, &filename, &contentType, &data)
+			`SELECT title, filename, content_type, data, is_encrypted FROM reference_documents WHERE id = $1 AND is_sensitive = FALSE`, id,
+		).Scan(&title, &filename, &contentType, &data, &isEncrypted)
 		if err != nil {
 			results = append(results, map[string]any{"id": id, "error": "not found"})
 			continue
@@ -389,6 +391,18 @@ func getReferenceDocuments(ctx context.Context, pool *pgxpool.Pool, ids []int64)
 			ct = *contentType
 		}
 		displayTitle := strVal(title, strVal(filename, ""))
+		if isEncrypted {
+			if documentPassword == "" {
+				results = append(results, map[string]any{"id": id, "title": displayTitle, "content": "[encrypted — AI_DOCUMENT_PASSWORD not configured]"})
+				continue
+			}
+			plain, err := appcrypto.DecryptDocumentData(ctx, pool, documentPassword, data, pepper)
+			if err != nil || len(plain) == 0 {
+				results = append(results, map[string]any{"id": id, "title": displayTitle, "content": "[encrypted — decryption failed]"})
+				continue
+			}
+			data = plain
+		}
 		if ct == "application/pdf" {
 			results = append(results, map[string]any{
 				"id":      id,

@@ -16,10 +16,12 @@ type Config struct {
 	DB          DatabaseConfig
 	Server      ServerConfig
 	App         AppConfig
+	Crypto      CryptoConfig
 	Defaults    DefaultsConfig
 	AI          AIConfig
 	Attachments AttachmentConfig
 	Filesystem  FilesystemConfig
+	Gmail       GmailConfig
 }
 
 // DatabaseConfig holds PostgreSQL connection settings.
@@ -44,6 +46,16 @@ func (d DatabaseConfig) AdminConnectionString() string {
 // ServerConfig holds HTTP server settings.
 type ServerConfig struct {
 	Port int
+}
+
+// CryptoConfig holds secrets used for crypto/key-derivation.
+type CryptoConfig struct {
+	// KeyringPepper is an application secret mixed into key derivation for the
+	// sensitive-keyring and encrypted reference documents.
+	//
+	// Set via KEYRING_PEPPER env var. Rotating this requires re-initialising the
+	// keyring and re-encrypting any encrypted records.
+	KeyringPepper string
 }
 
 // AppConfig holds application-level settings.
@@ -95,6 +107,17 @@ type AIConfig struct {
 	ClaudeModelName string
 
 	TavilyAPIKey string
+
+	// DocumentPassword is the keyring password used by the AI tool executor to
+	// decrypt encrypted reference_documents. Set via AI_DOCUMENT_PASSWORD env var.
+	// A keyring seat must be registered for this password via POST /reference-documents/add-user.
+	DocumentPassword string
+
+	// KeyringMasterPassword is the master keyring password used at startup to
+	// automatically register AI_DOCUMENT_PASSWORD as a keyring seat if it is not
+	// already present. Set via KEYRING_MASTER_PASSWORD env var.
+	// Optional: if unset, missing seats are logged as warnings but not fatal.
+	KeyringMasterPassword string
 }
 
 // AttachmentConfig holds attachment filtering settings.
@@ -103,13 +126,19 @@ type AttachmentConfig struct {
 	AllowedTypes []string
 	MinSize      int64
 	// RawAllowedTypes is the unmodified ATTACHMENT_ALLOWED_TYPES env value.
-	// It doubles as the crypto pepper for the sensitive-data layer.
 	RawAllowedTypes string
 }
 
 // FilesystemConfig holds filesystem import settings.
 type FilesystemConfig struct {
 	ExcludePatterns []string
+}
+
+// GmailConfig holds Google Gmail OAuth2 settings.
+type GmailConfig struct {
+	ClientID     string
+	ClientSecret string
+	RedirectURL  string
 }
 
 // Load reads environment variables (and optionally a .env file) and returns a Config.
@@ -120,6 +149,11 @@ func Load() (*Config, error) {
 	db, err := loadDatabaseConfig()
 	if err != nil {
 		return nil, fmt.Errorf("database config: %w", err)
+	}
+
+	cryptoCfg, err := loadCryptoConfig()
+	if err != nil {
+		return nil, fmt.Errorf("crypto config: %w", err)
 	}
 
 	serverPort, err := parseInt(getenv("HOST_PORT", "8000"), "HOST_PORT")
@@ -140,11 +174,25 @@ func Load() (*Config, error) {
 			TemplatesDir:   getenv("TEMPLATES_DIR", "../src/api/templates"),
 			AssetStaticDir: getenv("ASSET_STATIC_DIR", "../src/api/static"),
 		},
+		Crypto:      cryptoCfg,
 		Defaults:    loadDefaultsConfig(),
 		AI:          loadAIConfig(),
 		Attachments: attachments,
 		Filesystem:  loadFilesystemConfig(),
+		Gmail: GmailConfig{
+			ClientID:     os.Getenv("GMAIL_CLIENT_ID"),
+			ClientSecret: os.Getenv("GMAIL_CLIENT_SECRET"),
+			RedirectURL:  getenv("GMAIL_REDIRECT_URL", "http://localhost:8001/gmail/auth/callback"),
+		},
 	}, nil
+}
+
+func loadCryptoConfig() (CryptoConfig, error) {
+	pepper := os.Getenv("KEYRING_PEPPER")
+	if strings.TrimSpace(pepper) == "" {
+		return CryptoConfig{}, fmt.Errorf("missing required variable: set KEYRING_PEPPER")
+	}
+	return CryptoConfig{KeyringPepper: pepper}, nil
 }
 
 func loadDatabaseConfig() (DatabaseConfig, error) {
@@ -215,7 +263,9 @@ func loadAIConfig() AIConfig {
 		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
 		ClaudeModelName: getenv("CLAUDE_MODEL_NAME", "claude-sonnet-4-6"),
 
-		TavilyAPIKey: os.Getenv("TAVILY_API_KEY"),
+		TavilyAPIKey:          os.Getenv("TAVILY_API_KEY"),
+		DocumentPassword:      os.Getenv("AI_DOCUMENT_PASSWORD"),
+		KeyringMasterPassword: os.Getenv("KEYRING_MASTER_PASSWORD"),
 	}
 }
 

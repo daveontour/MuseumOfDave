@@ -2130,6 +2130,12 @@ body {
     background: #f8f9fa;
     border-radius: 8px;
 }
+
+/* Data Import: remove accidental debug outlines/borders on inner panels */
+#data-import-modal .config-section > div {
+    border: none !important;
+    outline: none !important;
+}
 .config-section h3 {
     margin-top: 0;
     margin-bottom: 20px;

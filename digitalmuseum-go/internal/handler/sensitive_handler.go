@@ -25,8 +25,7 @@ func NewSensitiveHandler(svc *service.SensitiveService, pythonStaticDir string) 
 }
 
 // RegisterRoutes mounts all sensitive-data routes.
-// Fixed paths (/count, /key-count, /hints, /master-key, /trusted-key) are registered
-// before the parameterised /{record_id} to ensure correct matching.
+// Fixed paths are registered before the parameterised /{record_id} for correct matching.
 func (h *SensitiveHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/sensitive-data/count", h.Count)
 	r.Get("/sensitive-data/key-count", h.KeyCount)
@@ -37,6 +36,7 @@ func (h *SensitiveHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/sensitive-data/master-key", h.GenerateMasterKey)
 	r.Post("/sensitive-data/trusted-key", h.GenerateTrustedKey)
 	r.Delete("/sensitive-data/trusted-key", h.DeleteTrustedKey)
+	r.Post("/sensitive-data/migrate", h.MigrateRecords)
 
 	r.Post("/sensitive-data", h.Create)
 	r.Put("/sensitive-data/{record_id}", h.Update)
@@ -112,6 +112,9 @@ func (h *SensitiveHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 // ── key management ────────────────────────────────────────────────────────────
 
+// GenerateMasterKey initialises a fresh pgcrypto keyring for the master password.
+// Endpoint: POST /sensitive-data/master-key
+// Body: {"password":"..."}
 func (h *SensitiveHandler) GenerateMasterKey(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Password string `json:"password"`
@@ -120,14 +123,21 @@ func (h *SensitiveHandler) GenerateMasterKey(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if err := h.svc.GenerateMasterKey(r.Context(), req.Password); err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("error generating master key: %s", err))
+	if !sensitiveHasPassword(req.Password) {
+		writeError(w, http.StatusForbidden, "password is required")
+		return
+	}
+	if err := h.svc.GenerateKeyring(r.Context(), req.Password); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("error initialising keyring: %s", err))
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
-	writeJSON(w, map[string]string{"message": "Master key pair generated and trusted key inserted into database"})
+	writeJSON(w, map[string]string{"message": "Keyring initialised"})
 }
 
+// GenerateTrustedKey adds a new keyring seat for user_password using master_password.
+// Endpoint: POST /sensitive-data/trusted-key
+// Body: {"user_password":"...","master_password":"..."}
 func (h *SensitiveHandler) GenerateTrustedKey(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		UserPassword   string `json:"user_password"`
@@ -145,14 +155,17 @@ func (h *SensitiveHandler) GenerateTrustedKey(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusForbidden, "master password is required")
 		return
 	}
-	if err := h.svc.GenerateTrustedKey(r.Context(), req.UserPassword, req.MasterPassword); err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("error creating trusted key: %s", err))
+	if err := h.svc.AddUser(r.Context(), req.UserPassword, req.MasterPassword); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("error adding user: %s", err))
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
-	writeJSON(w, map[string]string{"message": "Trusted key generated and inserted into database"})
+	writeJSON(w, map[string]string{"message": "Keyring seat added"})
 }
 
+// DeleteTrustedKey removes the keyring seat for user_password.
+// Endpoint: DELETE /sensitive-data/trusted-key
+// Body: {"user_password":"...","master_password":"..."}
 func (h *SensitiveHandler) DeleteTrustedKey(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		UserPassword   string `json:"user_password"`
@@ -170,11 +183,40 @@ func (h *SensitiveHandler) DeleteTrustedKey(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusForbidden, "master password is required")
 		return
 	}
-	if err := h.svc.DeleteTrustedKey(r.Context(), req.UserPassword, req.MasterPassword); err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("error deleting trusted key: %s", err))
+	if err := h.svc.RemoveUser(r.Context(), req.UserPassword, req.MasterPassword); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("error removing user: %s", err))
 		return
 	}
-	writeJSON(w, map[string]string{"message": "Trusted key deleted from database"})
+	writeJSON(w, map[string]string{"message": "Keyring seat removed"})
+}
+
+// MigrateRecords re-encrypts sensitive_data rows from the old RSA/hybrid format
+// to the new pgcrypto format.
+// Endpoint: POST /sensitive-data/migrate
+// Body: {"old_password":"...","new_password":"..."}
+func (h *SensitiveHandler) MigrateRecords(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		OldPassword string `json:"old_password"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if !sensitiveHasPassword(req.OldPassword) {
+		writeError(w, http.StatusForbidden, "old_password is required")
+		return
+	}
+	if !sensitiveHasPassword(req.NewPassword) {
+		writeError(w, http.StatusForbidden, "new_password is required")
+		return
+	}
+	count, err := h.svc.MigrateRecords(r.Context(), req.OldPassword, req.NewPassword)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("migration error: %s", err))
+		return
+	}
+	writeJSON(w, map[string]any{"migrated": count, "message": fmt.Sprintf("%d record(s) re-encrypted", count)})
 }
 
 // ── write endpoints ───────────────────────────────────────────────────────────

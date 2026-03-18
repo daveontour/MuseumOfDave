@@ -277,9 +277,6 @@
                             <i class="fas fa-microphone-alt"></i> Custom Voices
                         </button>
                         <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;color:cadetblue">Personal Data</label>
-                        <button class="config-tab-button" data-tab="reference-documents">
-                            <i class="fas fa-folder-open"></i> Reference Documents
-                        </button>
                         <button class="config-tab-button" data-tab="manage-imported-data">
                             <i class="fas fa-database"></i> Manage Imported Data
                         </button>
@@ -299,10 +296,6 @@
                         <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;;color:cadetblue">Manage Secure Data Access</label>
                         <button class="config-tab-button" data-tab="manage-keys">
                             <i class="fas fa-key"></i> Manage Keys
-                        </button>
-                        <label class="config-tab-label" style="margin-left: 10px; font-weight: bold;margin-top: 10px;;color:cadetblue">API Reference</label>
-                        <button class="config-tab-button" data-tab="api-docs">
-                            <i class="fas fa-book"></i> API Docs
                         </button>
                     </div>
                     <div class="config-content">
@@ -395,42 +388,6 @@
                             <div id="empty-tables-status" style="margin-top: 10px; padding: 10px; border-radius: 4px; display: none;"></div>
                         </div>
                     </section> -->
-                </div>
-                <div class="config-tab-content" id="reference-documents-tab">
-                    <section class="config-section" style="display: flex; flex-direction: column; height: 100%;">
-                        <h1>Reference Documents</h1>
-                        <p>Reference documents are used to provide context for the AI to use when generating responses. They can be uploaded as PDF, Word, Images, Text, CSV, or JSON files.<br/>
-                        You should upload at least one document that is a comprehenvie biography. <br/>
-                        Other documents could provide additional context such as CV, family tree, Letters, sample of your writing, etc.</p>
-                         <div class="reference-documents-filters">
-                            <div class="reference-documents-search-row">
-                                <input type="text" id="reference-documents-search" placeholder="Search documents..." class="reference-documents-input">
-                                <button id="reference-documents-upload-btn" class="modal-btn modal-btn-primary">
-                                    <i class="fas fa-upload"></i> Upload Document
-                                </button>
-                            </div>
-                            <div class="reference-documents-filter-row">
-                                <select id="reference-documents-category-filter" class="reference-documents-select">
-                                    <option value="">All Categories</option>
-                                </select>
-                                <select id="reference-documents-content-type-filter" class="reference-documents-select">
-                                    <option value="">All Types</option>
-                                    <option value="application/pdf">PDF</option>
-                                    <option value="application/msword">Word (DOC)</option>
-                                    <option value="application/vnd.openxmlformats-officedocument.wordprocessingml.document">Word (DOCX)</option>
-                                    <option value="image">Images</option>
-                                    <option value="text">Text Files</option>
-                                    <option value="text/csv">CSV</option>
-                                    <option value="application/json">JSON</option>
-                                </select>
-                                <label class="reference-documents-checkbox-label">
-                                    <input type="checkbox" id="reference-documents-task-filter">
-                                    Available for Task
-                                </label>
-                            </div>
-                        </div>
-                        <div class="reference-documents-list" id="reference-documents-list"></div>
-                    </section>
                 </div>
                 <div class="config-tab-content" id="subject-configuration-tab">
                     <section class="config-section">
@@ -633,9 +590,6 @@
                         </div>
                     </section>
                 </div>
-                <div class="config-tab-content" id="api-docs-tab">
-                    <iframe id="api-docs-iframe" src="/docs"></iframe>
-                </div>
                 <div class="config-tab-content" id="manage-keys-tab">
                     <section class="config-section">
                         <h1>Trusted Keys</h1>
@@ -660,6 +614,30 @@
                                 </button>
                             </div>
                             <div id="manage-keys-status" style="margin-top: 10px; padding: 10px; border-radius: 4px; display: none;"></div>
+                        </div>
+                    </section>
+                    <section class="config-section" style="margin-top: 1.5rem;">
+                        <h1>Document Encryption</h1>
+                        <div class="setting-group">
+                            <p style="color: #666; margin-bottom: 10px;">
+                                Manage access to encrypted reference documents. The same keyring is used for both sensitive data and document encryption.<br/>
+                                Add a user key to allow a person (or the AI) to decrypt documents. Remove a key to revoke access.<br/>
+                                Use <strong>Encrypt Existing</strong> to encrypt all currently unencrypted documents with the master key.
+                            </p>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 8px;">
+                                <button type="button" id="add-doc-key-btn" class="modal-btn modal-btn-primary">
+                                    <i class="fas fa-plus"></i> Add Document Key
+                                </button>
+                                <button type="button" id="remove-doc-key-btn" class="modal-btn modal-btn-secondary">
+                                    <i class="fas fa-minus"></i> Remove Document Key
+                                </button>
+                                <button type="button" id="encrypt-existing-btn" class="modal-btn" style="background-color: #6c757d; color: white;">
+                                    <i class="fas fa-lock"></i> Encrypt Existing Documents
+                                </button>
+                            </div>
+                            <div id="doc-keyring-count-display" style="color: #666; font-size: 0.9em; display: none;">
+                                Document keyring seats: <strong id="doc-keyring-count-value">—</strong>
+                            </div>
                         </div>
                     </section>
                 </div>
@@ -1081,7 +1059,7 @@
                                     <div class="import-tile-explanation">Generate thumbnails and extract location metadata from images.</div>
                                 </div>
                                 <div style="grid-column: 1 / -1; height: 15px;"></div>
-                                <div class="import-control-tile data-import-dialog-tile" data-open-tab="reference-documents" title="Click to open">
+                                <div class="import-control-tile data-import-dialog-tile" data-open-modal="reference-documents-manage-modal" title="Click to open">
                                     <div class="import-tile-title"><i class="fas fa-book"></i> Reference Documents</div>
                                     <div class="import-tile-explanation">Upload and manage reference documents (PDF, Word, images, text) that provide context for the AI. Upload a biography and other documents.</div>
                                 </div>
@@ -1096,6 +1074,50 @@
                                 <button type="button" class="import-controls-cancel-btn modal-btn modal-btn-secondary" disabled title="Cancel running import"><i class="fas fa-stop"></i> Cancel</button>
                             </div>
                         </div>
+                    </section>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reference Documents (opened from Data Import tile) -->
+        <div id="reference-documents-manage-modal" class="modal" style="display: none; position: fixed; z-index: 4100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center;">
+            <div class="modal-content" style="max-width: 90vw; width: 90vw; max-height: 90vh; height: 90vh; padding: 0; display: flex; flex-direction: column; overflow: hidden;" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h2>Reference Documents</h2>
+                    <button type="button" class="modal-close-btn" id="close-reference-documents-manage-modal" aria-label="Close">&times;</button>
+                </div>
+                <div style="padding: 20px; overflow-y: auto; flex: 1;">
+                    <section class="config-section" style="display: flex; flex-direction: column; min-height: 0;">
+                        <p style="margin-top: 0;">Reference documents provide context for the AI when generating responses. Upload as PDF, Word, images, text, CSV, or JSON.<br/>
+                        Upload at least one comprehensive biography; add CV, family tree, letters, writing samples, etc. as needed.</p>
+                        <div class="reference-documents-filters">
+                            <div class="reference-documents-search-row">
+                                <input type="text" id="reference-documents-search" placeholder="Search documents..." class="reference-documents-input">
+                                <button type="button" id="reference-documents-upload-btn" class="modal-btn modal-btn-primary">
+                                    <i class="fas fa-upload"></i> Upload Document
+                                </button>
+                            </div>
+                            <div class="reference-documents-filter-row">
+                                <select id="reference-documents-category-filter" class="reference-documents-select">
+                                    <option value="">All Categories</option>
+                                </select>
+                                <select id="reference-documents-content-type-filter" class="reference-documents-select">
+                                    <option value="">All Types</option>
+                                    <option value="application/pdf">PDF</option>
+                                    <option value="application/msword">Word (DOC)</option>
+                                    <option value="application/vnd.openxmlformats-officedocument.wordprocessingml.document">Word (DOCX)</option>
+                                    <option value="image">Images</option>
+                                    <option value="text">Text Files</option>
+                                    <option value="text/csv">CSV</option>
+                                    <option value="application/json">JSON</option>
+                                </select>
+                                <label class="reference-documents-checkbox-label">
+                                    <input type="checkbox" id="reference-documents-task-filter">
+                                    Available for Task
+                                </label>
+                            </div>
+                        </div>
+                        <div class="reference-documents-list" id="reference-documents-list"></div>
                     </section>
                 </div>
             </div>
@@ -2142,7 +2164,7 @@
         </div>
         
         <!-- Upload Document Modal -->
-        <div id="reference-documents-upload-modal" class="modal">
+        <div id="reference-documents-upload-modal" class="modal" style="z-index: 4200;">
             <div class="modal-content reference-documents-upload-content">
                 <div class="modal-header">
                     <h2>Upload Reference Document</h2>
@@ -2192,7 +2214,7 @@
         </div>
         
         <!-- Edit Document Modal -->
-        <div id="reference-documents-edit-modal" class="modal">
+        <div id="reference-documents-edit-modal" class="modal" style="z-index: 4200;">
             <div class="modal-content reference-documents-upload-content">
                 <div class="modal-header">
                     <h2>Edit Document Metadata</h2>
@@ -2822,6 +2844,80 @@
                 <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
                     <button id="delete-trusted-key-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
                     <button id="delete-trusted-key-submit" class="modal-btn" style="background-color: #dc3545; color: white;"><i class="fas fa-minus"></i> Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== ADD DOCUMENT KEY MODAL ===== -->
+    <div id="add-doc-key-modal" class="modal" style="display: none;">
+        <div class="modal-content sensitive-data-hints-content" style="max-width: 400px;">
+            <div class="sensitive-data-hints-header">
+                <h3>Add Document Key</h3>
+                <button class="modal-close-btn" id="close-add-doc-key-modal">&times;</button>
+            </div>
+            <div class="sensitive-data-hints-body">
+                <p style="margin-bottom: 1rem;">Add a new keyring seat so a user (or the AI via <code>AI_DOCUMENT_PASSWORD</code>) can decrypt encrypted documents. Requires the master password.</p>
+                <label class="artefact-field-label">User Password</label>
+                <input type="password" id="add-doc-key-user-password" class="new-image-gallery-input"
+                       placeholder="Password for the new key"
+                       style="width:100%; margin-bottom: 1rem;"/>
+                <label class="artefact-field-label">Master Password</label>
+                <input type="password" id="add-doc-key-master-password" class="new-image-gallery-input"
+                       placeholder="Master password"
+                       style="width:100%; margin-bottom: 1rem;"/>
+                <div id="add-doc-key-error" style="color: #dc3545; margin-bottom: 0.5rem; display: none;"></div>
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button id="add-doc-key-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+                    <button id="add-doc-key-submit" class="modal-btn modal-btn-primary"><i class="fas fa-plus"></i> Add Key</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== REMOVE DOCUMENT KEY MODAL ===== -->
+    <div id="remove-doc-key-modal" class="modal" style="display: none;">
+        <div class="modal-content sensitive-data-hints-content" style="max-width: 400px;">
+            <div class="sensitive-data-hints-header">
+                <h3>Remove Document Key</h3>
+                <button class="modal-close-btn" id="close-remove-doc-key-modal">&times;</button>
+            </div>
+            <div class="sensitive-data-hints-body">
+                <p style="margin-bottom: 1rem;">Remove a keyring seat, revoking decryption access for that user. The master seat cannot be removed.</p>
+                <label class="artefact-field-label">User Password (key to remove)</label>
+                <input type="password" id="remove-doc-key-user-password" class="new-image-gallery-input"
+                       placeholder="Password of the key to remove"
+                       style="width:100%; margin-bottom: 1rem;"/>
+                <label class="artefact-field-label">Master Password</label>
+                <input type="password" id="remove-doc-key-master-password" class="new-image-gallery-input"
+                       placeholder="Master password"
+                       style="width:100%; margin-bottom: 1rem;"/>
+                <div id="remove-doc-key-error" style="color: #dc3545; margin-bottom: 0.5rem; display: none;"></div>
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button id="remove-doc-key-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+                    <button id="remove-doc-key-submit" class="modal-btn" style="background-color: #dc3545; color: white;"><i class="fas fa-minus"></i> Remove Key</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== ENCRYPT EXISTING DOCUMENTS MODAL ===== -->
+    <div id="encrypt-existing-modal" class="modal" style="display: none;">
+        <div class="modal-content sensitive-data-hints-content" style="max-width: 420px;">
+            <div class="sensitive-data-hints-header">
+                <h3>Encrypt Existing Documents</h3>
+                <button class="modal-close-btn" id="close-encrypt-existing-modal">&times;</button>
+            </div>
+            <div class="sensitive-data-hints-body">
+                <p style="margin-bottom: 1rem;">Encrypt all currently unencrypted (non-sensitive) reference documents using the keyring DEK. Provide the master password to authorise encryption.</p>
+                <label class="artefact-field-label">Master Password</label>
+                <input type="password" id="encrypt-existing-password" class="new-image-gallery-input"
+                       placeholder="Master password"
+                       style="width:100%; margin-bottom: 1rem;"/>
+                <div id="encrypt-existing-error" style="color: #dc3545; margin-bottom: 0.5rem; display: none;"></div>
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button id="encrypt-existing-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
+                    <button id="encrypt-existing-submit" class="modal-btn" style="background-color: #6c757d; color: white;"><i class="fas fa-lock"></i> Encrypt</button>
                 </div>
             </div>
         </div>

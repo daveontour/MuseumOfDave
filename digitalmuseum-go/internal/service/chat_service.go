@@ -23,14 +23,16 @@ type voiceEntry struct {
 
 // ChatService orchestrates AI generation, tool calling, and conversation persistence.
 type ChatService struct {
-	chatRepo        *repository.ChatRepo
-	subjectRepo     *repository.SubjectConfigRepo
-	cpRepo          *repository.CompleteProfileRepo
-	pool            *pgxpool.Pool
-	geminiProvider  appai.ChatProvider
-	claudeProvider  appai.ChatProvider
-	pythonStaticDir string
-	tavilyKey       string
+	chatRepo         *repository.ChatRepo
+	subjectRepo      *repository.SubjectConfigRepo
+	cpRepo           *repository.CompleteProfileRepo
+	pool             *pgxpool.Pool
+	geminiProvider   appai.ChatProvider
+	claudeProvider   appai.ChatProvider
+	pythonStaticDir  string
+	tavilyKey        string
+	pepper           string
+	documentPassword string
 }
 
 // NewChatService creates a ChatService.
@@ -43,16 +45,20 @@ func NewChatService(
 	claudeProvider appai.ChatProvider,
 	pythonStaticDir string,
 	tavilyKey string,
+	pepper string,
+	documentPassword string,
 ) *ChatService {
 	return &ChatService{
-		chatRepo:        chatRepo,
-		subjectRepo:     subjectRepo,
-		cpRepo:          cpRepo,
-		pool:            pool,
-		geminiProvider:  geminiProvider,
-		claudeProvider:  claudeProvider,
-		pythonStaticDir: pythonStaticDir,
-		tavilyKey:       tavilyKey,
+		chatRepo:         chatRepo,
+		subjectRepo:      subjectRepo,
+		cpRepo:           cpRepo,
+		pool:             pool,
+		geminiProvider:   geminiProvider,
+		claudeProvider:   claudeProvider,
+		pythonStaticDir:  pythonStaticDir,
+		tavilyKey:        tavilyKey,
+		pepper:           pepper,
+		documentPassword: documentPassword,
 	}
 }
 
@@ -159,7 +165,7 @@ func (s *ChatService) GenerateResponse(ctx context.Context, req model.ChatReques
 	}
 
 	// Build tool executor and generation request
-	executor := appai.NewToolExecutor(s.pool, subjectName, s.tavilyKey)
+	executor := appai.NewToolExecutor(s.pool, subjectName, s.tavilyKey, s.pepper, s.documentPassword)
 	genReq := appai.GenerateRequest{
 		UserInput:     req.Prompt,
 		Temperature:   temperature,
@@ -324,7 +330,7 @@ func (s *ChatService) GenerateRandomQuestion(ctx context.Context, req model.Chat
 		" Do not answer the question, just generate it."
 
 	// Build tool executor and generation request
-	executor := appai.NewToolExecutor(s.pool, subjectName, s.tavilyKey)
+	executor := appai.NewToolExecutor(s.pool, subjectName, s.tavilyKey, s.pepper, s.documentPassword)
 	genReq := appai.GenerateRequest{
 		UserInput:     prompt,
 		Temperature:   temperature,
@@ -449,7 +455,7 @@ func (s *ChatService) TurnCount(ctx context.Context, conversationID int64) (int6
 // from messages and emails, using the specified AI provider (gemini or claude) to summarize,
 // and saves it to complete_profiles. Mirrors the Python base_chat_service.get_complete_profile_by_name.
 func (s *ChatService) GenerateCompleteProfile(ctx context.Context, name string, provider string) error {
-	executor := appai.NewToolExecutor(s.pool, "", s.tavilyKey)
+	executor := appai.NewToolExecutor(s.pool, "", s.tavilyKey, s.pepper, s.documentPassword)
 	msgsRaw, err := executor(ctx, "get_imessages_by_chat_session", map[string]any{"chat_session": name})
 	if err != nil {
 		return fmt.Errorf("get messages: %w", err)

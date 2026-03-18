@@ -45,6 +45,11 @@ func New(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
 	imapHandler := handler.NewIMAPHandler(pool)
 	imapHandler.RegisterRoutes(r)
 
+	// ── Gmail ─────────────────────────────────────────────────────────────────
+	gmailHandler := handler.NewGmailHandler(pool,
+		cfg.Gmail.ClientID, cfg.Gmail.ClientSecret, cfg.Gmail.RedirectURL)
+	gmailHandler.RegisterRoutes(r)
+
 	// ── Images & media ─────────────────────────────────────────────────────────
 	imageRepo := repository.NewImageRepo(pool)
 	imageSvc := service.NewImageService(imageRepo)
@@ -69,23 +74,20 @@ func New(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
 	templateHandler := handler.NewTemplateHandler(subjectConfigRepo, cfg)
 	templateHandler.RegisterRoutes(r)
 
-	// ── Sensitive data ────────────────────────────────────────────────────────
-	sensitiveRepo := repository.NewSensitiveRepo(pool)
-	sensitiveSvc := service.NewSensitiveService(sensitiveRepo, pool, cfg.Attachments.RawAllowedTypes)
+	// ── Reference documents & sensitive data (shared keyring) ────────────────
+	documentRepo := repository.NewDocumentRepo(pool)
+	documentSvc := service.NewDocumentService(documentRepo, pool, cfg.Crypto.KeyringPepper)
+	sensitiveSvc := service.NewSensitiveService(documentRepo, pool, cfg.Crypto.KeyringPepper)
 	sensitiveHandler := handler.NewSensitiveHandler(sensitiveSvc, cfg.App.AssetStaticDir)
 	sensitiveHandler.RegisterRoutes(r)
+	documentHandler := handler.NewDocumentHandler(documentSvc, sensitiveSvc)
+	documentHandler.RegisterRoutes(r)
 
 	// ── Artefacts ─────────────────────────────────────────────────────────────
 	artefactRepo := repository.NewArtefactRepo(pool)
 	artefactSvc := service.NewArtefactService(artefactRepo)
 	artefactHandler := handler.NewArtefactHandler(artefactSvc)
 	artefactHandler.RegisterRoutes(r)
-
-	// ── Reference documents ───────────────────────────────────────────────────
-	documentRepo := repository.NewDocumentRepo(pool)
-	documentSvc := service.NewDocumentService(documentRepo)
-	documentHandler := handler.NewDocumentHandler(documentSvc)
-	documentHandler.RegisterRoutes(r)
 
 	// ── Voices ────────────────────────────────────────────────────────────────
 	voiceRepo := repository.NewVoiceRepo(pool)
@@ -153,6 +155,8 @@ func New(pool *pgxpool.Pool, cfg *config.Config) http.Handler {
 		claudeProvider,
 		cfg.App.AssetStaticDir,
 		cfg.AI.TavilyAPIKey,
+		cfg.Crypto.KeyringPepper,
+		cfg.AI.DocumentPassword,
 	)
 	chatHandler := handler.NewChatHandler(chatSvc, completeProfileRepo)
 	chatHandler.RegisterRoutes(r)

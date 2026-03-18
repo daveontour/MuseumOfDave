@@ -19,6 +19,10 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 
 	// ── Extensions ────────────────────────────────────────────────────────────
 
+	if _, err := conn.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS pgcrypto"); err != nil {
+		return fmt.Errorf("pgcrypto extension required for encryption: %w", err)
+	}
+
 	pgTrgmAvailable := true
 	if _, err := conn.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS pg_trgm"); err != nil {
 		slog.Warn("pg_trgm extension unavailable — full-text search index will use btree fallback", "err", err)
@@ -35,6 +39,22 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 			}
 			return fmt.Errorf("migration statement failed (%s): %w", preview, err)
 		}
+	}
+
+	// ── reference_documents encryption columns ───────────────────────────────
+	if _, err := conn.Exec(ctx, `DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='reference_documents' AND column_name='is_encrypted') THEN
+    ALTER TABLE reference_documents ADD COLUMN is_encrypted BOOLEAN NOT NULL DEFAULT FALSE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='reference_documents' AND column_name='is_sensitive') THEN
+    ALTER TABLE reference_documents ADD COLUMN is_sensitive BOOLEAN NOT NULL DEFAULT FALSE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='reference_documents' AND column_name='is_private') THEN
+    ALTER TABLE reference_documents ADD COLUMN is_private BOOLEAN NOT NULL DEFAULT FALSE;
+  END IF;
+END$$`); err != nil {
+		slog.Warn("could not add encryption columns to reference_documents", "err", err)
 	}
 
 	// ── Full-text search index for emails.plain_text ───────────────────────────
@@ -482,6 +502,14 @@ func schemaDDL() []string {
 			public_key  TEXT NOT NULL,
 			created_at  TIMESTAMP DEFAULT NOW(),
 			updated_at  TIMESTAMP DEFAULT NOW()
+		)`,
+
+		// ── sensitive_keyring ────────────────────────────────────────────────────
+		`CREATE TABLE IF NOT EXISTS sensitive_keyring (
+			id            SERIAL PRIMARY KEY,
+			encrypted_dek BYTEA   NOT NULL,
+			is_master     BOOLEAN NOT NULL DEFAULT FALSE,
+			created_at    TIMESTAMP DEFAULT NOW()
 		)`,
 
 		// ── email_classifications ───────────────────────────────────────────────

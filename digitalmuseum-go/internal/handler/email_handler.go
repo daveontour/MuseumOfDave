@@ -43,9 +43,15 @@ func (h *EmailHandler) RegisterRoutes(r chi.Router) {
 
 // ── Read endpoints ─────────────────────────────────────────────────────────────
 
-// GetFolders is a placeholder until the Gmail client is ported in Phase 5.
+// GetFolders handles GET /emails/folders
+// Returns distinct folder/label names from imported emails.
 func (h *EmailHandler) GetFolders(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "folder listing requires Gmail client (available in Phase 5)")
+	folders, err := h.svc.GetFolders(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"folders": folders})
 }
 
 // GetByLabel handles GET /emails/label?labels=INBOX&labels=IMPORTANT

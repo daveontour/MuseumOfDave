@@ -247,6 +247,9 @@ CREATE TABLE IF NOT EXISTS reference_documents (
     ai_detailed_summary TEXT,
     ai_quick_summary    TEXT,
     available_for_task  BOOLEAN NOT NULL DEFAULT FALSE,
+    is_private          BOOLEAN NOT NULL DEFAULT FALSE,
+    is_sensitive        BOOLEAN NOT NULL DEFAULT FALSE,
+    is_encrypted        BOOLEAN NOT NULL DEFAULT FALSE,
     created_at          TIMESTAMP DEFAULT NOW(),
     updated_at          TIMESTAMP DEFAULT NOW()
 );
@@ -476,6 +479,16 @@ CREATE TABLE IF NOT EXISTS master_keys (
     public_key  TEXT NOT NULL,
     created_at  TIMESTAMP DEFAULT NOW(),
     updated_at  TIMESTAMP DEFAULT NOW()
+);
+
+-- ============================================================
+-- sensitive_keyring
+-- ============================================================
+CREATE TABLE IF NOT EXISTS sensitive_keyring (
+    id            SERIAL PRIMARY KEY,
+    encrypted_dek BYTEA   NOT NULL,
+    is_master     BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at    TIMESTAMP DEFAULT NOW()
 );
 
 -- ============================================================

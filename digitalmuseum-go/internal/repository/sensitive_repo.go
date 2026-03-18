@@ -25,10 +25,10 @@ func (r *SensitiveRepo) Count(ctx context.Context) (int64, error) {
 	return n, err
 }
 
-// KeyCount returns the number of trusted_keys rows.
+// KeyCount returns the number of sensitive_keyring seats.
 func (r *SensitiveRepo) KeyCount(ctx context.Context) (int64, error) {
 	var n int64
-	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM trusted_keys`).Scan(&n)
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM sensitive_keyring`).Scan(&n)
 	return n, err
 }
 

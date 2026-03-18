@@ -321,6 +321,31 @@ func (r *EmailRepo) GetThreadEmails(ctx context.Context, participant string) ([]
 	return scanEmails(rows)
 }
 
+// ListFolders returns distinct folder/label names stored across all emails.
+// Folder is stored as comma-joined label names, so this unnests and deduplicates them.
+func (r *EmailRepo) ListFolders(ctx context.Context) ([]string, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT DISTINCT unnest(string_to_array(folder, ',')) AS f
+		FROM emails
+		WHERE user_deleted = FALSE
+		ORDER BY f`)
+	if err != nil {
+		return nil, fmt.Errorf("ListFolders: %w", err)
+	}
+	defer rows.Close()
+	var folders []string
+	for rows.Next() {
+		var f string
+		if err := rows.Scan(&f); err != nil {
+			return nil, err
+		}
+		if f != "" {
+			folders = append(folders, f)
+		}
+	}
+	return folders, rows.Err()
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 // scanEmails collects rows into a slice of Email pointers.

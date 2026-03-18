@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -16,137 +14,150 @@ import (
 
 const redacted = "*****************"
 
-// SensitiveService handles sensitive-data CRUD and key management.
+// SensitiveService handles sensitive-data CRUD and keyring management.
+// Sensitive records are stored as reference_documents with is_sensitive=TRUE.
 type SensitiveService struct {
-	repo   *repository.SensitiveRepo
-	pool   *pgxpool.Pool
-	pepper string
+	docRepo *repository.DocumentRepo
+	pool    *pgxpool.Pool
+	pepper  string
 }
 
-// NewSensitiveService creates a SensitiveService.
-// pepper is ATTACHMENT_ALLOWED_TYPES from config.
-func NewSensitiveService(repo *repository.SensitiveRepo, pool *pgxpool.Pool, pepper string) *SensitiveService {
-	return &SensitiveService{repo: repo, pool: pool, pepper: pepper}
+// NewSensitiveService creates a SensitiveService backed by DocumentRepo.
+// pepper is ATTACHMENT_ALLOWED_TYPES from config (used for key derivation).
+func NewSensitiveService(docRepo *repository.DocumentRepo, pool *pgxpool.Pool, pepper string) *SensitiveService {
+	return &SensitiveService{docRepo: docRepo, pool: pool, pepper: pepper}
 }
 
-// Count returns the total number of sensitive_data records.
+// Count returns the total number of sensitive records in reference_documents.
 func (s *SensitiveService) Count(ctx context.Context) (int64, error) {
-	return s.repo.Count(ctx)
+	var n int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM reference_documents WHERE is_sensitive = TRUE`).Scan(&n)
+	return n, err
 }
 
-// KeyCount returns the total number of trusted_keys.
+// KeyCount returns the total number of sensitive_keyring seats.
 func (s *SensitiveService) KeyCount(ctx context.Context) (int64, error) {
-	return s.repo.KeyCount(ctx)
+	var n int64
+	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM sensitive_keyring`).Scan(&n)
+	return n, err
 }
 
-// ListAll returns all records. If password is empty a random token is used so
-// the call succeeds but details remain unreadable (matching Python behaviour).
+// ListAll returns all sensitive records. If password is empty details are redacted.
 func (s *SensitiveService) ListAll(ctx context.Context, password string) ([]model.SensitiveDataResponse, error) {
-	if !hasPassword(password) {
-		password = randomToken()
-	}
-	privateKey, err := appcrypto.GetPrivateKey(ctx, s.pool, password, s.pepper)
+	docs, err := s.docRepo.ListSensitive(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	rows, err := s.repo.GetAll(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return s.toResponses(rows, privateKey), nil
+	return s.toResponses(ctx, docs, password), nil
 }
 
-// GetByID returns a single record, decrypting if password is valid.
+// GetByID returns a single sensitive record, decrypting if password is valid.
 func (s *SensitiveService) GetByID(ctx context.Context, id int64, password string) (*model.SensitiveDataResponse, error) {
-	if !hasPassword(password) {
-		password = randomToken()
-	}
-	privateKey, err := appcrypto.GetPrivateKey(ctx, s.pool, password, s.pepper)
+	doc, err := s.docRepo.GetSensitiveByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-
-	row, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if row == nil {
+	if doc == nil {
 		return nil, nil
 	}
-	responses := s.toResponses([]model.SensitiveData{*row}, privateKey)
+	responses := s.toResponses(ctx, []*model.ReferenceDocument{doc}, password)
 	return &responses[0], nil
 }
 
-// Create encrypts details with the master public key and inserts a new record.
+// Create encrypts details with the keyring DEK and stores it as a sensitive reference_document.
 func (s *SensitiveService) Create(ctx context.Context, masterPassword, description, details string, isPrivate, isSensitive bool) error {
-	encDetails, err := appcrypto.EncryptRecord(ctx, s.pool, masterPassword, details, s.pepper)
+	data := []byte(details)
+	enc, err := appcrypto.EncryptDocumentData(ctx, s.pool, masterPassword, data, s.pepper)
 	if err != nil {
 		return fmt.Errorf("encrypt record: %w", err)
 	}
-	return s.repo.Create(ctx, description, encDetails, isPrivate, isSensitive)
+	title := description
+	_, err = s.docRepo.Create(ctx,
+		description, "text/plain", int64(len(data)), enc,
+		&title, nil, nil, nil, nil, nil,
+		false, isPrivate, isSensitive, true,
+	)
+	return err
 }
 
 // Update re-encrypts details and updates the record.
 func (s *SensitiveService) Update(ctx context.Context, id int64, masterPassword, description, details string, isPrivate, isSensitive bool) error {
-	encDetails, err := appcrypto.EncryptRecord(ctx, s.pool, masterPassword, details, s.pepper)
+	data := []byte(details)
+	enc, err := appcrypto.EncryptDocumentData(ctx, s.pool, masterPassword, data, s.pepper)
 	if err != nil {
 		return fmt.Errorf("encrypt record: %w", err)
 	}
-	return s.repo.Update(ctx, id, description, encDetails, isPrivate, isSensitive)
+	title := description
+	if _, err := s.docRepo.Update(ctx, id, &title, nil, nil, nil, nil, nil, nil); err != nil {
+		return err
+	}
+	return s.docRepo.UpdateData(ctx, id, enc, true)
 }
 
-// Delete removes a record. Requires a valid master password.
+// Delete removes a sensitive record. Requires a valid master password.
 func (s *SensitiveService) Delete(ctx context.Context, id int64, masterPassword string) error {
-	ok, err := appcrypto.CheckMasterPassword(ctx, s.pool, masterPassword, s.pepper)
+	ok, err := appcrypto.CheckSensitiveMasterPassword(ctx, s.pool, masterPassword, s.pepper)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return fmt.Errorf("invalid master password")
 	}
-	return s.repo.Delete(ctx, id)
+	return s.docRepo.Delete(ctx, id)
 }
 
-// GenerateMasterKey creates a fresh RSA key pair, wiping existing keys and records.
-func (s *SensitiveService) GenerateMasterKey(ctx context.Context, masterPassword string) error {
-	return appcrypto.GenerateMasterKey(ctx, s.pool, masterPassword, s.pepper)
+// GenerateKeyring initialises a fresh pgcrypto keyring for the master password.
+func (s *SensitiveService) GenerateKeyring(ctx context.Context, masterPassword string) error {
+	return appcrypto.InitSensitiveKeyring(ctx, s.pool, masterPassword, s.pepper)
 }
 
-// GenerateTrustedKey adds a trusted key for userPassword using masterPassword.
-func (s *SensitiveService) GenerateTrustedKey(ctx context.Context, userPassword, masterPassword string) error {
-	return appcrypto.GenerateTrustedKey(ctx, s.pool, userPassword, masterPassword, s.pepper)
+// AddUser adds a new keyring seat for userPassword. Requires masterPassword.
+func (s *SensitiveService) AddUser(ctx context.Context, userPassword, masterPassword string) error {
+	return appcrypto.AddSensitiveKeyringSeat(ctx, s.pool, userPassword, masterPassword, s.pepper)
 }
 
-// DeleteTrustedKey removes the trusted key for userPassword (master key cannot be deleted).
-func (s *SensitiveService) DeleteTrustedKey(ctx context.Context, userPassword, masterPassword string) error {
-	return appcrypto.DeleteTrustedKey(ctx, s.pool, userPassword, masterPassword, s.pepper)
+// RemoveUser removes the keyring seat for userPassword. Requires masterPassword.
+// Master seats cannot be removed.
+func (s *SensitiveService) RemoveUser(ctx context.Context, userPassword, masterPassword string) error {
+	return appcrypto.DeleteSensitiveKeyringSeat(ctx, s.pool, userPassword, masterPassword, s.pepper)
+}
+
+// MigrateRecords re-encrypts sensitive_data rows from the old RSA/hybrid format
+// to the new pgcrypto format. Returns the count of records migrated.
+func (s *SensitiveService) MigrateRecords(ctx context.Context, oldPassword, newPassword string) (int, error) {
+	return appcrypto.MigrateSensitiveRecords(ctx, s.pool, oldPassword, newPassword, s.pepper)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-func (s *SensitiveService) toResponses(rows []model.SensitiveData, privateKey string) []model.SensitiveDataResponse {
-	out := make([]model.SensitiveDataResponse, len(rows))
-	for i, r := range rows {
-		desc := r.Description
+func (s *SensitiveService) toResponses(ctx context.Context, docs []*model.ReferenceDocument, password string) []model.SensitiveDataResponse {
+	out := make([]model.SensitiveDataResponse, len(docs))
+	hasKey := hasPassword(password)
+	for i, doc := range docs {
+		description := ""
+		if doc.Title != nil {
+			description = *doc.Title
+		}
 		details := redacted
-		if privateKey != "" {
-			plain, err := appcrypto.DecryptRecord(privateKey, r.Details)
-			if err == nil {
-				details = plain
+		if hasKey {
+			rawData, _, err := s.docRepo.GetData(ctx, doc.ID)
+			if err == nil && len(rawData) > 0 {
+				plain, err := appcrypto.DecryptDocumentData(ctx, s.pool, password, rawData, s.pepper)
+				if err == nil && len(plain) > 0 {
+					details = string(plain)
+				}
 			}
-			// On decryption failure leave details as redacted; description stays.
 		} else {
-			desc = redacted
+			description = redacted
 		}
 		out[i] = model.SensitiveDataResponse{
-			ID:          r.ID,
-			Description: desc,
+			ID:          doc.ID,
+			Description: description,
 			Details:     details,
-			IsPrivate:   r.IsPrivate,
-			IsSensitive: r.IsSensitive,
-			CreatedAt:   r.CreatedAt.Format(time.RFC3339),
-			UpdatedAt:   r.UpdatedAt.Format(time.RFC3339),
+			IsPrivate:   doc.IsPrivate,
+			IsSensitive: doc.IsSensitive,
+			CreatedAt:   doc.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:   doc.UpdatedAt.Format(time.RFC3339),
 		}
 	}
 	return out
@@ -154,10 +165,4 @@ func (s *SensitiveService) toResponses(rows []model.SensitiveData, privateKey st
 
 func hasPassword(p string) bool {
 	return strings.TrimSpace(p) != ""
-}
-
-func randomToken() string {
-	b := make([]byte, 32)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
 }

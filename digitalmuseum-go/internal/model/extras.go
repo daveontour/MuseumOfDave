@@ -17,6 +17,9 @@ type ReferenceDocument struct {
 	Categories       *string
 	Notes            *string
 	AvailableForTask bool
+	IsPrivate        bool
+	IsSensitive      bool
+	IsEncrypted      bool
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }

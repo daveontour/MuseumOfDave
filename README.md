@@ -182,3 +182,25 @@ The application uses environment variables for configuration. See `.env` file fo
 ### Attachment Filtering
 - `ATTACHMENT_ALLOWED_TYPES`: Comma-separated list of allowed file extensions or MIME types
 - `ATTACHMENT_MIN_SIZE`: Minimum attachment size in bytes (default: 0)
+
+## digitalmuseum-go (Go server) encryption config
+
+The Go server (`digitalmuseum-go`) supports encrypting `reference_documents.data` using a shared keyring (stored in the `sensitive_keyring` table).
+
+### Required env vars
+
+- `KEYRING_PEPPER`: Secret string used in key derivation for the keyring and encrypted reference documents. **Do not change this after encrypting data** unless you intend to rotate/recreate the keyring.
+
+### Optional env vars (AI decryption)
+
+- `AI_DOCUMENT_PASSWORD`: Password the AI tool executor uses to decrypt encrypted reference documents.
+- `KEYRING_MASTER_PASSWORD`: Master keyring password used at startup to automatically add a keyring “seat” for `AI_DOCUMENT_PASSWORD` if missing.
+
+### Rotation / first-time setup steps
+
+If you are changing `KEYRING_PEPPER` (or setting it for the first time), plan to rotate the keyring:
+
+- Initialize keyring: `POST /reference-documents/init-keyring` with a chosen master password (this truncates `sensitive_keyring` and creates a new DEK + master seat).
+- Add access seats: `POST /reference-documents/add-user` for each user password that should decrypt documents (including `AI_DOCUMENT_PASSWORD`).
+- Encrypt existing plaintext docs: `POST /reference-documents/encrypt-existing` with the master password.
+- Validate: download an encrypted doc via `/reference-documents/{doc_id}/download?password=...` and verify the AI tool `get_reference_document` returns plaintext (not “[decryption failed]”).

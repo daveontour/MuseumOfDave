@@ -14,6 +14,7 @@ import (
 
 	"github.com/daveontour/digitalmuseum/internal/api/router"
 	"github.com/daveontour/digitalmuseum/internal/config"
+	appcrypto "github.com/daveontour/digitalmuseum/internal/crypto"
 	"github.com/daveontour/digitalmuseum/internal/database"
 )
 
@@ -55,6 +56,23 @@ func run() error {
 
 	if err := database.Migrate(migrateCtx, db.Pool); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
+	}
+
+	// ── AI document keyring seat provisioning ─────────────────────────────────
+	if cfg.AI.DocumentPassword != "" {
+		pepper := cfg.Crypto.KeyringPepper
+		existed, err := appcrypto.EnsureKeyringSeat(migrateCtx, db.Pool,
+			cfg.AI.DocumentPassword, cfg.AI.KeyringMasterPassword, pepper)
+		switch {
+		case err != nil && cfg.AI.KeyringMasterPassword == "":
+			slog.Warn("AI_DOCUMENT_PASSWORD has no keyring seat and KEYRING_MASTER_PASSWORD is not set — AI cannot decrypt documents until the seat is added via the UI")
+		case err != nil:
+			slog.Warn("could not provision AI document keyring seat", "err", err)
+		case existed:
+			slog.Info("AI document keyring seat verified")
+		default:
+			slog.Info("AI document keyring seat added successfully")
+		}
 	}
 
 	// ── HTTP server ────────────────────────────────────────────────────────────

@@ -637,12 +637,6 @@ const App = (() => {
                         Modals.SubjectConfiguration.loadAndPopulateForm();
                     }
                 }
-                // Load reference documents when Reference Documents tab is opened
-                if (targetTab === 'reference-documents') {
-                    if (Modals.ReferenceDocuments && Modals.ReferenceDocuments.loadDocuments) {
-                        Modals.ReferenceDocuments.loadDocuments();
-                    }
-                }
             });
         });
 
@@ -1482,7 +1476,7 @@ const App = (() => {
         }
 
         const importConfigs = {
-            email_processing: { needsInput: true, title: 'Email Processing', run: async (vals) => { const body = { all_folders: vals.all_folders || false, labels: vals.all_folders ? null : (vals.labels || []), new_only: vals.new_only || false }; const r = await fetch('/emails/process', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return r; }, stream: '/emails/process/stream' },
+            email_processing: { needsInput: true, title: 'Email Processing (Gmail)', run: async (vals) => { const body = { all_labels: vals.all_folders || false, label_ids: vals.all_folders ? [] : (vals.label_ids || []), new_only: vals.new_only || false }; const r = await fetch('/gmail/process', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return r; }, stream: '/gmail/process/stream' },
             whatsapp: { needsInput: true, title: 'WhatsApp Import', fields: [{ id: 'directory_path', key: 'whatsapp_import_directory', label: 'WhatsApp Export Directory', placeholder: 'e.g., C:\\iMazingBackup\\WhatsApp', required: true }], run: async (vals) => { const r = await fetch('/whatsapp/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ directory_path: vals.directory_path }) }); return r; }, stream: '/whatsapp/import/stream' },
             facebook: { needsInput: true, title: 'Facebook Messenger Import', fields: [{ id: 'directory_path', key: 'facebook_import_directory', label: 'Export Directory', placeholder: 'e.g., G:\\My Drive\\meta-2026-Jan-11\\your_facebook_activity\\messages\\e2ee_cutover', required: true }, { id: 'user_name', key: 'facebook_user_name', label: 'Your Name (Optional)', placeholder: 'e.g., Dave Burton', required: false }], run: async (vals) => { const r = await fetch('/facebook/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ directory_path: vals.directory_path, user_name: vals.user_name || null }) }); return r; }, stream: '/facebook/import/stream' },
             instagram: { needsInput: true, title: 'Instagram Import', fields: [{ id: 'directory_path', key: 'instagram_import_directory', label: 'Export Directory', placeholder: 'e.g., G:\\My Drive\\meta-2026-Jan-11\\your_instagram_activity\\messages\\inbox', required: true }, { id: 'user_name', key: 'instagram_user_name', label: 'Your Name (Optional)', placeholder: 'e.g., Dave Burton', required: false }], run: async (vals) => { const r = await fetch('/instagram/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ directory_path: vals.directory_path, user_name: vals.user_name || null }) }); return r; }, stream: '/instagram/import/stream' },
@@ -1501,76 +1495,109 @@ const App = (() => {
         };
 
         async function showEmailProcessingModal(onSubmit) {
-            importInputModalTitle.textContent = 'Email Processing';
+            importInputModalTitle.textContent = 'Email Processing (Gmail)';
             importInputModalBody.innerHTML = `
-                <div class="setting-group" style="margin-bottom: 15px;">
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                        <input type="checkbox" id="import-modal-email-all-folders" style="cursor: pointer;">
-                        <span>Process All Folders</span>
-                    </label>
+                <div id="gmail-auth-status-wrap" style="margin-bottom: 15px; padding: 10px; border-radius: 6px; background: #f0f4ff; border: 1px solid #c7d4f0; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                    <span id="gmail-auth-status-text" style="font-size: 0.95em;">Checking Gmail authentication…</span>
+                    <a id="gmail-auth-link" href="/gmail/auth/start" style="display: none; padding: 5px 12px; background: #4285f4; color: #fff; border-radius: 4px; text-decoration: none; font-size: 0.9em; font-weight: 500;">Connect Gmail</a>
                 </div>
-                <div id="import-modal-email-folders-wrap" class="setting-group" style="margin-bottom: 15px;">
-                    <label for="import-modal-email-folders" style="display: block; margin-bottom: 5px; font-weight: 500;">Select Folders</label>
-                    <select id="import-modal-email-folders" multiple style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da; min-height: 120px;">
-                        <option value="">Loading folders...</option>
-                    </select>
-                    <small style="color: #666; margin-top: 4px;">Hold Ctrl/Cmd to select multiple</small>
-                </div>
-                <div class="setting-group" style="margin-bottom: 15px;">
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                        <input type="checkbox" id="import-modal-email-new-only" style="cursor: pointer;">
-                        <span>New Only (skip already imported emails)</span>
-                    </label>
+                <div id="gmail-import-controls" style="display: none;">
+                    <div class="setting-group" style="margin-bottom: 15px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="import-modal-email-all-labels" style="cursor: pointer;">
+                            <span>Process All Labels</span>
+                        </label>
+                    </div>
+                    <div id="import-modal-email-labels-wrap" class="setting-group" style="margin-bottom: 15px;">
+                        <label for="import-modal-email-labels" style="display: block; margin-bottom: 5px; font-weight: 500;">Select Labels</label>
+                        <select id="import-modal-email-labels" multiple style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bfc9da; min-height: 120px;">
+                            <option value="">Loading labels…</option>
+                        </select>
+                        <small style="color: #666; margin-top: 4px; display: block;">Hold Ctrl/Cmd to select multiple</small>
+                    </div>
+                    <div class="setting-group" style="margin-bottom: 15px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="import-modal-email-new-only" style="cursor: pointer;">
+                            <span>New Only (skip already imported emails)</span>
+                        </label>
+                    </div>
                 </div>
             `;
-            const allFoldersCb = document.getElementById('import-modal-email-all-folders');
-            const foldersWrap = document.getElementById('import-modal-email-folders-wrap');
-            const foldersSelect = document.getElementById('import-modal-email-folders');
-            const newOnlyCb = document.getElementById('import-modal-email-new-only');
-
-            const allFoldersVal = typeof getControlValue === 'function' ? getControlValue('process_all_folders', typeof controlDefaults !== 'undefined' ? controlDefaults.process_all_folders : false) : false;
-            const newOnlyVal = typeof getControlValue === 'function' ? getControlValue('new_only_option', typeof controlDefaults !== 'undefined' ? controlDefaults.new_only_option : false) : false;
-            allFoldersCb.checked = !!allFoldersVal;
-            newOnlyCb.checked = !!newOnlyVal;
-            foldersWrap.style.display = allFoldersCb.checked ? 'none' : 'block';
-
-            allFoldersCb.addEventListener('change', () => { foldersWrap.style.display = allFoldersCb.checked ? 'none' : 'block'; });
-
-            try {
-                const response = await fetch('/emails/folders');
-                if (!response.ok) throw new Error('Failed to load folders');
-                const folders = await response.json();
-                foldersSelect.innerHTML = '';
-                folders.forEach(f => {
-                    const opt = document.createElement('option');
-                    opt.value = f.name;
-                    opt.textContent = f.name;
-                    foldersSelect.appendChild(opt);
-                });
-            } catch (e) {
-                foldersSelect.innerHTML = '<option value="">Error loading folders</option>';
-            }
 
             importInputModal.style.display = 'flex';
             importInputModal.style.alignItems = 'center';
             importInputModal.style.justifyContent = 'center';
 
+            const authStatusText = document.getElementById('gmail-auth-status-text');
+            const authLink = document.getElementById('gmail-auth-link');
+            const importControls = document.getElementById('gmail-import-controls');
+            const allLabelsCb = document.getElementById('import-modal-email-all-labels');
+            const labelsWrap = document.getElementById('import-modal-email-labels-wrap');
+            const labelsSelect = document.getElementById('import-modal-email-labels');
+            const newOnlyCb = document.getElementById('import-modal-email-new-only');
+
+            // Check auth and load labels
+            try {
+                const authResp = await fetch('/gmail/auth/status');
+                const authData = await authResp.json();
+                if (!authData.authenticated) {
+                    authStatusText.textContent = 'Not connected to Gmail.';
+                    authLink.style.display = 'inline-block';
+                    importInputModalSubmit.disabled = true;
+                } else {
+                    const expiry = authData.expiry ? ` (token expires ${new Date(authData.expiry).toLocaleDateString('en-GB', { day: '2-digit', month: 'numeric', year: 'numeric' })})` : '';
+                    authStatusText.textContent = `Connected to Gmail${expiry}`;
+                    authStatusText.style.color = '#27ae60';
+                    importControls.style.display = 'block';
+                    importInputModalSubmit.disabled = false;
+
+                    // Restore saved preferences
+                    const allLabelsVal = typeof getControlValue === 'function' ? getControlValue('gmail_all_labels', false) : false;
+                    const newOnlyVal = typeof getControlValue === 'function' ? getControlValue('gmail_new_only', true) : true;
+                    allLabelsCb.checked = !!allLabelsVal;
+                    newOnlyCb.checked = !!newOnlyVal;
+                    labelsWrap.style.display = allLabelsCb.checked ? 'none' : 'block';
+                    allLabelsCb.addEventListener('change', () => { labelsWrap.style.display = allLabelsCb.checked ? 'none' : 'block'; });
+
+                    // Load labels from Gmail API
+                    try {
+                        const labelsResp = await fetch('/gmail/labels');
+                        if (!labelsResp.ok) throw new Error('Failed to load labels');
+                        const labelsData = await labelsResp.json();
+                        labelsSelect.innerHTML = '';
+                        (labelsData.labels || []).forEach(l => {
+                            const opt = document.createElement('option');
+                            opt.value = l.id;
+                            opt.textContent = l.name;
+                            if (l.name === 'INBOX') opt.selected = true;
+                            labelsSelect.appendChild(opt);
+                        });
+                    } catch (e) {
+                        labelsSelect.innerHTML = '<option value="">Error loading labels</option>';
+                    }
+                }
+            } catch (e) {
+                authStatusText.textContent = 'Could not check Gmail status.';
+                authStatusText.style.color = '#c0392b';
+            }
+
             const doSubmit = () => {
-                const all_folders = allFoldersCb.checked;
-                const labels = all_folders ? [] : Array.from(foldersSelect.selectedOptions).map(o => o.value).filter(Boolean);
-                const new_only = newOnlyCb.checked;
-                if (!all_folders && labels.length === 0) return;
+                const all_folders = allLabelsCb ? allLabelsCb.checked : false;
+                const label_ids = all_folders ? [] : Array.from(labelsSelect.selectedOptions).map(o => o.value).filter(Boolean);
+                const new_only = newOnlyCb ? newOnlyCb.checked : true;
+                if (!all_folders && label_ids.length === 0) return;
                 if (typeof saveControlValue === 'function') {
-                    saveControlValue('process_all_folders', all_folders);
-                    saveControlValue('new_only_option', new_only);
+                    saveControlValue('gmail_all_labels', all_folders);
+                    saveControlValue('gmail_new_only', new_only);
                 }
                 importInputModal.style.display = 'none';
-                onSubmit({ all_folders, labels, new_only });
+                importInputModalSubmit.disabled = false;
+                onSubmit({ all_folders, label_ids, new_only });
             };
 
             importInputModalSubmit.onclick = doSubmit;
-            importInputModalCancel.onclick = () => { importInputModal.style.display = 'none'; };
-            importInputModal.onclick = (e) => { if (e.target === importInputModal) importInputModal.style.display = 'none'; };
+            importInputModalCancel.onclick = () => { importInputModal.style.display = 'none'; importInputModalSubmit.disabled = false; };
+            importInputModal.onclick = (e) => { if (e.target === importInputModal) { importInputModal.style.display = 'none'; importInputModalSubmit.disabled = false; } };
         }
 
         async function showImapModal(onSubmit) {
@@ -1864,6 +1891,13 @@ const App = (() => {
                             if (DOM.configPage) DOM.configPage.style.display = 'none';
                             if (typeof loadControlDefaults === 'function') loadControlDefaults();
                         }
+                        if (openModal === 'reference-documents-manage-modal') {
+                            const dim = document.getElementById('data-import-modal');
+                            if (dim) dim.style.display = 'none';
+                            if (Modals.ReferenceDocuments && Modals.ReferenceDocuments.loadDocuments) {
+                                Modals.ReferenceDocuments.loadDocuments();
+                            }
+                        }
                     }
                     return;
                 }
@@ -2069,6 +2103,20 @@ const App = (() => {
         if (dataImportModal) {
             dataImportModal.addEventListener('click', (e) => {
                 if (e.target === dataImportModal) closeDataImportModal();
+            });
+        }
+
+        const referenceDocumentsManageModal = document.getElementById('reference-documents-manage-modal');
+        const closeReferenceDocumentsManageBtn = document.getElementById('close-reference-documents-manage-modal');
+        const closeReferenceDocumentsManageModal = () => {
+            if (referenceDocumentsManageModal) referenceDocumentsManageModal.style.display = 'none';
+        };
+        if (closeReferenceDocumentsManageBtn && referenceDocumentsManageModal) {
+            closeReferenceDocumentsManageBtn.addEventListener('click', closeReferenceDocumentsManageModal);
+        }
+        if (referenceDocumentsManageModal) {
+            referenceDocumentsManageModal.addEventListener('click', (e) => {
+                if (e.target === referenceDocumentsManageModal) closeReferenceDocumentsManageModal();
             });
         }
 

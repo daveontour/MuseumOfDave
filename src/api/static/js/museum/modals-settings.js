@@ -1594,6 +1594,147 @@ Modals.ManageKeys = (() => {
         }
     }
 
+    async function _loadDocKeyringCount() {
+        try {
+            const resp = await fetch('/reference-documents/keyring-count');
+            if (!resp.ok) return;
+            const data = await resp.json().catch(() => ({}));
+            const display = document.getElementById('doc-keyring-count-display');
+            const value = document.getElementById('doc-keyring-count-value');
+            if (display) display.style.display = 'block';
+            if (value) value.textContent = data.count !== undefined ? data.count : '—';
+        } catch (e) {
+            console.error('[ManageKeys] keyring count error:', e);
+        }
+    }
+
+    function _closeAddDocKeyModal() {
+        const modal = document.getElementById('add-doc-key-modal');
+        if (modal) modal.style.display = 'none';
+        ['add-doc-key-user-password', 'add-doc-key-master-password'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        const err = document.getElementById('add-doc-key-error');
+        if (err) { err.textContent = ''; err.style.display = 'none'; }
+    }
+
+    function _closeRemoveDocKeyModal() {
+        const modal = document.getElementById('remove-doc-key-modal');
+        if (modal) modal.style.display = 'none';
+        ['remove-doc-key-user-password', 'remove-doc-key-master-password'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        const err = document.getElementById('remove-doc-key-error');
+        if (err) { err.textContent = ''; err.style.display = 'none'; }
+    }
+
+    function _closeEncryptExistingModal() {
+        const modal = document.getElementById('encrypt-existing-modal');
+        if (modal) modal.style.display = 'none';
+        const pw = document.getElementById('encrypt-existing-password');
+        if (pw) pw.value = '';
+        const err = document.getElementById('encrypt-existing-error');
+        if (err) { err.textContent = ''; err.style.display = 'none'; }
+    }
+
+    async function _addDocKey() {
+        const userPw = document.getElementById('add-doc-key-user-password');
+        const masterPw = document.getElementById('add-doc-key-master-password');
+        const errEl = document.getElementById('add-doc-key-error');
+        const userPassword = userPw ? userPw.value.trim() : '';
+        const masterPassword = masterPw ? masterPw.value.trim() : '';
+        if (!userPassword) {
+            if (errEl) { errEl.textContent = 'User password is required.'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (!masterPassword) {
+            if (errEl) { errEl.textContent = 'Master password is required.'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+        try {
+            const resp = await fetch('/reference-documents/add-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_password: userPassword, master_password: masterPassword })
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                throw new Error(data.error || `HTTP ${resp.status}`);
+            }
+            _closeAddDocKeyModal();
+            _showStatus(data.message || 'Document key added successfully.');
+            _loadDocKeyringCount();
+        } catch (e) {
+            console.error('[ManageKeys] add doc key error:', e);
+            if (errEl) { errEl.textContent = e.message || 'Failed to add document key.'; errEl.style.display = 'block'; }
+        }
+    }
+
+    async function _removeDocKey() {
+        const userPw = document.getElementById('remove-doc-key-user-password');
+        const masterPw = document.getElementById('remove-doc-key-master-password');
+        const errEl = document.getElementById('remove-doc-key-error');
+        const userPassword = userPw ? userPw.value.trim() : '';
+        const masterPassword = masterPw ? masterPw.value.trim() : '';
+        if (!userPassword) {
+            if (errEl) { errEl.textContent = 'User password is required.'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (!masterPassword) {
+            if (errEl) { errEl.textContent = 'Master password is required.'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+        try {
+            const resp = await fetch('/reference-documents/remove-user', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_password: userPassword, master_password: masterPassword })
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                throw new Error(data.error || `HTTP ${resp.status}`);
+            }
+            _closeRemoveDocKeyModal();
+            _showStatus(data.message || 'Document key removed successfully.');
+            _loadDocKeyringCount();
+        } catch (e) {
+            console.error('[ManageKeys] remove doc key error:', e);
+            if (errEl) { errEl.textContent = e.message || 'Failed to remove document key.'; errEl.style.display = 'block'; }
+        }
+    }
+
+    async function _encryptExisting() {
+        const pw = document.getElementById('encrypt-existing-password');
+        const errEl = document.getElementById('encrypt-existing-error');
+        const password = pw ? pw.value.trim() : '';
+        if (!password) {
+            if (errEl) { errEl.textContent = 'Master password is required.'; errEl.style.display = 'block'; }
+            return;
+        }
+        if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+        try {
+            const resp = await fetch('/reference-documents/encrypt-existing', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password })
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                throw new Error(data.error || `HTTP ${resp.status}`);
+            }
+            _closeEncryptExistingModal();
+            const count = data.encrypted !== undefined ? data.encrypted : '?';
+            _showStatus(`Encryption complete. ${count} document(s) encrypted.`);
+        } catch (e) {
+            console.error('[ManageKeys] encrypt existing error:', e);
+            if (errEl) { errEl.textContent = e.message || 'Failed to encrypt documents.'; errEl.style.display = 'block'; }
+        }
+    }
+
     async function _deleteTrustedKey() {
         const userPw = document.getElementById('delete-trusted-key-user-password');
         const masterPw = document.getElementById('delete-trusted-key-master-password');
@@ -1736,6 +1877,80 @@ Modals.ManageKeys = (() => {
         const enterHandler = e => { if (e.key === 'Enter') _submitCreateNewMasterKey(); };
         if (pwInputNew) pwInputNew.addEventListener('keydown', enterHandler);
         if (confirmInputNew) confirmInputNew.addEventListener('keydown', enterHandler);
+
+        // ── Document Encryption Keys ──────────────────────────────────────────
+        const addDocKeyBtn = document.getElementById('add-doc-key-btn');
+        if (addDocKeyBtn) addDocKeyBtn.addEventListener('click', () => {
+            const modal = document.getElementById('add-doc-key-modal');
+            if (modal) modal.style.display = 'flex';
+        });
+
+        const removeDocKeyBtn = document.getElementById('remove-doc-key-btn');
+        if (removeDocKeyBtn) removeDocKeyBtn.addEventListener('click', () => {
+            const modal = document.getElementById('remove-doc-key-modal');
+            if (modal) modal.style.display = 'flex';
+        });
+
+        const encryptExistingBtn = document.getElementById('encrypt-existing-btn');
+        if (encryptExistingBtn) encryptExistingBtn.addEventListener('click', () => {
+            const modal = document.getElementById('encrypt-existing-modal');
+            if (modal) modal.style.display = 'flex';
+        });
+
+        const closeAddDocKey = document.getElementById('close-add-doc-key-modal');
+        if (closeAddDocKey) closeAddDocKey.addEventListener('click', _closeAddDocKeyModal);
+
+        const closeRemoveDocKey = document.getElementById('close-remove-doc-key-modal');
+        if (closeRemoveDocKey) closeRemoveDocKey.addEventListener('click', _closeRemoveDocKeyModal);
+
+        const closeEncryptExisting = document.getElementById('close-encrypt-existing-modal');
+        if (closeEncryptExisting) closeEncryptExisting.addEventListener('click', _closeEncryptExistingModal);
+
+        const cancelAddDocKey = document.getElementById('add-doc-key-cancel');
+        if (cancelAddDocKey) cancelAddDocKey.addEventListener('click', _closeAddDocKeyModal);
+
+        const cancelRemoveDocKey = document.getElementById('remove-doc-key-cancel');
+        if (cancelRemoveDocKey) cancelRemoveDocKey.addEventListener('click', _closeRemoveDocKeyModal);
+
+        const cancelEncryptExisting = document.getElementById('encrypt-existing-cancel');
+        if (cancelEncryptExisting) cancelEncryptExisting.addEventListener('click', _closeEncryptExistingModal);
+
+        const submitAddDocKey = document.getElementById('add-doc-key-submit');
+        if (submitAddDocKey) submitAddDocKey.addEventListener('click', _addDocKey);
+
+        const submitRemoveDocKey = document.getElementById('remove-doc-key-submit');
+        if (submitRemoveDocKey) submitRemoveDocKey.addEventListener('click', _removeDocKey);
+
+        const submitEncryptExisting = document.getElementById('encrypt-existing-submit');
+        if (submitEncryptExisting) submitEncryptExisting.addEventListener('click', _encryptExisting);
+
+        const addDocKeyModal = document.getElementById('add-doc-key-modal');
+        if (addDocKeyModal) addDocKeyModal.addEventListener('click', e => { if (e.target === addDocKeyModal) _closeAddDocKeyModal(); });
+
+        const removeDocKeyModal = document.getElementById('remove-doc-key-modal');
+        if (removeDocKeyModal) removeDocKeyModal.addEventListener('click', e => { if (e.target === removeDocKeyModal) _closeRemoveDocKeyModal(); });
+
+        const encryptExistingModal = document.getElementById('encrypt-existing-modal');
+        if (encryptExistingModal) encryptExistingModal.addEventListener('click', e => { if (e.target === encryptExistingModal) _closeEncryptExistingModal(); });
+
+        // Enter key shortcuts for doc key modals
+        const addDocKeyEnter = e => { if (e.key === 'Enter') _addDocKey(); };
+        const addDocKeyPw = document.getElementById('add-doc-key-user-password');
+        const addDocKeyMaster = document.getElementById('add-doc-key-master-password');
+        if (addDocKeyPw) addDocKeyPw.addEventListener('keydown', addDocKeyEnter);
+        if (addDocKeyMaster) addDocKeyMaster.addEventListener('keydown', addDocKeyEnter);
+
+        const removeDocKeyEnter = e => { if (e.key === 'Enter') _removeDocKey(); };
+        const removeDocKeyPw = document.getElementById('remove-doc-key-user-password');
+        const removeDocKeyMaster = document.getElementById('remove-doc-key-master-password');
+        if (removeDocKeyPw) removeDocKeyPw.addEventListener('keydown', removeDocKeyEnter);
+        if (removeDocKeyMaster) removeDocKeyMaster.addEventListener('keydown', removeDocKeyEnter);
+
+        const encryptExistingPw = document.getElementById('encrypt-existing-password');
+        if (encryptExistingPw) encryptExistingPw.addEventListener('keydown', e => { if (e.key === 'Enter') _encryptExisting(); });
+
+        // Load keyring count on page ready
+        _loadDocKeyringCount();
     }
 
     return { init };
